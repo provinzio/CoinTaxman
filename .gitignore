@@ -1,0 +1,9 @@
+# Byte-compiled / optimized / DLL files
+__pycache__
+*.py[cod]
+
+# User data
+account_statements/*
+data/*
+
+!.gitkeep
