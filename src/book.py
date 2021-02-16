@@ -57,8 +57,15 @@ class Book:
                 # Parse data.
                 utc_time = datetime.datetime.strptime(
                     utc_time, "%Y-%m-%d %H:%M:%S")
-                change = abs(float(change))
+                change = float(change)
                 operation = operation_mapping.get(operation, operation)
+                if operation in (
+                    "The Easiest Way to Trade",
+                    "Small assets exchange BNB",
+                    "Transaction Related",
+                ):
+                    operation = "Sell" if change < 0 else "Buy"
+                change = abs(change)
 
                 # Validate data.
                 assert account == "Spot"
