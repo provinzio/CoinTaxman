@@ -39,7 +39,7 @@ log = logging.getLogger(__name__)
 class PriceData:
 
     @misc.delayed
-    def _get_price_binance(self, base_asset: str, utc_time: datetime.datetime, quote_asset: str) -> float:
+    def _get_price_binance(self, base_asset: str, utc_time: datetime.datetime, quote_asset: str, swapped_symbols: bool = False) -> float:
         """Retrieve price from binance official REST API.
 
         The price is calculated as the average price in a
@@ -64,9 +64,19 @@ class PriceData:
         # is paired with BTC. Calculate `TWTEUR` as `TWTBTC * BTCEUR`.
         if isinstance(data, dict) and data.get("code") == -1121 and data.get("msg") == "Invalid symbol.":
             if quote_asset == "BTC":
-                # Catch the case when a BTC pair does not exist.
-                # If this happens, we need to think of something else.
-                raise RuntimeError(f"Can not retrieve {symbol=} from binance")
+                # If we are already comparing with BTC, we might have to swap
+                # the assets to generate the correct symbol.
+                # Check a last time, if we find the pair by changing the symbol
+                # order.
+                # If this does not help, we need to think of something else.
+                if swapped_symbols:
+                    raise RuntimeError(
+                        f"Can not retrieve {symbol=} from binance")
+                # Changeing the order of the assets require to invert the price.
+                price = self.get_price(
+                    "binance", quote_asset, utc_time, base_asset, swapped_symbols=True)
+                return 0 if price == 0 else 1 / price
+
             btc = self.get_price("binance", base_asset, utc_time, "BTC")
             quote = self.get_price("binance", "BTC", utc_time, quote_asset)
             return btc * quote
@@ -142,7 +152,7 @@ class PriceData:
                     raise e
             conn.commit()
 
-    def get_price(self, platform: str, coin: str, utc_time: datetime.datetime, reference_coin: str = config.FIAT) -> float:
+    def get_price(self, platform: str, coin: str, utc_time: datetime.datetime, reference_coin: str = config.FIAT, **kwargs) -> float:
         """Get the price of a coin pair from a specific `platform` at `utc_time`.
 
         The function tries to retrieve the price from the local database first.
@@ -177,7 +187,7 @@ class PriceData:
             raise NotImplementedError(
                 "Unable to read data from %s", platform)
 
-        price = get_price(coin, utc_time, reference_coin)
+        price = get_price(coin, utc_time, reference_coin, **kwargs)
         self.__set_price_db(db_path, tablename, utc_time, price)
         return price
 
