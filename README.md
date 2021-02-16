@@ -29,7 +29,7 @@ Quick and easy installation can be done with `pip`.
 
 1. Adjust `src/config.py` to your likeing
 2. Add account statements from supported exchanges in `account_statements/`
-2. Run `python src/main.py`
+2. Run `python "src/main.py"`
 
 ### Key notes for developers
 
