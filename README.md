@@ -57,7 +57,7 @@ Meine Interpretation rund um die Besteuerung von Kryptowährung in Deutschland w
 Meine kurzen Zusammenfassungen am Ende von jedem Abschnitt werden durch einen ausführlicheren Text von [WINHELLER](https://www.winheller.com/) ergänzt.
 
 An dieser Stelle sei explizit erwähnt, dass dies meine Interpretation ist. Es ist weder sichergestellt, dass ich aktuell noch nach diesen praktiziere (falls ich das Repo in Zukunft nicht mehr aktiv pflege), noch ob diese Art der Versteuerung gesetzlich zulässig ist.
-Meine Intrepreation steht gerne zur Debatte.
+Meine Interpretation steht gerne zur Debatte.
 
 ### Allgemein
 
@@ -73,7 +73,7 @@ Meine Intrepreation steht gerne zur Debatte.
 [Wörtlich zitiert vom 14.02.2021]
 
 Zusammenfassung in meinen Worten:
-- Kryptowärhung sind immaterielle Wirtschaftsgüter.
+- Kryptowährung sind immaterielle Wirtschaftsgüter.
 - Der Verkauf innerhalb eines Jahres gilt als privates Veräußerungsgeschäft und ist als Sonstiges Einkommen zu versteuern (Freigrenze 600 €).
 - Der Tausch von Kryptowährung wird ebenfalls versteuert.
 - Gebühren zum Handel sind steuerlich abzugsfähig.
