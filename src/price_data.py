@@ -182,8 +182,9 @@ class PriceData:
         return price
 
     def get_cost(self, tr: Union[Operation, SoldCoin], reference_coin: str = config.FIAT) -> float:
-        price = self.get_price(tr.platform, tr.coin,
-                               tr.utc_time, reference_coin)
+        op = tr if isinstance(tr, Operation) else tr.op
+        price = self.get_price(op.platform, op.coin,
+                               op.utc_time, reference_coin)
         if isinstance(tr, Operation):
             return price * tr.change
         if isinstance(tr, SoldCoin):
