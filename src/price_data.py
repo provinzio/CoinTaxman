@@ -19,8 +19,9 @@ import json
 import logging
 import sqlite3
 from pathlib import Path
-import requests
 from typing import Optional, Union
+
+import requests
 
 from book import Book
 import config
