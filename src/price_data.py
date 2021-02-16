@@ -163,7 +163,7 @@ class PriceData:
         if coin == reference_coin:
             return 1.0
 
-        db_path = Path(f"{config.DATA_DIR}/{platform}.db")
+        db_path = Path(config.DATA_PATH, f"{platform}.db")
         tablename = f"{coin}/{reference_coin}"
 
         # Check if price exists already in our database.

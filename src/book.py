@@ -203,7 +203,7 @@ class Book:
             log.warning(
                 f"Unable to detect the exchange of file `{file_path}`. Skipping file.")
 
-    def get_account_statement_paths(self, statements_dir: str) -> list[Path]:
+    def get_account_statement_paths(self, statements_dir: Path) -> list[Path]:
         """Return file paths of all account statements in `statements_dir`.
 
         Args:
@@ -212,7 +212,6 @@ class Book:
         Returns:
             list[Path]: List of account statement file paths.
         """
-        statements_dir = Path(statements_dir)
         assert statements_dir.is_dir()
 
         file_paths: list[Path] = []
@@ -231,11 +230,11 @@ class Book:
         Returns:
             bool: Return True if everything went as expected.
         """
-        paths = self.get_account_statement_paths(config.ACCOUNT_STATMENTS_DIR)
+        paths = self.get_account_statement_paths(config.ACCOUNT_STATMENTS_PATH)
 
         if not paths:
             log.warning("No account statement files in %s located.",
-                        config.ACCOUNT_STATMENTS_DIR)
+                        config.ACCOUNT_STATMENTS_PATH)
             return False
 
         for file_path in paths:

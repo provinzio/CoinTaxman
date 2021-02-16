@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from datetime import datetime
+from pathlib import Path
 
 import core
 
@@ -34,6 +35,7 @@ else:
     raise NotImplementedError(f"Your country {COUNTRY} is not supported.")
 
 # Program specific constants.
-ACCOUNT_STATMENTS_DIR = "account_statements"
-DATA_DIR = "data"
+BASE_PATH = Path(__file__).parent.parent.absolute()
+ACCOUNT_STATMENTS_PATH = Path(BASE_PATH, "account_statements")
+DATA_PATH = Path(BASE_PATH, "data")
 FIAT = FIAT.name  # Convert to string.
