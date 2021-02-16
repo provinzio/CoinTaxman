@@ -212,16 +212,16 @@ class Book:
         Returns:
             list[Path]: List of account statement file paths.
         """
-        assert statements_dir.is_dir()
-
         file_paths: list[Path] = []
-        for file_path in statements_dir.iterdir():
-            # Ignore .gitkeep and temporary exel files.
-            filename = file_path.stem
-            if filename == ".gitkeep" or filename.startswith("~$"):
-                continue
 
-            file_paths.append(file_path)
+        if statements_dir.is_dir():
+            for file_path in statements_dir.iterdir():
+                # Ignore .gitkeep and temporary exel files.
+                filename = file_path.stem
+                if filename == ".gitkeep" or filename.startswith("~$"):
+                    continue
+
+                file_paths.append(file_path)
         return file_paths
 
     def read_files(self) -> bool:
