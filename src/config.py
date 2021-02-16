@@ -17,6 +17,8 @@
 from datetime import datetime
 from pathlib import Path
 
+from dateutil.relativedelta import relativedelta
+
 import core
 
 
@@ -30,7 +32,7 @@ if COUNTRY == core.Country.GERMANY:
     PRINCIPLE = core.Principle.FIFO
 
     def IS_LONG_TERM(buy: datetime, sell: datetime):
-        return (buy - sell).years > 1
+        return buy + relativedelta(years=1) < sell
 else:
     raise NotImplementedError(f"Your country {COUNTRY} is not supported.")
 
