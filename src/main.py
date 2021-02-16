@@ -1,5 +1,5 @@
 # CoinTaxman
-# Copyright (C) 2021  Carsten Docktor
+# Copyright (C) 2021  Carsten Docktor <https://github.com/provinzio>
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
