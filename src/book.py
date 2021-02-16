@@ -233,7 +233,7 @@ class Book:
         paths = self.get_account_statement_paths(config.ACCOUNT_STATMENTS_PATH)
 
         if not paths:
-            log.warning("No account statement files in %s located.",
+            log.warning("No account statement files located in %s.",
                         config.ACCOUNT_STATMENTS_PATH)
             return False
 
