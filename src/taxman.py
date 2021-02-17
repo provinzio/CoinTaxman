@@ -145,11 +145,13 @@ class Taxman:
         """Print short summary of evaluation to stdout."""
         if self.tax_events:
             print()
+            print(f"Your tax evaluation for {config.TAX_YEAR}:")
             for taxation_type, tax_events in misc.group_by(self.tax_events, "taxation_type").items():
                 taxed_gains = sum(tx.taxed_gain for tx in tax_events)
                 print(f"{taxation_type}: {taxed_gains} {config.FIAT}")
         else:
-            print("Either the evaluation has not run or there are no tax events.")
+            print(
+                f"Either the evaluation has not run or there are no tax events for {config.TAX_YEAR}.")
 
     def export_evaluation(self) -> Path:
         """Export detailed summary of all tax events to CSV.
