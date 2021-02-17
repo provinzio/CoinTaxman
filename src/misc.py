@@ -16,7 +16,9 @@
 
 import collections
 import datetime
+from pathlib import Path
 import random
+import re
 import time
 from typing import Optional, Tuple, Union
 
@@ -102,3 +104,36 @@ def is_fiat(symbol: Union[str, core.Fiat]) -> bool:
         bool: True if `symbol` is fiat. False otherwise.
     """
     return isinstance(symbol, core.Fiat) or symbol in core.Fiat.__members__
+
+
+def get_next_file_path(path: Path, base_filename: str, extension: str) -> Path:
+    """Looking for the next free filename in format {base_filename}_revXXX.
+
+    The revision number starts with 001 and will always be +1 from the highest
+    existing revision.
+
+    Args:
+        path (Path)
+        base_filename (str)
+        extension (str)
+
+    Raises:
+        AssertitionError: When {base_filename}_rev999.{extension} already exists.
+
+    Returns:
+        Path: Path to next free file.
+    """
+    i = 1
+    regex = re.compile(base_filename + "_rev(\d{3})." + extension)
+    for p in path.iterdir():
+        if p.is_file():
+            if m := regex.match(p.name):
+                j = int(m.group(1)) + 1
+                if j > i:
+                    i = j
+
+    assert i < 1000
+
+    file_path = Path(path, f"{base_filename}_rev{i:03d}.{extension}")
+    assert not file_path.exists()
+    return file_path

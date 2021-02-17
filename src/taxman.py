@@ -14,7 +14,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import csv
+from pathlib import Path
 import logging
+import re
 
 from bilance_queue import *
 from book import Book
@@ -94,7 +97,7 @@ class Taxman:
                             taxed_gain += partial_win - \
                                 self.price_data.get_cost(sc)
                     remark = ", ".join(
-                        f"{sc.sold} from {sc.op.utc_time}" for sc in sold_coins)
+                        f"{sc.sold} from {sc.op.utc_time} ({sc.op.__class__.__name__})" for sc in sold_coins)
                     tx = TaxEvent(taxation_type, taxed_gain, op, remark)
                     self.tax_events.append(tx)
             elif isinstance(op, CoinLendInterest):
@@ -125,6 +128,7 @@ class Taxman:
 
     def evaluate_taxation(self) -> None:
         """Evaluate the taxation per coin using the country specific function."""
+        log.debug("Starting evaluation...")
         for coin, operations in misc.group_by(self.book.operations, "coin").items():
             operations = sorted(operations)  # Sort by time.
             self.__evaluate_taxation(coin, operations)
@@ -135,10 +139,33 @@ class Taxman:
             taxed_gains = sum(tx.taxed_gain for tx in tax_events)
             print(f"{taxation_type}: {taxed_gains} {config.FIAT}")
 
-    def export_evaluation(self) -> None:
-        # TODO Print CSV with more information
-        #      which could be sent to tax office if they have any questions.
-        raise NotImplementedError
+    def export_evaluation(self) -> Path:
+        """Export detailed summary of all tax events to CSV.
+
+        File will be placed in export/ with ascending revision numbers
+        (in case multiple evaluations will be done).
+
+        When no tax events occured, the CSV will be exported only with
+        a header line.
+
+        Returns:
+            Path: Path to the exported file.
+        """
+        file_path = misc.get_next_file_path(
+            config.EXPORT_PATH, str(config.TAX_YEAR), "csv")
+
+        with open(file_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            header = ["Date", "Taxation Type", f"Taxed Gain in {config.FIAT}",
+                      "Action", "Amount", "Asset",  "Remark"]
+            writer.writerow(header)
+            for tx in self.tax_events:
+                line = [tx.op.utc_time, tx.taxation_type, tx.taxed_gain,
+                        tx.op.__class__.__name__,  tx.op.change, tx.op.coin, tx.remark]
+                writer.writerow(line)
+
+        log.info("Saved evaluation in %s.", file_path)
+        return file_path
 
     def export_bilance(self) -> None:
         # TODO Print bilance at end of tax year.
