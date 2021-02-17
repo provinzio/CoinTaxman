@@ -84,7 +84,7 @@ class Book:
                     Operation = getattr(tr, operation)
                 except AttributeError:
                     log.warning(
-                        "Could not recognize operation `%s` in binance file `%s`.", operation, file_path)
+                        "Could not recognize operation `%s` in binance file `%s:%i`.", operation, file_path, row)
                     continue
 
                 o = Operation(utc_time, platform, change, coin)
