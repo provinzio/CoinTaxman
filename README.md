@@ -29,7 +29,7 @@ Quick and easy installation can be done with `pip`.
 
 ### Usage
 
-1. Adjust `src/config.py` to your likeing
+1. Adjust `src/config.py` to your liking
 2. Add account statements from supported exchanges in `account_statements/`
 2. Run `python "src/main.py"`
 
@@ -90,7 +90,7 @@ Hit the thumbs up button of that issue or participate in the process.
 
 # Ideas on crypto-taxation
 
-The taxation of crytocurrency is probably not yet regulated down to the smallest detail in every country. Often there still seem to be ambiguities or gray areas.
+The taxation of cryptocurrency is probably not yet regulated down to the smallest detail in every country. Often there still seem to be ambiguities or gray areas.
 This section should help you to dig deeper into the subject.
 Feel free to commit details about the taxation in your country.
 
