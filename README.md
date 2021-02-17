@@ -3,12 +3,14 @@
 #### English
 
 CoinTaxman helps you to bring your income from crypto trading, lending, ... into your tax declaration.
-At the moment CoinTaxman only covers my area of ​​application, pull requests are welcome.
+At the moment CoinTaxman only covers my area of ​​application.
+Pull requests and requests via issues are welcome (see `Key notes for users` for more information).
 
 #### German - Deutsch
 
 CoinTaxman hilft dir dabei deine Einkünfte aus dem Krypto-Handel/-Verleih/... in die Steuererklärung zu bringen.
-Momentan deckt der CoinTaxman nur meinen Anwendungsbereich ab, Pull Requests sind gerne gesehen.
+Momentan deckt der CoinTaxman nur meinen Anwendungsbereich ab.
+Pull Requests und Anfragen über Issues sind gerne gesehen (siehe `Key notes for users` für weitere Informationen).
 
 **Disclaimer: use at your own risk**
 
@@ -30,6 +32,47 @@ Quick and easy installation can be done with `pip`.
 1. Adjust `src/config.py` to your likeing
 2. Add account statements from supported exchanges in `account_statements/`
 2. Run `python "src/main.py"`
+
+### Key notes for users
+
+### Requesting a new country
+
+I would like to extend my tool for international usage.
+However, the chances are high that I am unfamiliar with the local conditions neither able to speak the language.
+I would not want to program the logic for something I can not look up properly.
+Because in general and especially when it comes to state affairs, I prefer to look at the primary source.
+
+I am happy to implement your input or support you with the implementation.
+You can help by specifying detailed information about the taxation of crypto currency in the requested country.
+Information I require are for example
+- Country fiat (well that is easy... I might be able to figure it out by myself)
+- Taxation of crypto sells
+- Taxation from crypto lending
+- Taxation of airdrops
+- Are there special periods after which the sell is tax free?
+- ...
+
+Not every aspect has to be implemented directly.
+We are free to start by implementing the stuff you need for your tax declaration.
+
+I am looking forward to your [issue](https://github.com/provinzio/CoinTaxman/issues).
+Your country was already requested?
+Hit the thumbs up button of that issue or participate in the process.
+
+### Requesting a new exchange
+
+The crypto world is huge and so is the amount of available exchanges out there.
+I would love to make this tool as useful as possible for as many of you.
+
+I am happy to implement your input or support you with the implementation.
+Please provide an example account statement for the requested exchange or some other kind of documentation.
+
+Are you already familiar with the API of that exchange or know some other way to request historical prices for that exchange?
+Share your knowledge.
+
+I am looking forward to your [issue](https://github.com/provinzio/CoinTaxman/issues).
+Your exchange was already requested?
+Hit the thumbs up button of that issue or participate in the process.
 
 ### Key notes for developers
 
