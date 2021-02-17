@@ -36,7 +36,7 @@ class Taxman:
         self.price_data = price_data
 
         self.tax_events: list[TaxEvent] = []
-        self.bilances: dict[str, list[BilanceQueue]] = {}
+        self.bilances: dict[str, BilanceQueue] = {}
 
         # Determine used functions/classes depending on the config.
         country = config.COUNTRY.name
@@ -130,7 +130,7 @@ class Taxman:
         # Check that all relevant positions were considered.
         if bilance.buffer_fee:
             log.warning("Bilance has outstanding fees which were not considered: %s %s", ", ".join(
-                fee for fee in bilance.buffer_fee), coin)
+                str(fee) for fee in bilance.buffer_fee), coin)
 
         self.bilances[coin] = bilance
 

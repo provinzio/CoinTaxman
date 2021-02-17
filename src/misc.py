@@ -56,15 +56,15 @@ def get_offset_timestamps(utc_time: datetime.datetime, offset: datetime.timedelt
     return to_ms_timestamp(start), to_ms_timestamp(end)
 
 
-def group_by(l: list[object], key: str) -> dict[str, list[object]]:
+def group_by(l: list, key: str) -> dict[str, list]:
     """Group a list of objects by `key`.
 
     Args:
-        l (list[object])
+        l (list)
         key (str)
 
     Returns:
-        dict[str, list[object]]: Dict with different `key`as keys.
+        dict[str, list]: Dict with different `key`as keys.
     """
     d = collections.defaultdict(list)
     for e in l:
@@ -72,7 +72,7 @@ def group_by(l: list[object], key: str) -> dict[str, list[object]]:
     return dict(d)
 
 
-__delayed = {}
+__delayed: dict[int, datetime.datetime] = {}
 
 
 def delayed(func):

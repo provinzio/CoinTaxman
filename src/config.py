@@ -28,7 +28,7 @@ TAX_YEAR = 2020
 
 # Country specific constants.
 if COUNTRY == core.Country.GERMANY:
-    FIAT = core.Fiat.EUR
+    FIAT_CLASS = core.Fiat.EUR
     PRINCIPLE = core.Principle.FIFO
 
     def IS_LONG_TERM(buy: datetime, sell: datetime):
@@ -41,4 +41,4 @@ BASE_PATH = Path(__file__).parent.parent.absolute()
 ACCOUNT_STATMENTS_PATH = Path(BASE_PATH, "account_statements")
 DATA_PATH = Path(BASE_PATH, "data")
 EXPORT_PATH = Path(BASE_PATH, "export")
-FIAT = FIAT.name  # Convert to string.
+FIAT = FIAT_CLASS.name  # Convert to string.

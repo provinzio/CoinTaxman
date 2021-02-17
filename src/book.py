@@ -54,11 +54,11 @@ class Book:
             # Skip header.
             next(reader)
 
-            for row, (utc_time, account, operation, coin, change, remark) in enumerate(reader, 2):
+            for row, (_utc_time, account, operation, coin, _change, remark) in enumerate(reader, 2):
                 # Parse data.
                 utc_time = datetime.datetime.strptime(
-                    utc_time, "%Y-%m-%d %H:%M:%S")
-                change = float(change)
+                    _utc_time, "%Y-%m-%d %H:%M:%S")
+                change = float(_change)
                 operation = operation_mapping.get(operation, operation)
                 if operation in (
                     "The Easiest Way to Trade",

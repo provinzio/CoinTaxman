@@ -17,7 +17,7 @@
 import collections
 import dataclasses
 import logging
-from typing import Optional, Union
+from typing import Deque, Union
 import queue
 
 from transaction import *
@@ -35,7 +35,7 @@ class BilancedOperation:
 class BilanceQueue:
 
     def __init__(self) -> None:
-        self.queue = collections.deque()
+        self.queue: Deque[BilancedOperation] = collections.deque()
         self.buffer_fee: list[float] = []
 
     def put(self, item: Union[Operation, BilancedOperation]) -> None:
@@ -58,7 +58,7 @@ class BilanceQueue:
         for fee in buffer_fee:
             self.remove_fee(fee)
 
-    def get(self) -> Optional[BilancedOperation]:
+    def get(self) -> BilancedOperation:
         """Get an item from the queue.
 
         Returns:
