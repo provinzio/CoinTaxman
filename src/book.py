@@ -81,13 +81,13 @@ class Book:
 
                 # Append operation to the correct list.
                 try:
-                    Operation = getattr(tr, operation)
+                    Op = getattr(tr, operation)
                 except AttributeError:
                     log.warning(
                         "Could not recognize operation `%s` in binance file `%s:%i`.", operation, file_path, row)
                     continue
 
-                o = Operation(utc_time, platform, change, coin)
+                o = Op(utc_time, platform, change, coin)
                 self.operations.append(o)
 
     # def _read_etoro(self, file_path: Path) -> None:
