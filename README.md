@@ -157,3 +157,13 @@ Zusammenfassung in meinen Worten:
 - Erhaltene Kryptowährung durch Coin Lending wird im Zeitpunkt des Zuflusses als Einkunft aus sonstigen Leistungen versteuert (Freigrenze 256 €).
 - Der Verkauf ist nicht steuerbar.
 - Coin Lending beeinflusst nicht die Haltefrist der verliehenen Coins.
+
+### Kommission (Referral System)
+
+Wenn man denkt, dass man den Steuerdschungel endlich durchquert hat, kommt Binance mit seinem Referral System daher.
+Über das Werbungs-System erhält man einen prozentualen Anteil an den Trading-Gebühren der Geworbenen auf sein Konto gutgeschrieben.
+(lebenslang, logischerweise in BTC.)
+Es ist also keine typische Kunden-werben-Kunden-Prämie sondern eher eine Kommission und damit bin ich mir unsicher, wie das einzuordnen ist.
+
+Für das Erste handhabe ich es wie eine Kunden-werben-Kunden-Prämie in Form eines Sachwerts.
+Sprich, die BTC werden zum Zeitpunkt des Erhalts in ihren EUR-Gegenwert umgerechnet und den Einkünften aus sonstigen Leistungen hinzugefügt.

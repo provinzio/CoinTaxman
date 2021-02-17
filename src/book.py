@@ -45,6 +45,7 @@ class Book:
             "Savings Interest": "CoinLendInterest",
             "Savings purchase": "CoinLend",
             "Savings Principal redemption": "CoinLendEnd",
+            "Commission History": "Commission",
         }
 
         with open(file_path, encoding="utf8") as f:

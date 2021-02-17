@@ -96,6 +96,10 @@ class Airdrop(Transaction):
     pass
 
 
+class Commission(Transaction):
+    pass
+
+
 class Deposit(Transaction):
     pass
 

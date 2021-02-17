@@ -112,6 +112,13 @@ class Taxman:
                     self.tax_events.append(tx)
             elif isinstance(op, Airdrop):
                 bilance.put(op)
+            elif isinstance(op, Commission):
+                bilance.put(op)
+                if self.in_tax_year(op):
+                    taxation_type = "Einkünfte aus sonstigen Leistungen"
+                    taxed_gain = self.price_data.get_cost(op)
+                    tx = TaxEvent(taxation_type, taxed_gain, op)
+                    self.tax_events.append(tx)
             elif isinstance(op, Deposit):
                 pass
             elif isinstance(op, Withdraw):
