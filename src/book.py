@@ -69,7 +69,7 @@ class Book:
                 change = abs(change)
 
                 # Validate data.
-                assert account == "Spot"
+                assert account == "Spot", "Other types than Spot are currently not supported. Please create an Issue or PR."
                 assert operation
                 assert coin
                 assert change
