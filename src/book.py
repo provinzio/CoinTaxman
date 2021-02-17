@@ -14,15 +14,11 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import collections
 import csv
 import datetime
 import logging
 from pathlib import Path
-import re
 from typing import Optional
-
-import openpyxl
 
 import config
 import transaction as tr
@@ -90,64 +86,6 @@ class Book:
                 o = Op(utc_time, platform, change, coin)
                 self.operations.append(o)
 
-    # def _read_etoro(self, file_path: Path) -> None:
-    #     platform = "etoro"
-    #     etoro_fiat = "USD"
-    #     wb = openpyxl.load_workbook(filename=file_path, read_only=True)
-    #     ws = wb["Transactions Report"]
-
-    #     deposit_regex = re.compile("(\d+(\.\d+)?) (\W+) (.*)")
-
-    #     for row, (utc_time, account_balance, operation, details, position_id, amount, realized_equity_change, realized_equity, nwa) in enumerate(ws.iter_rows(min_row=2, values_only=True), 2):
-    #         # Parse data.
-    #         utc_time = datetime.datetime.strptime(
-    #             utc_time, "%Y-%m-%d %H:%M:%S")
-    #         account_balance = float(account_balance)
-    #         position_id = misc.xint(position_id)
-    #         amount = float(amount)
-    #         realized_equity_change = float(realized_equity_change)
-    #         realized_equity = float(realized_equity)
-
-    #         # Validate data.
-    #         assert amount
-
-    #         # Append fees.
-
-    #         # Append operation to the correct list.
-    #         if operation == "Deposit":
-    #             m = deposit_regex.match(details)
-    #             assert m
-    #             # TODO fees depending on description (paypal/wiretransfer)
-    #             change, coin, description = m.groups()
-    #             if coin == etoro_fiat:
-    #                 deposit = tr.Deposit(utc_time, platform, change)
-    #                 self.operations[etoro_fiat] = deposit
-    #             else:
-    #                 sell = tr.Sell(utc_time, platform, -change)
-    #                 self.operations[coin].append(sell)
-    #                 buy = tr.Buy(utc_time, platform, amount)
-    #                 self.operations[etoro_fiat].append(buy)
-
-    #         elif operation == "Open Position":
-    #             buy_coin, sell_coin = details.split("/")
-
-    #             # TODO amount in etoro fiat. calc how many
-    #             if buy_coin == etoro_fiat:
-    #                 buy_change = amount
-    #             else:
-    #                 # TODO get pricedata
-    #             if sell_coin == etoro_fiat:
-    #                 sell_change = amount
-    #             else:
-    #                 # TODO get pricedata
-
-    #             sell = tr.Sell(utc_time, platform, -sell_change)
-    #             self.operations[buy_coin].append(sell)
-    #             buy = tr.Buy(utc_time, platform, buy_change)
-    #             self.operations[sell_coin].append(buy)
-
-    #     wb.close()
-
     def detect_exchange(self, file_path: Path) -> Optional[str]:
         if file_path.suffix == ".csv":
             with open(file_path, encoding="utf8") as f:
@@ -160,27 +98,6 @@ class Book:
             }
             for exchange, expected in expected_headers.items():
                 if header == expected:
-                    return exchange
-
-        elif file_path.suffix == ".xlsx":
-            wb = openpyxl.load_workbook(filename=file_path, read_only=True)
-            sheets = wb.sheetnames
-            sheet_headers = {
-                sheet: next(wb[sheet].iter_rows(values_only=True), None)
-                for sheet in sheets
-            }
-            wb.close()
-
-            expected_sheet_headers = {
-                "etoro": {
-                    'Account Details': ('Details', None),
-                    'Closed Positions': ('Position ID', 'Action', 'Copy Trader Name', 'Amount', 'Units', 'Open Rate', 'Close Rate', 'Spread', 'Profit', 'Open Date', 'Close Date', 'Take Profit Rate', 'Stop Loss Rate', 'Rollover Fees And Dividends', 'Is Real', 'Leverage', 'Notes'),
-                    'Transactions Report': ('Date', 'Account Balance', 'Type', 'Details', 'Position ID', 'Amount', 'Realized Equity Change', 'Realized Equity', 'NWA'),
-                    'Financial Summary': ('Figure', 'Amount in USD', 'Tax Rate'),
-                },
-            }
-            for exchange, expected in expected_sheet_headers.items():
-                if sheet_headers == expected:
                     return exchange
 
         return None
