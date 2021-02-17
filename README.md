@@ -167,3 +167,4 @@ Es ist also keine typische Kunden-werben-Kunden-Prämie sondern eher eine Kommis
 
 Für das Erste handhabe ich es wie eine Kunden-werben-Kunden-Prämie in Form eines Sachwerts.
 Sprich, die BTC werden zum Zeitpunkt des Erhalts in ihren EUR-Gegenwert umgerechnet und den Einkünften aus sonstigen Leistungen hinzugefügt.
+Aufgrund eines fehlenden steuerlichen Anschaffungsvorgangs ist eine Veräußerung steuerfrei.
