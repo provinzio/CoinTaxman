@@ -31,7 +31,7 @@ if COUNTRY == core.Country.GERMANY:
     FIAT_CLASS = core.Fiat.EUR
     PRINCIPLE = core.Principle.FIFO
 
-    def IS_LONG_TERM(buy: datetime, sell: datetime):
+    def IS_LONG_TERM(buy: datetime, sell: datetime) -> bool:
         return buy + relativedelta(years=1) < sell
 else:
     raise NotImplementedError(f"Your country {COUNTRY} is not supported.")
