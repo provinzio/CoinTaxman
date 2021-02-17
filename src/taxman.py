@@ -90,9 +90,10 @@ class Taxman:
                     total_win = self.price_data.get_cost(op)
                     taxed_gain = 0.0
                     # Coins which are older than (in this case) one year or
-                    # which come from an Airdrop or CoinLend will not be taxed.
+                    # which come from an Airdrop or CoinLend (in an foreign
+                    # currency) will not be taxed.
                     for sc in sold_coins:
-                        if not config.IS_LONG_TERM(sc.op.utc_time, op.utc_time) and not isinstance(sc.op, (Airdrop, CoinLendInterest)):
+                        if not config.IS_LONG_TERM(sc.op.utc_time, op.utc_time) and not (isinstance(sc.op, (Airdrop, CoinLendInterest)) and not sc.op.coin == config.FIAT):
                             partial_win = (sc.sold / op.change) * total_win
                             taxed_gain += partial_win - \
                                 self.price_data.get_cost(sc)
