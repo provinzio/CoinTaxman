@@ -173,7 +173,8 @@ class Taxman:
             header = ["Date", "Taxation Type", f"Taxed Gain in {config.FIAT}",
                       "Action", "Amount", "Asset",  "Remark"]
             writer.writerow(header)
-            for tx in self.tax_events:
+            # Tax events are currently sorted by coin. Sort by time instead.
+            for tx in sorted(self.tax_events, key=lambda tx: tx.op.utc_time):
                 line = [tx.op.utc_time, tx.taxation_type, tx.taxed_gain,
                         tx.op.__class__.__name__,  tx.op.change, tx.op.coin, tx.remark]
                 writer.writerow(line)
