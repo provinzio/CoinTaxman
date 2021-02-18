@@ -138,7 +138,7 @@ class Taxman:
         """Evaluate the taxation per coin using the country specific function."""
         log.debug("Starting evaluation...")
         for coin, operations in misc.group_by(self.book.operations, "coin").items():
-            operations = sorted(operations)  # Sort by time.
+            operations = sorted(operations, key=lambda op: op.utc_time)
             self.__evaluate_taxation(coin, operations)
 
     def print_evaluation(self) -> None:

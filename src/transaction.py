@@ -36,11 +36,6 @@ class Operation:
         if self.change < 0:
             raise ValueError("Operation.change must be positive.")
 
-    def __lt__(self, other: Operation) -> bool:
-        if issubclass(other.__class__, Operation):
-            return self.utc_time < other.utc_time and self.platform < other.platform
-        return NotImplemented
-
     def validate_types(self) -> bool:
         ret = True
         for field_name, field_def in self.__dataclass_fields__.items():
