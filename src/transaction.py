@@ -19,6 +19,7 @@ import dataclasses
 import datetime
 import logging
 import typing
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
@@ -29,6 +30,8 @@ class Operation:
     platform: str
     change: float
     coin: str
+    line: int
+    file_path: Path
 
     def __post_init__(self):
         assert self.validate_types()

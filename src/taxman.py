@@ -84,8 +84,14 @@ class Taxman:
                         # ...this is OK for fiat currencies (not taxable)
                         continue
                     else:
-                        raise RuntimeError(
-                            f"Not enough {coin} in queue to sell (transaction from {op.utc_time} on {op.platform}).\nHave you forgotten to add all account statements?\nThis error could occure after deposits from unknown sources.")
+                        # ...but not for crypto coins (taxable)
+                        log.error(
+                            f"{op.file_path.name}: Line {op.line}: "
+                            f"Not enough {coin} in queue to sell (transaction from {op.utc_time} on {op.platform})\n"
+                            f"\tIs your account statement missing any transactions?\n"
+                            f"\tThis error may also occur after deposits from unknown sources.\n"
+                        )
+                        raise RuntimeError
                 if self.in_tax_year(op) and coin != config.FIAT:
                     taxation_type = "Sonstige Einkünfte"
                     # Price of the sell.
