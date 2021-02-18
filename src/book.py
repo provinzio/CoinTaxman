@@ -50,7 +50,8 @@ class Book:
             # Skip header.
             next(reader)
 
-            for row, (_utc_time, account, operation, coin, _change, remark) in enumerate(reader, 2):
+            for _utc_time, account, operation, coin, _change, remark in reader:
+                row = reader.line_num
                 # Parse data.
                 utc_time = datetime.datetime.strptime(
                     _utc_time, "%Y-%m-%d %H:%M:%S")
@@ -73,7 +74,7 @@ class Book:
                 # Check for problems.
                 if remark:
                     log.warning(
-                        "I may missed a remark in %s:%i: `%s`.", file_path, row, remark)
+                        "I may have missed a remark in %s:%i: `%s`.", file_path, row, remark)
 
                 # Append operation to the correct list.
                 try:
@@ -83,7 +84,7 @@ class Book:
                         "Could not recognize operation `%s` in binance file `%s:%i`.", operation, file_path, row)
                     continue
 
-                o = Op(utc_time, platform, change, coin)
+                o = Op(utc_time, platform, change, coin, row, file_path)
                 self.operations.append(o)
 
     def detect_exchange(self, file_path: Path) -> Optional[str]:
