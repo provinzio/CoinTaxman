@@ -83,7 +83,7 @@ class Taxman:
                     if coin == config.FIAT:
                         continue
                     raise RuntimeError(
-                        f"Not enough {coin} in queue to remove sold ones.")
+                        f"Not enough {coin} in queue to sell (transaction from {op.utc_time} on {op.platform}).\nHave you forgotten to add all account statements?\nThis error could occure after deposits from unknown sources.")
                 if self.in_tax_year(op) and coin != config.FIAT:
                     taxation_type = "Sonstige Einkünfte"
                     # Price of the sell.
