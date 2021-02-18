@@ -17,7 +17,7 @@
 import collections
 import dataclasses
 import logging
-from typing import Deque, Union
+from typing import Deque, Union, Optional
 import queue
 
 from transaction import *
@@ -58,19 +58,23 @@ class BilanceQueue:
         for fee in buffer_fee:
             self.remove_fee(fee)
 
-    def get(self) -> BilancedOperation:
+    def get(self) -> Optional[BilancedOperation]:
         """Get an item from the queue.
 
         Returns:
             BilancedOperation
+            ...or None, if the queue ran out of items to sell.
         """
         return self._get()
 
     def _put(self, bop: BilancedOperation) -> None:
         self.queue.append(bop)
 
-    def _get(self) -> BilancedOperation:
-        return self.queue.popleft()
+    def _get(self) -> Optional[BilancedOperation]:
+        try:
+            return self.queue.popleft()
+        except IndexError:
+            return None
 
     def remove_fee(self, fee: float) -> None:
         """Remove fee from the last added transaction.
@@ -99,7 +103,7 @@ class BilanceQueue:
             else:
                 fee -= not_sold
 
-    def sell(self, change: float) -> list[SoldCoin]:
+    def sell(self, change: float) -> Optional[list[SoldCoin]]:
         """Sell/remove coins from the queue, returning the sold coins.
 
         Depending on the QueueType, the coins will be removed FIFO or LIFO.
@@ -111,11 +115,15 @@ class BilanceQueue:
         Returns:
             list[SoldCoin]: List of specific coins which were (depending on
                             the tax regulation) sold in the transaction.
+            ...or None, if the queue ran out of items to sell.
         """
         assert change > 0
         sold_coins: list[SoldCoin] = []
         while True:
-            bop: BilancedOperation = self.get()
+            bop: Optional[BilancedOperation] = self.get()
+
+            if bop is None:
+                return None
 
             not_sold = bop.op.change - bop.sold
             assert not_sold > 0

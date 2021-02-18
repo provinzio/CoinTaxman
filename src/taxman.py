@@ -77,13 +77,15 @@ class Taxman:
             elif isinstance(op, Buy):
                 bilance.put(op)
             elif isinstance(op, Sell):
-                try:
-                    sold_coins = bilance.sell(op.change)
-                except IndexError:
+                sold_coins = bilance.sell(op.change)
+                if sold_coins is None:
+                    # Queue ran out of items to sell...
                     if coin == config.FIAT:
+                        # ...this is OK for fiat currencies (not taxable)
                         continue
-                    raise RuntimeError(
-                        f"Not enough {coin} in queue to sell (transaction from {op.utc_time} on {op.platform}).\nHave you forgotten to add all account statements?\nThis error could occure after deposits from unknown sources.")
+                    else:
+                        raise RuntimeError(
+                            f"Not enough {coin} in queue to sell (transaction from {op.utc_time} on {op.platform}).\nHave you forgotten to add all account statements?\nThis error could occure after deposits from unknown sources.")
                 if self.in_tax_year(op) and coin != config.FIAT:
                     taxation_type = "Sonstige Einkünfte"
                     # Price of the sell.
