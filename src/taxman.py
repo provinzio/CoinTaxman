@@ -178,13 +178,21 @@ class Taxman:
 
         with open(file_path, "w", newline="") as f:
             writer = csv.writer(f)
+            # Add embedded metadata info
+            writer.writerow(
+                ["# software", "CoinTaxman <https://github.com/provinzio/CoinTaxman>"])
+            if commit_hash := misc.get_current_commit_hash():
+                writer.writerow(["# commit", commit_hash])
+            writer.writerow(
+                ["# updated", datetime.date.today().strftime("%x")])
+
             header = ["Date", "Taxation Type", f"Taxed Gain in {config.FIAT}",
                       "Action", "Amount", "Asset",  "Remark"]
             writer.writerow(header)
             # Tax events are currently sorted by coin. Sort by time instead.
             for tx in sorted(self.tax_events, key=lambda tx: tx.op.utc_time):
                 line = [tx.op.utc_time, tx.taxation_type, tx.taxed_gain,
-                        tx.op.__class__.__name__,  tx.op.change, tx.op.coin, tx.remark]
+                        tx.op.__class__.__name__, tx.op.change, tx.op.coin, tx.remark]
                 writer.writerow(line)
 
         log.info("Saved evaluation in %s.", file_path)

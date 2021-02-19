@@ -19,6 +19,7 @@ import datetime
 from pathlib import Path
 import random
 import re
+import subprocess
 import time
 from typing import Optional, Tuple, Union
 
@@ -137,3 +138,9 @@ def get_next_file_path(path: Path, base_filename: str, extension: str) -> Path:
     file_path = Path(path, f"{base_filename}_rev{i:03d}.{extension}")
     assert not file_path.exists()
     return file_path
+
+def get_current_commit_hash() -> Optional[str]:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("UTF-8").strip()
+    except subprocess.CalledProcessError:
+        return None
