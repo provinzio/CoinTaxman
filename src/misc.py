@@ -26,8 +26,8 @@ from typing import Optional, Tuple, Union
 import core
 
 
-def xint(i: int) -> Optional[int]:
-    return None if i is None else int(i)
+def xint(x) -> Optional[int]:
+    return None if x is None else int(x)
 
 
 def to_ms_timestamp(d: datetime.datetime) -> int:
@@ -138,6 +138,7 @@ def get_next_file_path(path: Path, base_filename: str, extension: str) -> Path:
     file_path = Path(path, f"{base_filename}_rev{i:03d}.{extension}")
     assert not file_path.exists()
     return file_path
+
 
 def get_current_commit_hash() -> Optional[str]:
     try:
