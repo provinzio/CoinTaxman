@@ -161,7 +161,7 @@ class Taxman:
             print(
                 f"Either the evaluation has not run or there are no tax events for {config.TAX_YEAR}.")
 
-    def export_evaluation(self) -> Path:
+    def export_evaluation_as_csv(self) -> Path:
         """Export detailed summary of all tax events to CSV.
 
         File will be placed in export/ with ascending revision numbers

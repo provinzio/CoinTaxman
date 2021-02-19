@@ -36,7 +36,7 @@ def main() -> None:
         return
 
     taxman.evaluate_taxation()
-    taxman.export_evaluation()
+    taxman.export_evaluation_as_csv()
     taxman.print_evaluation()
 
 
