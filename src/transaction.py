@@ -90,6 +90,10 @@ class CoinLendInterest(Transaction):
     pass
 
 
+class StakingInterest(Transaction):
+    pass
+
+
 class Airdrop(Transaction):
     pass
 

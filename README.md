@@ -166,6 +166,16 @@ Zusammenfassung in meinen Worten:
 - Der Verkauf ist nicht steuerbar.
 - Coin Lending beeinflusst nicht die Haltefrist der verliehenen Coins.
 
+### Staking
+
+> Ebenso [wie beim Coin Lending] verhält es sich bei Kryptowährungen, die für Staking oder Masternodes genutzt werden. Nutzer müssen bei proof-of-stake-basierten Kryptowährungen oder beim Betreiben von Masternodes einen bestimmten Teil ihrer Kryptowährung der Verfügungsmacht entziehen und dem Netzwerk als Sicherheit bereitstellen. Die Sicherheit des Netzwerkes wird dadurch gewährleistet, dass regelwidriges Verhalten den dem Verlust der Sicherheitsleistung (Kryptowährung) zur Folge hat. Auch in diesen Fällen werden keine Einkünfte aus dem Wirtschaftsgut selbst, sondern für das Blockieren der Verfügungsmacht, also als Ertrag aus der Forderung, erzielt. Auch hier bleibt es bei der Haltefrist von einem Jahr.
+
+[Quelle](https://www.winheller.com/bankrecht-finanzrecht/bitcointrading/bitcoinundsteuer/besteuerung-von-staking.html)
+[Wörtlich zitiert vom 19.02.2021]
+
+Zusammenfassung:
+- siehe Coin Lending
+
 ### Kommission (Referral System)
 
 Wenn man denkt, dass man den Steuerdschungel endlich durchquert hat, kommt Binance mit seinem Referral System daher.

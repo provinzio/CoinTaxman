@@ -101,7 +101,7 @@ class Taxman:
                     # which come from an Airdrop, CoinLend or Commission (in an
                     # foreign currency) will not be taxed.
                     for sc in sold_coins:
-                        if not config.IS_LONG_TERM(sc.op.utc_time, op.utc_time) and not (isinstance(sc.op, (Airdrop, CoinLendInterest, Commission)) and not sc.op.coin == config.FIAT):
+                        if not config.IS_LONG_TERM(sc.op.utc_time, op.utc_time) and not (isinstance(sc.op, (Airdrop, CoinLendInterest, StakingInterest, Commission)) and not sc.op.coin == config.FIAT):
                             partial_win = (sc.sold / op.change) * total_win
                             taxed_gain += partial_win - \
                                 self.price_data.get_cost(sc)
@@ -109,10 +109,12 @@ class Taxman:
                         f"{sc.sold} from {sc.op.utc_time} ({sc.op.__class__.__name__})" for sc in sold_coins)
                     tx = TaxEvent(taxation_type, taxed_gain, op, remark)
                     self.tax_events.append(tx)
-            elif isinstance(op, CoinLendInterest):
+            elif isinstance(op, (CoinLendInterest, StakingInterest)):
                 bilance.put(op)
                 if self.in_tax_year(op):
                     if misc.is_fiat(coin):
+                        assert not isinstance(
+                            op, StakingInterest), "You can not stake fiat currencies."
                         taxation_type = "Einkünfte aus Kapitalvermögen"
                     else:
                         taxation_type = "Einkünfte aus sonstigen Leistungen"
