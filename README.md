@@ -34,6 +34,8 @@ Quick and easy installation can be done with `pip`.
 2. Add account statements from supported exchanges in `account_statements/`
 2. Run `python "src/main.py"`
 
+Have a look at our [Wiki](https://github.com/provinzio/CoinTaxman/wiki) for more information on how to obtain the account statement for your exchange.
+
 ### Supporting the development
 
 Please consider supporting the development of this tool by either using my [Binance referral link](https://www.binance.com/en/register?ref=DS7C3HPD) if you want to create an account there or by donating to one of the adresses below.
