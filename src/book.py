@@ -34,6 +34,27 @@ class Book:
     def __bool__(self) -> bool:
         return bool(self.operations)
 
+    def append_operation(
+        self,
+        operation: str,
+        utc_time: datetime.datetime,
+        platform: str,
+        change: float,
+        coin: str,
+        row: int,
+        file_path: Path,
+    ) -> None:
+
+        try:
+            Op = getattr(tr, operation)
+        except AttributeError:
+            log.warning(
+                "Could not recognize operation `%s` in  %s file `%s:%i`.", operation, platform, file_path, row)
+            return
+
+        o = Op(utc_time, platform, change, coin, row, file_path)
+        self.operations.append(o)
+
     def _read_binance(self, file_path: Path) -> None:
         platform = "binance"
         operation_mapping = {
@@ -53,6 +74,7 @@ class Book:
 
             for _utc_time, account, operation, coin, _change, remark in reader:
                 row = reader.line_num
+
                 # Parse data.
                 utc_time = datetime.datetime.strptime(
                     _utc_time, "%Y-%m-%d %H:%M:%S")
@@ -77,16 +99,8 @@ class Book:
                     log.warning(
                         "I may have missed a remark in %s:%i: `%s`.", file_path, row, remark)
 
-                # Append operation to the correct list.
-                try:
-                    Op = getattr(tr, operation)
-                except AttributeError:
-                    log.warning(
-                        "Could not recognize operation `%s` in binance file `%s:%i`.", operation, file_path, row)
-                    continue
-
-                o = Op(utc_time, platform, change, coin, row, file_path)
-                self.operations.append(o)
+                self.append_operation(operation, utc_time, platform,
+                                      change, coin, row, file_path)
 
     def detect_exchange(self, file_path: Path) -> Optional[str]:
         if file_path.suffix == ".csv":
