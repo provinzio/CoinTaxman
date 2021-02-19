@@ -23,7 +23,6 @@ from typing import Optional, Union
 
 import requests
 
-from book import Book
 import config
 import misc
 from transaction import *
@@ -237,18 +236,3 @@ class PriceData:
         if isinstance(tr, SoldCoin):
             return price * tr.sold
         raise NotImplementedError
-
-    def gather_data(self, book: Book) -> None:
-        """Gather data in advance.
-
-        Args:
-            book (Book)
-        """
-        reference_coin = config.FIAT
-        for op in book.operations:
-            # We do not need to gather prices for these operation types.
-            if isinstance(op, (Airdrop, Deposit, Withdraw)):
-                continue
-            # By getting the cost, we confirm that data exists or it will
-            # be retrieved and writting to our local database.
-            self.get_cost(op, reference_coin)
