@@ -21,6 +21,8 @@ from pathlib import Path
 from typing import Optional
 
 import config
+import misc
+from price_data import PriceData
 import transaction as tr
 
 log = logging.getLogger(__name__)
@@ -28,7 +30,9 @@ log = logging.getLogger(__name__)
 
 class Book:
 
-    def __init__(self) -> None:
+    def __init__(self, price_data: PriceData) -> None:
+        self.price_data = price_data
+
         self.operations: list[tr.Operation] = []
 
     def __bool__(self) -> bool:
@@ -102,6 +106,76 @@ class Book:
                 self.append_operation(operation, utc_time, platform,
                                       change, coin, row, file_path)
 
+    def _read_coinbase(self, file_path: Path) -> None:
+        platform = "coinbase"
+        operation_mapping = {
+            "Send": "Withdraw",
+        }
+
+        with open(file_path, encoding="utf8") as f:
+            reader = csv.reader(f)
+
+            # Skip header.
+            try:
+                assert next(reader)  # header line
+                assert next(reader) == []
+                assert next(reader) == []
+                assert next(reader) == []
+                assert next(reader) == ["Transactions"]
+                assert next(reader)  # user row
+                assert next(reader) == []
+                assert next(reader) == ['Timestamp', 'Transaction Type', 'Asset', 'Quantity Transacted',
+                                        'EUR Spot Price at Transaction', 'EUR Subtotal', 'EUR Total (inclusive of fees)', 'EUR Fees', 'Notes']
+            except AssertionError as e:
+                msg = f"Unable to read coinbase file: Malformed header. Skipping {file_path}."
+                e.args += (msg,)
+                log.exception(e)
+                return
+
+            for _utc_time, operation, coin, _change, _eur_spot, _eur_subtotal, _eur_total, _eur_fee, remark in reader:
+                row = reader.line_num
+
+                # Parse data.
+                utc_time = datetime.datetime.strptime(
+                    _utc_time, "%Y-%m-%dT%H:%M:%SZ")
+                operation = operation_mapping.get(operation, operation)
+                change = float(_change)
+                #  Current price from exchange.
+                eur_spot = float(_eur_spot)
+                #  Cost without fees.
+                eur_subtotal = misc.xfloat(_eur_subtotal)
+                #  Cost with fees.
+                eur_total = misc.xfloat(_eur_total)
+                eur_fee = misc.xfloat(_eur_fee)
+
+                # Unused variables.
+                del eur_total
+                del remark
+
+                # Validate data.
+                assert operation
+                assert coin
+                assert change
+                assert eur_spot
+
+                self.append_operation(operation, utc_time, platform,
+                                      change, coin, row, file_path)
+
+                # Save price in our local database for later.
+                self.price_data.set_price_db(
+                    platform, coin, "EUR", utc_time, eur_spot)
+
+                if operation == "Sell":
+                    self.append_operation("Buy", utc_time, platform,
+                                          eur_subtotal, "EUR", row, file_path)
+                elif operation == "Buy":
+                    self.append_operation("Sell", utc_time, platform,
+                                          eur_subtotal, "EUR", row, file_path)
+
+                if eur_fee:
+                    self.append_operation("Fee", utc_time, platform,
+                                          eur_fee, "EUR", row, file_path)
+
     def detect_exchange(self, file_path: Path) -> Optional[str]:
         if file_path.suffix == ".csv":
             with open(file_path, encoding="utf8") as f:
@@ -110,7 +184,8 @@ class Book:
 
             expected_headers = {
                 "binance": ['UTC_Time', 'Account',
-                            'Operation', 'Coin', 'Change', 'Remark']
+                            'Operation', 'Coin', 'Change', 'Remark'],
+                "coinbase": ['You can use this transaction report to inform your likely tax obligations. For US customers, Sells, Converts, and Rewards Income, and Coinbase Earn transactions are taxable events. For final tax obligations, please consult your tax advisor.'],
             }
             for exchange, expected in expected_headers.items():
                 if header == expected:

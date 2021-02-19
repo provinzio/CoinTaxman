@@ -25,8 +25,8 @@ log = logging.getLogger(__name__)
 
 
 def main() -> None:
-    book = Book()
     price_data = PriceData()
+    book = Book(price_data)
     taxman = Taxman(book, price_data)
 
     status = book.read_files()
