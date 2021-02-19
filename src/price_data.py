@@ -38,6 +38,12 @@ log = logging.getLogger(__name__)
 
 class PriceData:
 
+    def get_db_path(self, platform: str) -> Path:
+        return Path(config.DATA_PATH, f"{platform}.db")
+
+    def get_tablename(self, coin: str, reference_coin: str) -> str:
+        return f"{coin}/{reference_coin}"
+
     @misc.delayed
     def _get_price_binance(self, base_asset: str, utc_time: datetime.datetime, quote_asset: str, swapped_symbols: bool = False) -> float:
         """Retrieve price from binance official REST API.
@@ -128,7 +134,7 @@ class PriceData:
         return None
 
     def __set_price_db(self, db_path: Path, tablename: str, utc_time: datetime.datetime, price: float) -> None:
-        """Write Price to database.
+        """Write price to database.
 
         Create database/table if necessary.
 
@@ -152,6 +158,37 @@ class PriceData:
                     raise e
             conn.commit()
 
+    def set_price_db(self, platform: str, coin: str, reference_coin: str, utc_time: datetime.datetime, price: float) -> None:
+        """Write price to database.
+
+        Tries to insert a historical price into the local database.
+
+        A warning will be raised, if there is already a different price.
+
+        Args:
+            platform (str): [description]
+            coin (str): [description]
+            reference_coin (str): [description]
+            utc_time (datetime.datetime): [description]
+            price (float): [description]
+        """
+        assert coin != reference_coin
+        db_path = self.get_db_path(platform)
+        tablename = self.get_tablename(coin, reference_coin)
+        try:
+            self.__set_price_db(db_path, tablename, utc_time, price)
+        except sqlite3.IntegrityError as e:
+            if str(e) == f"UNIQUE constraint failed: {tablename}.utc_time":
+                price_db = self.get_price(
+                    platform, coin, utc_time, reference_coin)
+                if price != price_db:
+                    log.warning(
+                        "Tried to write price to database, but a different price exists already."
+                        f"({platform=}, {tablename=}, {utc_time=}, {price=})"
+                    )
+            else:
+                raise e
+
     def get_price(self, platform: str, coin: str, utc_time: datetime.datetime, reference_coin: str = config.FIAT, **kwargs) -> float:
         """Get the price of a coin pair from a specific `platform` at `utc_time`.
 
@@ -174,8 +211,8 @@ class PriceData:
         if coin == reference_coin:
             return 1.0
 
-        db_path = Path(config.DATA_PATH, f"{platform}.db")
-        tablename = f"{coin}/{reference_coin}"
+        db_path = self.get_db_path(platform)
+        tablename = self.get_tablename(coin, reference_coin)
 
         # Check if price exists already in our database.
         if (price := self.__get_price_db(db_path, tablename, utc_time)) is not None:
