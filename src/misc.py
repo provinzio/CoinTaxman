@@ -27,7 +27,11 @@ import core
 
 
 def xint(x) -> Optional[int]:
-    return None if x is None else int(x)
+    return None if x in (None, "") else int(x)
+
+
+def xfloat(x) -> Optional[float]:
+    return None if x in (None, "") else float(x)
 
 
 def to_ms_timestamp(d: datetime.datetime) -> int:

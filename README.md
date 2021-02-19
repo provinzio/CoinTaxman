@@ -19,6 +19,7 @@ Pull Requests und Anfragen über Issues sind gerne gesehen (siehe `Key notes for
 
 ### Currently supported exchanges
 - Binance
+- coinbase
 
 ### Requirements
 
