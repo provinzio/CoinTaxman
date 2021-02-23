@@ -24,6 +24,7 @@ import config
 import misc
 from price_data import PriceData
 import transaction as tr
+from core import kraken_asset_map
 
 log = logging.getLogger(__name__)
 
@@ -179,6 +180,79 @@ class Book:
                     self.append_operation("Fee", utc_time, platform,
                                           eur_fee, "EUR", row, file_path)
 
+    def _read_kraken_trades(self, file_path: Path) -> None:
+        log.error(f"{file_path.name}: "
+                  f"Looks like this is a Kraken 'Trades' history, but we need the 'Ledgers' history. "
+                  f"(See: https://github.com/provinzio/CoinTaxman/wiki/Exchange:-Kraken)")
+
+    def _read_kraken_ledgers(self, file_path: Path) -> None:
+        platform = "kraken"
+        operation_mapping = {
+            "spend": "Sell",  # Sell ordered via 'Buy Crypto' button
+            "receive": "Buy",  # Buy ordered via 'Buy Crypto' button
+            "transfer": "Airdrop",
+            "reward": "StakingInterest",
+            "deposit": "Deposit",
+            "withdrawal": "Withdraw",
+        }
+
+        # Need to track state of "duplicate entries" for deposits / withdrawals;
+        # the second deposit and the first withdrawal entry need to be skipped.
+        #   dup_state["deposit"] == 0: Deposit is broadcast to blockchain            <-- Taxable event (is in public trade history)
+        #   dup_state["deposit"] == 1: Deposit is credited to Kraken account         <-- Skipped
+        #   dup_state["withdrawal"] == 0: Withdrawal is requested in Kraken account  <-- Skipped
+        #   dup_state["withdrawal"] == 1: Withdrawal is broadcast to blockchain      <-- Taxable event (is in public trade history)
+        dup_state, dup_skip = {"deposit": 0, "withdrawal": 0}, {"deposit": 1, "withdrawal": 0}
+        # See: https://support.kraken.com/hc/en-us/articles/360001169443-Why-there-are-duplicate-entries-for-deposits-withdrawals
+
+        with open(file_path, encoding="utf8") as f:
+            reader = csv.reader(f)
+
+            # Skip header.
+            next(reader)
+
+            for txid, refid, _utc_time, _type, subtype, aclass, _asset, _amount, _fee, balance in reader:
+                row = reader.line_num
+
+                # Skip "duplicate entries" for deposits / withdrawals
+                if _type in dup_state.keys():
+                    skip = dup_state[_type] == dup_skip[_type]
+                    dup_state[_type] = (dup_state[_type] + 1) % 2
+                    if skip:
+                        continue
+
+                # Parse data.
+                utc_time = datetime.datetime.strptime(_utc_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=datetime.timezone.utc)
+                change = float(_amount)
+                coin = kraken_asset_map.get(_asset, _asset)
+                fee = float(_fee)
+                operation = operation_mapping.get(_type)
+                if operation is None:
+                    if _type == "trade":
+                        operation = "Sell" if change < 0 else "Buy"
+                    elif _type in ["margin trade", "rollover", "settled"]:
+                        log.error(f"{file_path}: {row}: Margin trading is currently not supported. Please create an Issue or PR.")
+                        raise RuntimeError
+                    else:
+                        log.error(f"{file_path}: {row}: Other order type '{_type}' is currently not supported. Please create an Issue or PR.")
+                        raise RuntimeError
+                change = abs(change)
+
+                # Validate data.
+                assert operation
+                assert coin
+                assert change
+
+                self.append_operation(operation, utc_time, platform,
+                                      change, coin, row, file_path)
+
+                if fee != 0:
+                    self.append_operation("Fee", utc_time, platform,
+                                          fee, coin, row, file_path)
+
+        assert dup_state["deposit"] == 0, "Orphaned deposit. (Must always come in pairs). Is your file corrupted?"
+        assert dup_state["withdrawal"] == 0, "Orphaned withdrawal. (Must always come in pairs). Is your file corrupted?"
+
     def detect_exchange(self, file_path: Path) -> Optional[str]:
         if file_path.suffix == ".csv":
             with open(file_path, encoding="utf8") as f:
@@ -189,6 +263,8 @@ class Book:
                 "binance": ['UTC_Time', 'Account',
                             'Operation', 'Coin', 'Change', 'Remark'],
                 "coinbase": ['You can use this transaction report to inform your likely tax obligations. For US customers, Sells, Converts, and Rewards Income, and Coinbase Earn transactions are taxable events. For final tax obligations, please consult your tax advisor.'],
+                "kraken_ledgers": ["txid", "refid", "time", "type", "subtype", "aclass", "asset", "amount", "fee", "balance"],
+                "kraken_trades": ["txid", "ordertxid", "pair", "time", "type", "ordertype", "price", "", "cost", "fee", "vol", "margin", "misc", "ledgers"],
             }
             for exchange, expected in expected_headers.items():
                 if header == expected:
