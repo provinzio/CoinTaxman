@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import bisect
 import datetime
 import json
 import logging
@@ -24,6 +25,7 @@ from typing import Optional, Union
 import requests
 
 import config
+from core import kraken_pair_map
 import misc
 from transaction import *
 
@@ -116,6 +118,77 @@ class PriceData:
             total_quantity += quantity
         average_price = total_cost / total_quantity
         return average_price
+
+    @misc.delayed
+    def _get_price_kraken(self, base_asset: str, utc_time: datetime.datetime, quote_asset: str, minutes_step: int = 10) -> float:
+        """Retrieve price from Kraken official REST API.
+
+        We select the data point closest to the desired timestamp (utc_time), but not newer than this timestamp.
+        For this we fetch one chunk of the trade history, starting `minutes_step` minutes before this timestamp.
+        We then walk through the history until the closest timestamp match is found.
+        Otherwise, we start another 10 minutes earlier and try again, etc. …
+        (Exiting with a warning and zero price after hitting the arbitrarily chosen offset limit of 120 minutes.)
+        If the initial offset is already too large, recursively retry by reducing the offset step, down to 1 minute.
+
+        Documentation: https://www.kraken.com/features/api
+
+        Args:
+            base_asset (str): Base asset.
+            utc_time (datetime.datetime): Target time (time of the trade).
+            quote_asset (str): Quote asset.
+            minutes_step (int): Initial time offset for consecutive Kraken API requests. Defaults to 10.
+
+        Returns:
+            float: Price of asset pair at target time (0 if price couldn't be determined)
+        """
+        target_timestamp = misc.to_ms_timestamp(utc_time)
+        root_url = "https://api.kraken.com/0/public/Trades"
+        pair = base_asset + quote_asset
+        pair = kraken_pair_map.get(pair, pair)
+
+        minutes_offset = 0
+        while minutes_offset < 120:
+            minutes_offset += minutes_step
+
+            since = misc.to_ns_timestamp(utc_time - datetime.timedelta(minutes=minutes_offset))
+            url = f"{root_url}?{pair=:}&{since=:}"
+
+            log.debug(f"Querying trades for {pair} at {utc_time} (offset={minutes_offset}m): Calling %s", url)
+            response = requests.get(url)
+            response.raise_for_status()
+            data = json.loads(response.text)
+
+            if data["error"]:
+                log.warning(f"Querying trades for {pair} at {utc_time} (offset={minutes_offset}m): "
+                            f"Could not retrieve trades: {data['error']}")
+                return 0
+
+            # Find closest timestamp match
+            data = data["result"][pair]
+            data_timestamps_ms = [int(float(d[2]) * 1000) for d in data]
+            closest_match_index = bisect.bisect_left(data_timestamps_ms, target_timestamp) - 1
+
+            # The desired timestamp is in the past; increase the offset
+            if closest_match_index == - 1:
+                continue
+
+            # The desired timestamp is in the future
+            if closest_match_index == len(data_timestamps_ms) - 1:
+
+                if minutes_step == 1:
+                    # Cannot remove interval any further; give up
+                    break
+                else:
+                    # We missed the desired timestamp because our initial step size was too large; reduce step size
+                    log.debug(f"Querying trades for {pair} at {utc_time}: Reducing step")
+                    return self._get_price_kraken(base_asset, utc_time, quote_asset, minutes_step - 1)
+
+            price = float(data[closest_match_index][0])
+            return price
+
+        log.warning(f"Querying trades for {pair} at {utc_time}: "
+                    f"Failed to find matching exchange rate. Please create an Issue or PR.")
+        return 0
 
     def __get_price_db(self, db_path: Path, tablename: str, utc_time: datetime.datetime) -> Optional[float]:
         """Try to retrieve the price from our local database.

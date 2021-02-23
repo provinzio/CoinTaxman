@@ -20,7 +20,7 @@ Pull Requests und Anfragen über Issues sind gerne gesehen (siehe `Key notes for
 ### Currently supported exchanges
 - [Binance](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-Binance)
 - [coinbase](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-coinbase)
-- [Kraken](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-Kraken) (Work in Progress #8)
+- [Kraken](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-Kraken)
 
 ### Requirements
 

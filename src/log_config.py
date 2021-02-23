@@ -33,3 +33,6 @@ formatter = logging.Formatter(
 ch.setLevel(logging.DEBUG)
 ch.setFormatter(formatter)
 log.addHandler(ch)
+
+# Disable urllib debug messages
+logging.getLogger("urllib3").propagate = False

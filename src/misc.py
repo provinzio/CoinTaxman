@@ -46,6 +46,18 @@ def to_ms_timestamp(d: datetime.datetime) -> int:
     return int(d.timestamp() * 1000)
 
 
+def to_ns_timestamp(d: datetime.datetime) -> int:
+    """Return timestamp in nanoseconds.
+
+    Args:
+        d (datetime.datetime)
+
+    Returns:
+        int: Timestamp in nanoseconds.
+    """
+    return int(d.timestamp() * 1000000000)
+
+
 def get_offset_timestamps(utc_time: datetime.datetime, offset: datetime.timedelta) -> Tuple[int, int]:
     """Return timestamps in milliseconds `offset/2` before/after `utc_time`.
 
