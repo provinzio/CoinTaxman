@@ -82,6 +82,7 @@ class Book:
                 # Parse data.
                 utc_time = datetime.datetime.strptime(
                     _utc_time, "%Y-%m-%d %H:%M:%S")
+                utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
                 change = float(_change)
                 operation = operation_mapping.get(operation, operation)
                 if operation in (
@@ -138,6 +139,7 @@ class Book:
                 # Parse data.
                 utc_time = datetime.datetime.strptime(
                     _utc_time, "%Y-%m-%dT%H:%M:%SZ")
+                utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
                 operation = operation_mapping.get(operation, operation)
                 change = float(_change)
                 #  Current price from exchange.
