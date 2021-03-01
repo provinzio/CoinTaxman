@@ -128,7 +128,7 @@ class BilanceQueue:
             not_sold = bop.op.change - bop.sold
             assert not_sold > 0
 
-            if not_sold >= change:
+            if not_sold > change:
                 bop.sold += change
                 self.queue.append(bop)
                 sold_coins.append(SoldCoin(bop.op, change))
