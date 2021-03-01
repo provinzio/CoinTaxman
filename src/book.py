@@ -67,6 +67,7 @@ class Book:
             "Savings purchase": "CoinLend",
             "Savings Principal redemption": "CoinLendEnd",
             "Commission History": "Commission",
+            "Commission Fee Shared With You": "Commission",
             "Launchpool Interest": "StakingInterest",
         }
 
