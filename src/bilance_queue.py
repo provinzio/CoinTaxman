@@ -119,7 +119,7 @@ class BilanceQueue:
         """
         assert change > 0
         sold_coins: list[SoldCoin] = []
-        while True:
+        while change > 0:
             bop: Optional[BilancedOperation] = self.get()
 
             if bop is None:
