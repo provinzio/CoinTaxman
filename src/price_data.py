@@ -54,6 +54,19 @@ class PriceData:
         `TWTBTC * BTCEUR`.
 
         Documentation: https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md
+
+        Args:
+            base_asset (str)
+            utc_time (datetime.datetime)
+            quote_asset (str)
+            swapped_symbols (bool, optional): The function is run with swapped asset symbols.
+                                              Defaults to False.
+
+        Raises:
+            RuntimeError: Unable to retrieve price data.
+
+        Returns:
+            float: Price of asset pair.
         """
         root_url = "https://api.binance.com/api/v3/aggTrades"
         symbol = f"{base_asset}{quote_asset}"
