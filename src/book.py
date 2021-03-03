@@ -202,7 +202,8 @@ class Book:
         #   dup_state["deposit"] == 1: Deposit is credited to Kraken account         <-- Skipped
         #   dup_state["withdrawal"] == 0: Withdrawal is requested in Kraken account  <-- Skipped
         #   dup_state["withdrawal"] == 1: Withdrawal is broadcast to blockchain      <-- Taxable event (is in public trade history)
-        dup_state, dup_skip = {"deposit": 0, "withdrawal": 0}, {"deposit": 1, "withdrawal": 0}
+        dup_state, dup_skip = {"deposit": 0, "withdrawal": 0}, {
+            "deposit": 1, "withdrawal": 0}
         # See: https://support.kraken.com/hc/en-us/articles/360001169443-Why-there-are-duplicate-entries-for-deposits-withdrawals
 
         with open(file_path, encoding="utf8") as f:
@@ -222,7 +223,9 @@ class Book:
                         continue
 
                 # Parse data.
-                utc_time = datetime.datetime.strptime(_utc_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=datetime.timezone.utc)
+                utc_time = datetime.datetime.strptime(
+                    _utc_time, "%Y-%m-%d %H:%M:%S")
+                utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
                 change = float(_amount)
                 coin = kraken_asset_map.get(_asset, _asset)
                 fee = float(_fee)
@@ -231,10 +234,12 @@ class Book:
                     if _type == "trade":
                         operation = "Sell" if change < 0 else "Buy"
                     elif _type in ["margin trade", "rollover", "settled"]:
-                        log.error(f"{file_path}: {row}: Margin trading is currently not supported. Please create an Issue or PR.")
+                        log.error(
+                            f"{file_path}: {row}: Margin trading is currently not supported. Please create an Issue or PR.")
                         raise RuntimeError
                     else:
-                        log.error(f"{file_path}: {row}: Other order type '{_type}' is currently not supported. Please create an Issue or PR.")
+                        log.error(
+                            f"{file_path}: {row}: Other order type '{_type}' is currently not supported. Please create an Issue or PR.")
                         raise RuntimeError
                 change = abs(change)
 

@@ -150,10 +150,12 @@ class PriceData:
         while minutes_offset < 120:
             minutes_offset += minutes_step
 
-            since = misc.to_ns_timestamp(utc_time - datetime.timedelta(minutes=minutes_offset))
+            since = misc.to_ns_timestamp(
+                utc_time - datetime.timedelta(minutes=minutes_offset))
             url = f"{root_url}?{pair=:}&{since=:}"
 
-            log.debug(f"Querying trades for {pair} at {utc_time} (offset={minutes_offset}m): Calling %s", url)
+            log.debug(
+                f"Querying trades for {pair} at {utc_time} (offset={minutes_offset}m): Calling %s", url)
             response = requests.get(url)
             response.raise_for_status()
             data = json.loads(response.text)
@@ -166,7 +168,8 @@ class PriceData:
             # Find closest timestamp match
             data = data["result"][pair]
             data_timestamps_ms = [int(float(d[2]) * 1000) for d in data]
-            closest_match_index = bisect.bisect_left(data_timestamps_ms, target_timestamp) - 1
+            closest_match_index = bisect.bisect_left(
+                data_timestamps_ms, target_timestamp) - 1
 
             # The desired timestamp is in the past; increase the offset
             if closest_match_index == - 1:
@@ -180,7 +183,8 @@ class PriceData:
                     break
                 else:
                     # We missed the desired timestamp because our initial step size was too large; reduce step size
-                    log.debug(f"Querying trades for {pair} at {utc_time}: Reducing step")
+                    log.debug(
+                        f"Querying trades for {pair} at {utc_time}: Reducing step")
                     return self._get_price_kraken(base_asset, utc_time, quote_asset, minutes_step - 1)
 
             price = float(data[closest_match_index][0])

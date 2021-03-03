@@ -192,6 +192,7 @@ class Fiat(Enum):
     ZMW = "Zambia Kwacha"
     ZWD = "Zimbabwe Dollar"
 
+
 # Kraken's "dirty" asset codes don't seem to follow any system. Only "clean" names are used in CoinTaxman internally.
 #     kraken_asset_map:  Converts Kraken "dirty" asset codes to "clean" asset names           (e.g. ZEUR   -> EUR)
 #     kraken_pair_map:   Converts clean fiat / clean crypto pairs to "dirty" API asset pairs  (e.g. ETHEUR -> XETHZEUR)
@@ -205,7 +206,7 @@ kraken_asset_map = {
     "ZCAD": "CAD",
     "ZJPY": "JPY",
     "ZGBP": "GBP",
-    "CHF" : "CHF",
+    "CHF": "CHF",
     "ZAUD": "AUD",
     # Crypto:
     "XXBT": "XBT",
