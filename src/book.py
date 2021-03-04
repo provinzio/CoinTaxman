@@ -91,6 +91,7 @@ class Book:
                     "The Easiest Way to Trade",
                     "Small assets exchange BNB",
                     "Transaction Related",
+                    "Large OTC trading",
                 ):
                     operation = "Sell" if change < 0 else "Buy"
                 change = abs(change)
