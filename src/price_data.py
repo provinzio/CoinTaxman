@@ -417,7 +417,7 @@ class PriceData:
             return price * tr.sold
         raise NotImplementedError
     
-    def get_candles(self, start, stop, symbol):
+    def get_candles(self, start: int, stop: int, symbol: str) ->list:
         if self.exchange.has['fetchOHLCV']:
             sleep(self.exchange.rateLimit / 1000)  # time.sleep wants seconds
             # get 2min before and after range
@@ -433,15 +433,15 @@ class PriceData:
         self.exchange = exchange_class()
         self.markets = []
         markets = self.exchange.fetch_markets()
-        
+
         for market in markets:
             # may not apply for all exchanges, currently works for binance
             # caches a list of all pairs on the exchange
             self.markets.append(market["symbol"].split("/"))
 
-    def _get_binance_bulk_pair_list(self, reference_coin, coin):
+    def _get_binance_bulk_pair_list(self, reference_coin: str = config.FIAT, coin) -> list:
 
-        def get_pair(coin, reference_coin):
+        def get_pair(coin, reference_coin:str):
 
             for market in self.markets:
                 if market[0] == coin and market[1] == reference_coin:
@@ -463,7 +463,7 @@ class PriceData:
         else:
             return [pair, ]
 
-    def _get_binance_bulk_pair_data(self, operations, symbol, invert=False):
+    def _get_binance_bulk_pair_data(self, operations: list, symbol: str, invert: str=False) ->list:
         timestamps = []
         timestamppairs = []
         data = []
@@ -500,7 +500,7 @@ class PriceData:
                     data.append((operation, min(ts, key=lambda x: x[0])[1][1]))
         return data
 
-    def preload_price_data(self, operations, coin):
+    def preload_price_data(self, operations: list, coin: str):
 
         reference_coin = config.FIAT
         # get pairs used for calculating the price
