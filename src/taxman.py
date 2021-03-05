@@ -45,6 +45,8 @@ class Taxman:
             self.__evaluate_taxation = getattr(self, f"_evaluate_taxation_{country}")
         except AttributeError:
             raise NotImplementedError(f"Unable to evaluate taxation for {country=}.")
+        
+        self.price_data.initialize_ccxt()
 
         if config.PRINCIPLE == core.Principle.FIFO:
             self.BalanceType = balance_queue.BalanceQueue
@@ -178,6 +180,7 @@ class Taxman:
         log.debug("Starting evaluation...")
         for coin, operations in misc.group_by(self.book.operations, "coin").items():
             operations = sorted(operations, key=lambda op: op.utc_time)
+            self.price_data.preload_price_data(operations,coin)
             self.__evaluate_taxation(coin, operations)
 
     def print_evaluation(self) -> None:

@@ -23,8 +23,10 @@ import sqlite3
 import time
 from pathlib import Path
 from typing import Any, Optional, Union
+from time import sleep
 
 import requests
+import ccxt
 
 import config
 import misc
@@ -414,3 +416,110 @@ class PriceData:
         if isinstance(tr, transaction.SoldCoin):
             return price * tr.sold
         raise NotImplementedError
+    
+    def get_candles(self, start, stop, symbol):
+        if self.exchange.has['fetchOHLCV']:
+            sleep(self.exchange.rateLimit / 1000)  # time.sleep wants seconds
+            print(f"get {max(int((stop-start)/1000/60)+2,1)} rows")
+            # get 2min before and after range
+            return self.exchange.fetch_ohlcv(symbol, '1m', start-1000*60*2, max(int((stop-start)/1000/60)+5, 1))
+        else:
+            raise Exception
+
+    def initialize_ccxt(self):
+        exchange_id = 'binance'
+        exchange_class = getattr(ccxt, exchange_id)
+        self.exchange = exchange_class()
+        self.markets = []
+        markets = self.exchange.fetch_markets()
+        for market in markets:
+            # may not apply for all exchanges, currently works for binance
+            self.markets.append(market["symbol"].split("/"))
+
+    def _get_binance_bulk_pair_list(self, reference_coin, coin):
+        def get_pair(coin, reference_coin):
+            for market in self.markets:
+                if market[0] == coin and market[1] == reference_coin:
+                    return [coin, reference_coin, False]
+                elif market[1] == coin and market[0] == reference_coin:
+                    return [reference_coin, coin, True]
+
+        pair = get_pair(coin, reference_coin)
+        if not pair:
+            for market in self.markets:
+                if market[0] == coin:
+                    pair = get_pair(market[1], reference_coin)
+                    if pair:
+                        return [[market[0], market[1], False], pair]
+                elif market[1] == coin:
+                    pair = get_pair(market[1], reference_coin)
+                    if pair:
+                        return [[market[1], market[0], True], pair]
+        return [pair, ]
+
+    def _get_binance_bulk_pair_data(self, operations, symbol, invert=False):
+        timestamps = []
+        timestamppairs = []
+        counter = 0
+        data = []
+        for op in operations:
+            timestamps.append(op.utc_time)
+        while len(timestamps) > 0:
+            timestamp = timestamps.pop(0)
+            if len(timestamppairs) > 0 and timestamppairs[-1][0]+datetime.timedelta(minutes=995) > timestamp:
+                timestamppairs[-1].append(timestamp)
+            else:
+                timestamppairs.append([timestamp, ])
+        for batch in timestamppairs:
+            last = int(max(batch).timestamp() * 1000)
+            first = int(min(batch).timestamp() * 1000)
+            if invert:
+                tempdata = list(
+                    map(lambda x: (x[0], 1/((x[1]+x[4])/2)), self.get_candles(first, last, symbol)))
+            else:
+                tempdata = list(
+                    map(lambda x: (x[0], (x[1]+x[4])/2), self.get_candles(first, last, symbol)))
+            if tempdata:
+                for stamp in batch:
+                    # TODO discuss which candle is picked current is closest to original date (often off by about 1-20s, but can be after the Trade)
+                    # times do not always line up perfectly so take one nearest
+                    ts = list(
+                        map(lambda x: (abs(stamp.timestamp()*1000-x[0]), x), tempdata))
+                    print(min(ts, key=lambda x: x[0])[0]/1000)
+                    data.append((stamp, min(ts, key=lambda x: x[0])[1][1]))
+        return data
+
+    def preload_price_data(self, operations, coin):
+        
+        reference_coin = config.FIAT
+        lis = self._get_binance_bulk_pair_list(reference_coin, coin)
+        db_path = self.get_db_path("binance")
+        operations_filtered = []
+        tablename = self.get_tablename(coin, reference_coin)
+
+        if lis:
+            for operation in operations:
+                if not self.__get_price_db(db_path, tablename, operation.utc_time):
+                    operations_filtered.append(operation)
+            if len(lis) == 1 and lis[0]:
+                data = self._get_binance_bulk_pair_data(
+                    operations_filtered, f"{lis[0][0]}/{lis[0][1]}", lis[0][2])
+                for element in data:
+                    self.__set_price_db(db_path, tablename,
+                                        element[0], element[1])
+            elif len(lis) == 2 and lis[0] and lis[1]:
+                data = self._get_binance_bulk_pair_data(
+                    operations_filtered, f"{lis[0][0]}/{lis[0][1]}", lis[0][2])
+                data2 = self._get_binance_bulk_pair_data(
+                    operations_filtered, f"{lis[1][0]}/{lis[1][1]}", lis[1][2])
+                for element in data:
+                    factor = None
+                    for element2 in data2:
+                        if element[0] == element2[0]:
+                            factor = element2[1]
+                            break
+                    if factor:
+                        price = element[1]*factor
+                        if not self.__get_price_db(db_path, tablename, element[0]):
+                            self.__set_price_db(
+                                db_path, tablename, element[0], price)
