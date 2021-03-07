@@ -155,10 +155,10 @@ class PriceData:
                 utc_time - datetime.timedelta(minutes=minutes_offset))
             url = f"{root_url}?{pair=:}&{since=:}"
 
-            log.debug(
+            num_retries = 10
+            while num_retries:
+                log.debug(
                 f"Querying trades for {pair} at {utc_time} (offset={minutes_offset}m): Calling %s", url)
-
-            while num_retries := 10:
                 response = requests.get(url)
                 response.raise_for_status()
                 data = json.loads(response.text)
