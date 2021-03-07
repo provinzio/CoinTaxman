@@ -103,7 +103,7 @@ def delayed(func):
 
         ret = func(*args, **kwargs)
 
-        delay = random.uniform(0.2, 2)
+        delay = random.uniform(1, 2)
         delay = datetime.timedelta(seconds=delay)
         __delayed[id(func)] = datetime.datetime.now() + delay
 
