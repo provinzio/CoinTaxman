@@ -172,11 +172,10 @@ class PriceData:
                                 f"Could not retrieve trades: {data['error']}. Retry in {sleep_duration} s ...")
                     time.sleep(sleep_duration)
                     continue
-
-            if data["error"]:
+            else:
                 log.error(f"Querying trades for {pair} at {utc_time} (offset={minutes_offset}m): "
-                            f"Could not retrieve trades: {data['error']}")
-                raise  RuntimeError("Kraken response keeps having error flags.")
+                          f"Could not retrieve trades: {data['error']}")
+                raise RuntimeError("Kraken response keeps having error flags.")
 
             # Find closest timestamp match
             data = data["result"][pair]
