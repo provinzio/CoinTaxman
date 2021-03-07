@@ -213,7 +213,16 @@ class Book:
             # Skip header.
             next(reader)
 
-            for txid, refid, _utc_time, _type, aclass, _asset, _amount, _fee, balance in reader:
+            for columns in reader:
+
+                num_columns = len(columns)
+                if num_columns == 10:  # Kraken ledgers export format from October 2020 and ongoing
+                    txid, refid, _utc_time, _type, subtype, aclass, _asset, _amount, _fee, balance = columns
+                elif num_columns == 9:  # Kraken ledgers export format from September 2020 and before
+                    txid, refid, _utc_time, _type, aclass, _asset, _amount, _fee, balance = columns
+                else:
+                    raise RuntimeError("Unknown Kraken ledgers format: Number of rows do not match known versions.")
+
                 row = reader.line_num
 
                 # Skip "duplicate entries" for deposits / withdrawals

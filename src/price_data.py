@@ -19,6 +19,7 @@ import datetime
 import json
 import logging
 import sqlite3
+import time
 from pathlib import Path
 from typing import Optional, Union
 
@@ -156,14 +157,26 @@ class PriceData:
 
             log.debug(
                 f"Querying trades for {pair} at {utc_time} (offset={minutes_offset}m): Calling %s", url)
-            response = requests.get(url)
-            response.raise_for_status()
-            data = json.loads(response.text)
+
+            while num_retries := 10:
+                response = requests.get(url)
+                response.raise_for_status()
+                data = json.loads(response.text)
+
+                if not data["error"]:
+                    break
+                else:
+                    num_retries -= 1
+                    sleep_duration = 2**(10-num_retries)
+                    log.warning(f"Querying trades for {pair} at {utc_time} (offset={minutes_offset}m): "
+                                f"Could not retrieve trades: {data['error']}. Retry in {sleep_duration} s ...")
+                    time.sleep(sleep_duration)
+                    continue
 
             if data["error"]:
-                log.warning(f"Querying trades for {pair} at {utc_time} (offset={minutes_offset}m): "
+                log.error(f"Querying trades for {pair} at {utc_time} (offset={minutes_offset}m): "
                             f"Could not retrieve trades: {data['error']}")
-                return 0
+                raise  RuntimeError("Kraken response keeps having error flags.")
 
             # Find closest timestamp match
             data = data["result"][pair]
