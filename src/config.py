@@ -24,7 +24,7 @@ import core
 
 # User specific constants.
 COUNTRY = core.Country.GERMANY
-TAX_YEAR = 2018
+TAX_YEAR = 2020
 
 # Country specific constants.
 if COUNTRY == core.Country.GERMANY:
