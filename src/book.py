@@ -54,7 +54,9 @@ class Book:
             Op = getattr(tr, operation)
         except AttributeError:
             log.warning(
-                "Could not recognize operation `%s` in  %s file `%s:%i`.", operation, platform, file_path, row)
+                "Could not recognize operation `%s` in  %s file `%s:%i`.",
+                operation, platform, file_path, row
+            )
             return
 
         o = Op(utc_time, platform, change, coin, row, file_path)
@@ -97,7 +99,10 @@ class Book:
                 change = abs(change)
 
                 # Validate data.
-                assert account == "Spot", "Other types than Spot are currently not supported. Please create an Issue or PR."
+                assert account == "Spot", (
+                    "Other types than Spot are currently not supported. "
+                    "Please create an Issue or PR."
+                )
                 assert operation
                 assert coin
                 assert change
@@ -105,7 +110,9 @@ class Book:
                 # Check for problems.
                 if remark:
                     log.warning(
-                        "I may have missed a remark in %s:%i: `%s`.", file_path, row, remark)
+                        "I may have missed a remark in %s:%i: `%s`.",
+                        file_path, row, remark
+                    )
 
                 self.append_operation(operation, utc_time, platform,
                                       change, coin, row, file_path)
@@ -128,15 +135,23 @@ class Book:
                 assert next(reader) == ["Transactions"]
                 assert next(reader)  # user row
                 assert next(reader) == []
-                assert next(reader) == ['Timestamp', 'Transaction Type', 'Asset', 'Quantity Transacted',
-                                        'EUR Spot Price at Transaction', 'EUR Subtotal', 'EUR Total (inclusive of fees)', 'EUR Fees', 'Notes']
+                assert next(reader) == ['Timestamp', 'Transaction Type',
+                                        'Asset', 'Quantity Transacted',
+                                        'EUR Spot Price at Transaction',
+                                        'EUR Subtotal',
+                                        'EUR Total (inclusive of fees)',
+                                        'EUR Fees', 'Notes']
             except AssertionError as e:
-                msg = f"Unable to read coinbase file: Malformed header. Skipping {file_path}."
+                msg = (
+                    f"Unable to read coinbase file: Malformed header. "
+                    f"Skipping {file_path}."
+                )
                 e.args += (msg,)
                 log.exception(e)
                 return
 
-            for _utc_time, operation, coin, _change, _eur_spot, _eur_subtotal, _eur_total, _eur_fee, remark in reader:
+            for _utc_time, operation, coin, _change, _eur_spot, \
+                    _eur_subtotal, _eur_total, _eur_fee, remark in reader:
                 row = reader.line_num
 
                 # Parse data.
@@ -184,9 +199,12 @@ class Book:
                                           eur_fee, "EUR", row, file_path)
 
     def _read_kraken_trades(self, file_path: Path) -> None:
-        log.error(f"{file_path.name}: "
-                  f"Looks like this is a Kraken 'Trades' history, but we need the 'Ledgers' history. "
-                  f"(See: https://github.com/provinzio/CoinTaxman/wiki/Exchange:-Kraken)")
+        log.error(
+            f"{file_path.name}: "
+            "Looks like this is a Kraken 'Trades' history, "
+            "but we need the 'Ledgers' history. "
+            "(See: Wiki - Exchange Kraken)"
+        )
 
     def _read_kraken_ledgers(self, file_path: Path) -> None:
         platform = "kraken"
@@ -199,15 +217,24 @@ class Book:
             "withdrawal": "Withdraw",
         }
 
-        # Need to track state of "duplicate entries" for deposits / withdrawals;
-        # the second deposit and the first withdrawal entry need to be skipped.
-        #   dup_state["deposit"] == 0: Deposit is broadcast to blockchain            <-- Taxable event (is in public trade history)
-        #   dup_state["deposit"] == 1: Deposit is credited to Kraken account         <-- Skipped
-        #   dup_state["withdrawal"] == 0: Withdrawal is requested in Kraken account  <-- Skipped
-        #   dup_state["withdrawal"] == 1: Withdrawal is broadcast to blockchain      <-- Taxable event (is in public trade history)
+        # Need to track state of "duplicate entries"
+        # for deposits / withdrawals;
+        # the second deposit and the first withdrawal entry
+        # need to be skipped.
+        #   dup_state["deposit"] == 0:
+        #       Deposit is broadcast to blockchain
+        #       > Taxable event (is in public trade history)
+        #   dup_state["deposit"] == 1:
+        #       Deposit is credited to Kraken account
+        #       > Skipped
+        #   dup_state["withdrawal"] == 0:
+        #       Withdrawal is requested in Kraken account
+        #       > Skipped
+        #   dup_state["withdrawal"] == 1:
+        #       Withdrawal is broadcast to blockchain
+        #       > Taxable event (is in public trade history)
         dup_state, dup_skip = {"deposit": 0, "withdrawal": 0}, {
             "deposit": 1, "withdrawal": 0}
-        # See: https://support.kraken.com/hc/en-us/articles/360001169443-Why-there-are-duplicate-entries-for-deposits-withdrawals
 
         with open(file_path, encoding="utf8") as f:
             reader = csv.reader(f)
@@ -218,12 +245,20 @@ class Book:
             for columns in reader:
 
                 num_columns = len(columns)
-                if num_columns == 10:  # Kraken ledgers export format from October 2020 and ongoing
-                    txid, refid, _utc_time, _type, subtype, aclass, _asset, _amount, _fee, balance = columns
-                elif num_columns == 9:  # Kraken ledgers export format from September 2020 and before
-                    txid, refid, _utc_time, _type, aclass, _asset, _amount, _fee, balance = columns
+                # Kraken ledgers export format from October 2020 and ongoing
+                if num_columns == 10:
+                    (txid, refid, _utc_time, _type, subtype, aclass, _asset,
+                     _amount, _fee, balance) = columns
+
+                # Kraken ledgers export format from September 2020 and before
+                elif num_columns == 9:
+                    (txid, refid, _utc_time, _type, aclass, _asset, _amount,
+                     _fee, balance) = columns
                 else:
-                    raise RuntimeError("Unknown Kraken ledgers format: Number of rows do not match known versions.")
+                    raise RuntimeError(
+                        "Unknown Kraken ledgers format: "
+                        "Number of rows do not match known versions."
+                    )
 
                 row = reader.line_num
 
@@ -247,11 +282,17 @@ class Book:
                         operation = "Sell" if change < 0 else "Buy"
                     elif _type in ["margin trade", "rollover", "settled"]:
                         log.error(
-                            f"{file_path}: {row}: Margin trading is currently not supported. Please create an Issue or PR.")
+                            f"{file_path}: {row}: Margin trading is "
+                            "currently not supported. "
+                            "Please create an Issue or PR."
+                        )
                         raise RuntimeError
                     else:
                         log.error(
-                            f"{file_path}: {row}: Other order type '{_type}' is currently not supported. Please create an Issue or PR.")
+                            f"{file_path}: {row}: Other order type '{_type}' "
+                            "is currently not supported. "
+                            "Please create an Issue or PR."
+                        )
                         raise RuntimeError
                 change = abs(change)
 
@@ -267,8 +308,14 @@ class Book:
                     self.append_operation("Fee", utc_time, platform,
                                           fee, coin, row, file_path)
 
-        assert dup_state["deposit"] == 0, "Orphaned deposit. (Must always come in pairs). Is your file corrupted?"
-        assert dup_state["withdrawal"] == 0, "Orphaned withdrawal. (Must always come in pairs). Is your file corrupted?"
+        assert dup_state["deposit"] == 0, (
+            "Orphaned deposit. (Must always come in pairs). "
+            "Is your file corrupted?"
+        )
+        assert dup_state["withdrawal"] == 0, (
+            "Orphaned withdrawal. (Must always come in pairs). "
+            "Is your file corrupted?"
+        )
 
     def _read_kraken_ledgers_old(self, file_path: Path) -> None:
 
@@ -283,10 +330,25 @@ class Book:
             expected_headers = {
                 "binance": ['UTC_Time', 'Account',
                             'Operation', 'Coin', 'Change', 'Remark'],
-                "coinbase": ['You can use this transaction report to inform your likely tax obligations. For US customers, Sells, Converts, and Rewards Income, and Coinbase Earn transactions are taxable events. For final tax obligations, please consult your tax advisor.'],
-                "kraken_ledgers_old": ["txid", "refid", "time", "type", "aclass", "asset", "amount", "fee", "balance"],
-                "kraken_ledgers": ["txid", "refid", "time", "type", "subtype", "aclass", "asset", "amount", "fee", "balance"],
-                "kraken_trades": ["txid", "ordertxid", "pair", "time", "type", "ordertype", "price", "cost", "fee", "vol", "margin", "misc", "ledgers"],
+                "coinbase": [
+                    'You can use this transaction report to inform your '
+                    'likely tax obligations. For US customers, Sells, '
+                    'Converts, and Rewards Income, and Coinbase Earn '
+                    'transactions are taxable events. For final tax '
+                    'obligations, please consult your tax advisor.'
+                ],
+                "kraken_ledgers_old": [
+                    "txid", "refid", "time", "type", "aclass", "asset",
+                    "amount", "fee", "balance"
+                ],
+                "kraken_ledgers": [
+                    "txid", "refid", "time", "type", "subtype", "aclass",
+                    "asset", "amount", "fee", "balance"
+                ],
+                "kraken_trades": [
+                    "txid", "ordertxid", "pair", "time", "type", "ordertype",
+                    "price", "cost", "fee", "vol", "margin", "misc", "ledgers"
+                ],
             }
             for exchange, expected in expected_headers.items():
                 if header == expected:
@@ -310,7 +372,9 @@ class Book:
                 read_file = getattr(self, f"_read_{exchange}")
             except AttributeError:
                 log.warning(
-                    "Unable to read files from the exchange `%s`. Skipping `%s`.", exchange, file_path)
+                    f"Unable to read files from the exchange `{exchange}`. "
+                    f"Skipping `{file_path}`."
+                )
                 return
 
             log.info("Reading file from exchange %s at %s",
@@ -318,13 +382,16 @@ class Book:
             read_file(file_path)
         else:
             log.warning(
-                f"Unable to detect the exchange of file `{file_path}`. Skipping file.")
+                f"Unable to detect the exchange of file `{file_path}`. "
+                "Skipping file."
+            )
 
     def get_account_statement_paths(self, statements_dir: Path) -> list[Path]:
         """Return file paths of all account statements in `statements_dir`.
 
         Args:
-            statements_dir (str): Folder in which account statements will be searched.
+            statements_dir (str): Folder in which account statements
+                                  will be searched.
 
         Returns:
             list[Path]: List of account statement file paths.

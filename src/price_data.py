@@ -47,7 +47,13 @@ class PriceData:
         return f"{coin}/{reference_coin}"
 
     @misc.delayed
-    def _get_price_binance(self, base_asset: str, utc_time: datetime.datetime, quote_asset: str, swapped_symbols: bool = False) -> float:
+    def _get_price_binance(
+        self,
+        base_asset: str,
+        utc_time: datetime.datetime,
+        quote_asset: str,
+        swapped_symbols: bool = False
+    ) -> float:
         """Retrieve price from binance official REST API.
 
         The price is calculated as the average price in a
@@ -56,14 +62,15 @@ class PriceData:
         None existing pairs like `TWTEUR` are calculated as
         `TWTBTC * BTCEUR`.
 
-        Documentation: https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md
+        Documentation:
+        https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md
 
         Args:
             base_asset (str)
             utc_time (datetime.datetime)
             quote_asset (str)
-            swapped_symbols (bool, optional): The function is run with swapped asset symbols.
-                                              Defaults to False.
+            swapped_symbols (bool, optional): The function is run with swapped
+                                              asset symbols. Defaults to False.
 
         Raises:
             RuntimeError: Unable to retrieve price data.
@@ -83,7 +90,11 @@ class PriceData:
 
         # Some combinations do not exist (e.g. `TWTEUR`), but almost anything
         # is paired with BTC. Calculate `TWTEUR` as `TWTBTC * BTCEUR`.
-        if isinstance(data, dict) and data.get("code") == -1121 and data.get("msg") == "Invalid symbol.":
+        if (
+            isinstance(data, dict) and
+            data.get("code") == -1121 and
+            data.get("msg") == "Invalid symbol."
+        ):
             if quote_asset == "BTC":
                 # If we are already comparing with BTC, we might have to swap
                 # the assets to generate the correct symbol.
@@ -93,9 +104,12 @@ class PriceData:
                 if swapped_symbols:
                     raise RuntimeError(
                         f"Can not retrieve {symbol=} from binance")
-                # Changeing the order of the assets require to invert the price.
+                # Changeing the order of the assets require to
+                # invert the price.
                 price = self.get_price(
-                    "binance", quote_asset, utc_time, base_asset, swapped_symbols=True)
+                    "binance", quote_asset, utc_time, base_asset,
+                    swapped_symbols=True
+                )
                 return 0 if price == 0 else 1 / price
 
             btc = self.get_price("binance", base_asset, utc_time, "BTC")
@@ -121,15 +135,24 @@ class PriceData:
         return average_price
 
     @misc.delayed
-    def _get_price_kraken(self, base_asset: str, utc_time: datetime.datetime, quote_asset: str, minutes_step: int = 10) -> float:
+    def _get_price_kraken(
+        self,
+        base_asset: str,
+        utc_time: datetime.datetime,
+        quote_asset: str, minutes_step: int = 10
+    ) -> float:
         """Retrieve price from Kraken official REST API.
 
-        We select the data point closest to the desired timestamp (utc_time), but not newer than this timestamp.
-        For this we fetch one chunk of the trade history, starting `minutes_step` minutes before this timestamp.
-        We then walk through the history until the closest timestamp match is found.
-        Otherwise, we start another 10 minutes earlier and try again, etc. …
-        (Exiting with a warning and zero price after hitting the arbitrarily chosen offset limit of 120 minutes.)
-        If the initial offset is already too large, recursively retry by reducing the offset step, down to 1 minute.
+        We select the data point closest to the desired timestamp (utc_time),
+        but not newer than this timestamp.
+        For this we fetch one chunk of the trade history, starting
+        `minutes_step`minutes before this timestamp.
+        We then walk through the history until the closest timestamp match is
+        found. Otherwise, we start another 10 minutes earlier and try again.
+        (Exiting with a warning and zero price after hitting the arbitrarily
+        chosen offset limit of 120 minutes). If the initial offset is already
+        too large, recursively retry by reducing the offset step,
+        down to 1 minute.
 
         Documentation: https://www.kraken.com/features/api
 
@@ -137,10 +160,12 @@ class PriceData:
             base_asset (str): Base asset.
             utc_time (datetime.datetime): Target time (time of the trade).
             quote_asset (str): Quote asset.
-            minutes_step (int): Initial time offset for consecutive Kraken API requests. Defaults to 10.
+            minutes_step (int): Initial time offset for consecutive
+                                Kraken API requests. Defaults to 10.
 
         Returns:
-            float: Price of asset pair at target time (0 if price couldn't be determined)
+            float: Price of asset pair at target time
+                   (0 if price couldn't be determined)
         """
         target_timestamp = misc.to_ms_timestamp(utc_time)
         root_url = "https://api.kraken.com/0/public/Trades"
@@ -158,7 +183,9 @@ class PriceData:
             num_retries = 10
             while num_retries:
                 log.debug(
-                f"Querying trades for {pair} at {utc_time} (offset={minutes_offset}m): Calling %s", url)
+                    f"Querying trades for {pair} at {utc_time} "
+                    f"(offset={minutes_offset}m): Calling %s", url
+                )
                 response = requests.get(url)
                 response.raise_for_status()
                 data = json.loads(response.text)
@@ -168,13 +195,20 @@ class PriceData:
                 else:
                     num_retries -= 1
                     sleep_duration = 2**(10-num_retries)
-                    log.warning(f"Querying trades for {pair} at {utc_time} (offset={minutes_offset}m): "
-                                f"Could not retrieve trades: {data['error']}. Retry in {sleep_duration} s ...")
+                    log.warning(
+                        f"Querying trades for {pair} at {utc_time} "
+                        f"(offset={minutes_offset}m): "
+                        f"Could not retrieve trades: {data['error']}. "
+                        f"Retry in {sleep_duration} s ..."
+                    )
                     time.sleep(sleep_duration)
                     continue
             else:
-                log.error(f"Querying trades for {pair} at {utc_time} (offset={minutes_offset}m): "
-                          f"Could not retrieve trades: {data['error']}")
+                log.error(
+                    f"Querying trades for {pair} at {utc_time} "
+                    f"(offset={minutes_offset}m): "
+                    f"Could not retrieve trades: {data['error']}"
+                )
                 raise RuntimeError("Kraken response keeps having error flags.")
 
             # Find closest timestamp match
@@ -194,19 +228,31 @@ class PriceData:
                     # Cannot remove interval any further; give up
                     break
                 else:
-                    # We missed the desired timestamp because our initial step size was too large; reduce step size
+                    # We missed the desired timestamp because our initial step
+                    # size was too large; reduce step size
                     log.debug(
-                        f"Querying trades for {pair} at {utc_time}: Reducing step")
-                    return self._get_price_kraken(base_asset, utc_time, quote_asset, minutes_step - 1)
+                        f"Querying trades for {pair} at {utc_time}: "
+                        "Reducing step"
+                    )
+                    return self._get_price_kraken(
+                        base_asset, utc_time,
+                        quote_asset, minutes_step - 1
+                    )
 
             price = float(data[closest_match_index][0])
             return price
 
         log.warning(f"Querying trades for {pair} at {utc_time}: "
-                    f"Failed to find matching exchange rate. Please create an Issue or PR.")
+                    f"Failed to find matching exchange rate. "
+                    "Please create an Issue or PR.")
         return 0
 
-    def __get_price_db(self, db_path: Path, tablename: str, utc_time: datetime.datetime) -> Optional[float]:
+    def __get_price_db(
+        self,
+        db_path: Path,
+        tablename: str,
+        utc_time: datetime.datetime
+    ) -> Optional[float]:
         """Try to retrieve the price from our local database.
 
         Args:
@@ -234,7 +280,13 @@ class PriceData:
 
         return None
 
-    def __set_price_db(self, db_path: Path, tablename: str, utc_time: datetime.datetime, price: float) -> None:
+    def __set_price_db(
+        self,
+        db_path: Path,
+        tablename: str,
+        utc_time: datetime.datetime,
+        price: float
+    ) -> None:
         """Write price to database.
 
         Create database/table if necessary.
@@ -247,19 +299,29 @@ class PriceData:
         """
         with sqlite3.connect(db_path) as conn:
             cur = conn.cursor()
-            query = f"INSERT INTO `{tablename}` ('utc_time', 'price') VALUES (?, ?);"
+            query = (f"INSERT INTO `{tablename}`"
+                     "('utc_time', 'price') VALUES (?, ?);")
             try:
                 cur.execute(query, (utc_time, price))
             except sqlite3.OperationalError as e:
                 if str(e) == f"no such table: {tablename}":
-                    create_query = f"CREATE TABLE `{tablename}` (utc_time DATETIME PRIMARY KEY, price FLOAT NOT NULL);"
+                    create_query = (f"CREATE TABLE `{tablename}`"
+                                    "(utc_time DATETIME PRIMARY KEY, "
+                                    "price FLOAT NOT NULL);")
                     cur.execute(create_query)
                     cur.execute(query, (utc_time, price))
                 else:
                     raise e
             conn.commit()
 
-    def set_price_db(self, platform: str, coin: str, reference_coin: str, utc_time: datetime.datetime, price: float) -> None:
+    def set_price_db(
+        self,
+        platform: str,
+        coin: str,
+        reference_coin: str,
+        utc_time: datetime.datetime,
+        price: float
+    ) -> None:
         """Write price to database.
 
         Tries to insert a historical price into the local database.
@@ -284,13 +346,20 @@ class PriceData:
                     platform, coin, utc_time, reference_coin)
                 if price != price_db:
                     log.warning(
-                        "Tried to write price to database, but a different price exists already."
+                        "Tried to write price to database, "
+                        "but a different price exists already."
                         f"({platform=}, {tablename=}, {utc_time=}, {price=})"
                     )
             else:
                 raise e
 
-    def get_price(self, platform: str, coin: str, utc_time: datetime.datetime, reference_coin: str = config.FIAT, **kwargs) -> float:
+    def get_price(
+        self,
+        platform: str,
+        coin: str,
+        utc_time: datetime.datetime,
+        reference_coin: str = config.FIAT, **kwargs
+    ) -> float:
         """Get the price of a coin pair from a specific `platform` at `utc_time`.
 
         The function tries to retrieve the price from the local database first.
@@ -304,7 +373,8 @@ class PriceData:
             reference_coin (str, optional): Defaults to config.FIAT.
 
         Raises:
-            NotImplementedError: Platform specific GET function is not implemented.
+            NotImplementedError: Platform specific GET function is not
+                                 implemented.
 
         Returns:
             float: Price of the coin pair.
@@ -316,7 +386,8 @@ class PriceData:
         tablename = self.get_tablename(coin, reference_coin)
 
         # Check if price exists already in our database.
-        if (price := self.__get_price_db(db_path, tablename, utc_time)) is not None:
+        if ((price := self.__get_price_db(db_path, tablename, utc_time))
+                is not None):
             return price
 
         try:
@@ -329,7 +400,8 @@ class PriceData:
         self.__set_price_db(db_path, tablename, utc_time, price)
         return price
 
-    def get_cost(self, tr: Union[Operation, SoldCoin], reference_coin: str = config.FIAT) -> float:
+    def get_cost(self, tr: Union[Operation, SoldCoin],
+                 reference_coin: str = config.FIAT) -> float:
         op = tr if isinstance(tr, Operation) else tr.op
         price = self.get_price(op.platform, op.coin,
                                op.utc_time, reference_coin)

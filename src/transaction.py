@@ -43,7 +43,8 @@ class Operation:
         ret = True
         for field_name, field_def in self.__dataclass_fields__.items():
             if isinstance(field_def.type, typing._SpecialForm):
-                # No check for typing.Any, typing.Union, typing.ClassVar (without parameters)
+                # No check for typing.Any, typing.Union, typing.ClassVar
+                # (without parameters)
                 continue
 
             actual_type = typing.get_origin(field_def.type) or field_def.type
@@ -56,7 +57,9 @@ class Operation:
             actual_value = getattr(self, field_name)
             if not isinstance(actual_value, actual_type):
                 log.warning(
-                    f"\t{field_name}: '{type(actual_value)}' instead of '{field_def.type}'")
+                    f"\t{field_name}: '{type(actual_value)}' "
+                    f"instead of '{field_def.type}'"
+                )
                 ret = False
         return ret
 

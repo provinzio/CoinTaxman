@@ -1,3 +1,2 @@
 [flake8]
 exclude = *py*env*/
-max-line-length = 119

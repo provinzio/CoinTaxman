@@ -58,7 +58,10 @@ def to_ns_timestamp(d: datetime.datetime) -> int:
     return int(d.timestamp() * 1000000000)
 
 
-def get_offset_timestamps(utc_time: datetime.datetime, offset: datetime.timedelta) -> Tuple[int, int]:
+def get_offset_timestamps(
+    utc_time: datetime.datetime,
+    offset: datetime.timedelta
+) -> Tuple[int, int]:
     """Return timestamps in milliseconds `offset/2` before/after `utc_time`.
 
     Args:
@@ -134,7 +137,8 @@ def get_next_file_path(path: Path, base_filename: str, extension: str) -> Path:
         extension (str)
 
     Raises:
-        AssertitionError: When {base_filename}_rev999.{extension} already exists.
+        AssertitionError: When {base_filename}_rev999.{extension}
+                          already exists.
 
     Returns:
         Path: Path to next free file.
@@ -157,6 +161,8 @@ def get_next_file_path(path: Path, base_filename: str, extension: str) -> Path:
 
 def get_current_commit_hash() -> Optional[str]:
     try:
-        return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("UTF-8").strip()
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"]
+            ).decode("UTF-8").strip()
     except subprocess.CalledProcessError:
         return None
