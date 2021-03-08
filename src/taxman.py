@@ -169,7 +169,7 @@ class Taxman:
         """Evaluate the taxation per coin using country specific function."""
         log.debug("Starting evaluation...")
         for coin, operations in misc.group_by(self.book.operations,
-                "coin").items():
+                                              "coin").items():
             operations = sorted(operations, key=lambda op: op.utc_time)
             self.__evaluate_taxation(coin, operations)
 
@@ -179,7 +179,7 @@ class Taxman:
             print()
             print(f"Your tax evaluation for {config.TAX_YEAR}:")
             for taxation_type, tax_events in misc.group_by(self.tax_events,
-                    "taxation_type").items():
+                                                           "taxation_type").items():
                 taxed_gains = sum(tx.taxed_gain for tx in tax_events)
                 print(f"{taxation_type}: {taxed_gains} {config.FIAT}")
         else:

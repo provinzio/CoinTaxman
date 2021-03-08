@@ -163,6 +163,6 @@ def get_current_commit_hash() -> Optional[str]:
     try:
         return subprocess.check_output(
             ["git", "rev-parse", "HEAD"]
-            ).decode("UTF-8").strip()
+        ).decode("UTF-8").strip()
     except subprocess.CalledProcessError:
         return None
