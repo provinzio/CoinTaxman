@@ -271,5 +271,5 @@ kraken_pair_map = {
     'EURUSD': 'ZEURZUSD',
     'GBPUSD': 'ZGBPZUSD',
     'USDCAD': 'ZUSDZCAD',
-    'USDJPY': 'ZUSDZJPY'
+    'USDJPY': 'ZUSDZJPY',
 }

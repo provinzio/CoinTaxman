@@ -60,7 +60,7 @@ def to_ns_timestamp(d: datetime.datetime) -> int:
 
 def get_offset_timestamps(
     utc_time: datetime.datetime,
-    offset: datetime.timedelta
+    offset: datetime.timedelta,
 ) -> Tuple[int, int]:
     """Return timestamps in milliseconds `offset/2` before/after `utc_time`.
 

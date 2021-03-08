@@ -52,7 +52,7 @@ class PriceData:
         base_asset: str,
         utc_time: datetime.datetime,
         quote_asset: str,
-        swapped_symbols: bool = False
+        swapped_symbols: bool = False,
     ) -> float:
         """Retrieve price from binance official REST API.
 
@@ -139,7 +139,7 @@ class PriceData:
         self,
         base_asset: str,
         utc_time: datetime.datetime,
-        quote_asset: str, minutes_step: int = 10
+        quote_asset: str, minutes_step: int = 10,
     ) -> float:
         """Retrieve price from Kraken official REST API.
 
@@ -251,7 +251,7 @@ class PriceData:
         self,
         db_path: Path,
         tablename: str,
-        utc_time: datetime.datetime
+        utc_time: datetime.datetime,
     ) -> Optional[float]:
         """Try to retrieve the price from our local database.
 
@@ -285,7 +285,7 @@ class PriceData:
         db_path: Path,
         tablename: str,
         utc_time: datetime.datetime,
-        price: float
+        price: float,
     ) -> None:
         """Write price to database.
 
@@ -320,7 +320,7 @@ class PriceData:
         coin: str,
         reference_coin: str,
         utc_time: datetime.datetime,
-        price: float
+        price: float,
     ) -> None:
         """Write price to database.
 
@@ -358,7 +358,8 @@ class PriceData:
         platform: str,
         coin: str,
         utc_time: datetime.datetime,
-        reference_coin: str = config.FIAT, **kwargs
+        reference_coin: str = config.FIAT,
+        **kwargs,
     ) -> float:
         """Get the price of a coin pair from a specific `platform` at `utc_time`.
 

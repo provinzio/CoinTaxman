@@ -61,7 +61,7 @@ class Taxman:
     def _evaluate_taxation_GERMANY(
         self,
         coin: str,
-        operations: list[Operation]
+        operations: list[Operation],
     ) -> None:
         balance = self.BalanceType()
 
