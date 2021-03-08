@@ -199,7 +199,3 @@ class Taxman:
 
         log.info("Saved evaluation in %s.", file_path)
         return file_path
-
-    def export_balance(self) -> None:
-        # TODO Print balance at end of tax year.
-        raise NotImplementedError
