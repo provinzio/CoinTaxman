@@ -143,7 +143,7 @@ class Book:
                                         'EUR Fees', 'Notes']
             except AssertionError as e:
                 msg = (
-                    f"Unable to read coinbase file: Malformed header. "
+                    "Unable to read coinbase file: Malformed header. "
                     f"Skipping {file_path}."
                 )
                 e.args += (msg,)

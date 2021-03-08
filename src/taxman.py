@@ -94,9 +94,9 @@ class Taxman:
                             f"Not enough {coin} in queue to sell "
                             f"(transaction from {op.utc_time} "
                             f"on {op.platform})\n"
-                            f"\tIs your account statement missing "
+                            "\tIs your account statement missing "
                             "any transactions?\n"
-                            f"\tThis error may also occur after deposits "
+                            "\tThis error may also occur after deposits "
                             "from unknown sources.\n"
                         )
                         raise RuntimeError
