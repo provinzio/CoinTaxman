@@ -213,7 +213,16 @@ class Book:
             # Skip header.
             next(reader)
 
-            for txid, refid, _utc_time, _type, subtype, aclass, _asset, _amount, _fee, balance in reader:
+            for columns in reader:
+
+                num_columns = len(columns)
+                if num_columns == 10:  # Kraken ledgers export format from October 2020 and ongoing
+                    txid, refid, _utc_time, _type, subtype, aclass, _asset, _amount, _fee, balance = columns
+                elif num_columns == 9:  # Kraken ledgers export format from September 2020 and before
+                    txid, refid, _utc_time, _type, aclass, _asset, _amount, _fee, balance = columns
+                else:
+                    raise RuntimeError("Unknown Kraken ledgers format: Number of rows do not match known versions.")
+
                 row = reader.line_num
 
                 # Skip "duplicate entries" for deposits / withdrawals
@@ -259,6 +268,10 @@ class Book:
         assert dup_state["deposit"] == 0, "Orphaned deposit. (Must always come in pairs). Is your file corrupted?"
         assert dup_state["withdrawal"] == 0, "Orphaned withdrawal. (Must always come in pairs). Is your file corrupted?"
 
+    def _read_kraken_ledgers_old(self, file_path: Path) -> None:
+
+        self._read_kraken_ledgers(file_path)
+
     def detect_exchange(self, file_path: Path) -> Optional[str]:
         if file_path.suffix == ".csv":
             with open(file_path, encoding="utf8") as f:
@@ -269,8 +282,9 @@ class Book:
                 "binance": ['UTC_Time', 'Account',
                             'Operation', 'Coin', 'Change', 'Remark'],
                 "coinbase": ['You can use this transaction report to inform your likely tax obligations. For US customers, Sells, Converts, and Rewards Income, and Coinbase Earn transactions are taxable events. For final tax obligations, please consult your tax advisor.'],
+                "kraken_ledgers_old": ["txid", "refid", "time", "type", "aclass", "asset", "amount", "fee", "balance"],
                 "kraken_ledgers": ["txid", "refid", "time", "type", "subtype", "aclass", "asset", "amount", "fee", "balance"],
-                "kraken_trades": ["txid", "ordertxid", "pair", "time", "type", "ordertype", "price", "", "cost", "fee", "vol", "margin", "misc", "ledgers"],
+                "kraken_trades": ["txid", "ordertxid", "pair", "time", "type", "ordertype", "price", "cost", "fee", "vol", "margin", "misc", "ledgers"],
             }
             for exchange, expected in expected_headers.items():
                 if header == expected:

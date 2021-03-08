@@ -10,4 +10,10 @@ export/*
 # Development folder
 dev/
 
+# IDE
+.vscode/
+
+# Python virtual environment
+*py*env*/
+
 !.gitkeep
