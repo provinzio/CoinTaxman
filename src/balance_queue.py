@@ -27,27 +27,27 @@ log = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
-class BilancedOperation:
+class BalancedOperation:
     op: Operation
     sold: float = 0.0
 
 
-class BilanceQueue:
+class BalanceQueue:
 
     def __init__(self) -> None:
-        self.queue: Deque[BilancedOperation] = collections.deque()
+        self.queue: Deque[BalancedOperation] = collections.deque()
         self.buffer_fee: list[float] = []
 
-    def put(self, item: Union[Operation, BilancedOperation]) -> None:
+    def put(self, item: Union[Operation, BalancedOperation]) -> None:
         """Put a new item in the queue.
 
         Args:
-            item (Union[Operation, BilancedOperation])
+            item (Union[Operation, BalancedOperation])
         """
-        if not isinstance(item, (Operation, BilancedOperation)):
+        if not isinstance(item, (Operation, BalancedOperation)):
             raise ValueError
         if isinstance(item, Operation):
-            item = BilancedOperation(item)
+            item = BalancedOperation(item)
 
         self._put(item)
 
@@ -58,19 +58,19 @@ class BilanceQueue:
         for fee in buffer_fee:
             self.remove_fee(fee)
 
-    def get(self) -> Optional[BilancedOperation]:
+    def get(self) -> Optional[BalancedOperation]:
         """Get an item from the queue.
 
         Returns:
-            BilancedOperation
+            BalancedOperation
             ...or None, if the queue ran out of items to sell.
         """
         return self._get()
 
-    def _put(self, bop: BilancedOperation) -> None:
+    def _put(self, bop: BalancedOperation) -> None:
         self.queue.append(bop)
 
-    def _get(self) -> Optional[BilancedOperation]:
+    def _get(self) -> Optional[BalancedOperation]:
         try:
             return self.queue.popleft()
         except IndexError:
@@ -84,7 +84,7 @@ class BilanceQueue:
         """
         while True:
             try:
-                bop: BilancedOperation = self.queue.pop()
+                bop: BalancedOperation = self.queue.pop()
             except IndexError:
                 # Not enough coins in queue to remove fee.
                 # This can happen if the exchange takes the fees before
@@ -120,7 +120,7 @@ class BilanceQueue:
         assert change > 0
         sold_coins: list[SoldCoin] = []
         while change > 0:
-            bop: Optional[BilancedOperation] = self.get()
+            bop: Optional[BalancedOperation] = self.get()
 
             if bop is None:
                 return None
@@ -140,10 +140,10 @@ class BilanceQueue:
         return sold_coins
 
 
-class BilanceLIFOQueue(queue.LifoQueue, BilanceQueue):
+class BalanceLIFOQueue(queue.LifoQueue, BalanceQueue):
 
-    def _put(self, item: BilancedOperation) -> None:
+    def _put(self, item: BalancedOperation) -> None:
         self.queue.append(item)
 
-    def _get(self) -> BilancedOperation:
+    def _get(self) -> BalancedOperation:
         return self.queue.pop()

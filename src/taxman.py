@@ -19,7 +19,7 @@ from pathlib import Path
 import logging
 import re
 
-from bilance_queue import *
+from balance_queue import *
 from book import Book
 import config
 import core
@@ -36,7 +36,7 @@ class Taxman:
         self.price_data = price_data
 
         self.tax_events: list[TaxEvent] = []
-        self.bilances: dict[str, BilanceQueue] = {}
+        self.balances: dict[str, BalanceQueue] = {}
 
         # Determine used functions/classes depending on the config.
         country = config.COUNTRY.name
@@ -48,9 +48,9 @@ class Taxman:
                 f"Unable to evaluate taxation for {country=}.")
 
         if config.PRINCIPLE == core.Principle.FIFO:
-            self.BilanceType = BilanceQueue
+            self.BalanceType = BalanceQueue
         elif config.PRINCIPLE == core.Principle.LIFO:
-            self.BilanceType = BilanceLIFOQueue
+            self.BalanceType = BalanceLIFOQueue
         else:
             raise NotImplementedError(
                 f"Unable to evaluate taxation for {config.PRINCIPLE=}.")
@@ -59,11 +59,11 @@ class Taxman:
         return op.utc_time.year == config.TAX_YEAR
 
     def _evaluate_taxation_GERMANY(self, coin: str, operations: list[Operation]) -> None:
-        bilance = self.BilanceType()
+        balance = self.BalanceType()
 
         for op in operations:
             if isinstance(op, Fee):
-                bilance.remove_fee(op.change)
+                balance.remove_fee(op.change)
                 if self.in_tax_year(op):
                     # Fees reduce taxed gain.
                     taxation_type = "Sonstige Einkünfte"
@@ -75,9 +75,9 @@ class Taxman:
             elif isinstance(op, CoinLendEnd):
                 pass
             elif isinstance(op, Buy):
-                bilance.put(op)
+                balance.put(op)
             elif isinstance(op, Sell):
-                sold_coins = bilance.sell(op.change)
+                sold_coins = balance.sell(op.change)
                 if sold_coins is None:
                     # Queue ran out of items to sell...
                     if coin == config.FIAT:
@@ -110,7 +110,7 @@ class Taxman:
                     tx = TaxEvent(taxation_type, taxed_gain, op, remark)
                     self.tax_events.append(tx)
             elif isinstance(op, (CoinLendInterest, StakingInterest)):
-                bilance.put(op)
+                balance.put(op)
                 if self.in_tax_year(op):
                     if misc.is_fiat(coin):
                         assert not isinstance(
@@ -122,9 +122,9 @@ class Taxman:
                     tx = TaxEvent(taxation_type, taxed_gain, op)
                     self.tax_events.append(tx)
             elif isinstance(op, Airdrop):
-                bilance.put(op)
+                balance.put(op)
             elif isinstance(op, Commission):
-                bilance.put(op)
+                balance.put(op)
                 if self.in_tax_year(op):
                     taxation_type = "Einkünfte aus sonstigen Leistungen"
                     taxed_gain = self.price_data.get_cost(op)
@@ -138,11 +138,11 @@ class Taxman:
                 raise NotImplementedError
 
         # Check that all relevant positions were considered.
-        if bilance.buffer_fee:
-            log.warning("Bilance has outstanding fees which were not considered: %s %s", ", ".join(
-                str(fee) for fee in bilance.buffer_fee), coin)
+        if balance.buffer_fee:
+            log.warning("Balance has outstanding fees which were not considered: %s %s", ", ".join(
+                str(fee) for fee in balance.buffer_fee), coin)
 
-        self.bilances[coin] = bilance
+        self.balances[coin] = balance
 
     def evaluate_taxation(self) -> None:
         """Evaluate the taxation per coin using the country specific function."""
@@ -200,6 +200,6 @@ class Taxman:
         log.info("Saved evaluation in %s.", file_path)
         return file_path
 
-    def export_bilance(self) -> None:
-        # TODO Print bilance at end of tax year.
+    def export_balance(self) -> None:
+        # TODO Print balance at end of tax year.
         raise NotImplementedError
