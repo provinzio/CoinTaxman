@@ -171,9 +171,11 @@ class Book:
                     platform, coin, "EUR", utc_time, eur_spot)
 
                 if operation == "Sell":
+                    assert isinstance(eur_subtotal, float)
                     self.append_operation("Buy", utc_time, platform,
                                           eur_subtotal, "EUR", row, file_path)
                 elif operation == "Buy":
+                    assert isinstance(eur_subtotal, float)
                     self.append_operation("Sell", utc_time, platform,
                                           eur_subtotal, "EUR", row, file_path)
 

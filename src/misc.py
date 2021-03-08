@@ -21,17 +21,17 @@ import random
 import re
 import subprocess
 import time
-from typing import Optional, Tuple, Union
+from typing import Optional, SupportsInt, Tuple, Union, SupportsFloat
 
 import core
 
 
-def xint(x) -> Optional[int]:
-    return None if x in (None, "") else int(x)
+def xint(x: Union[None, str, SupportsInt]) -> Optional[int]:
+    return None if x is None or x == "" else int(x)
 
 
-def xfloat(x) -> Optional[float]:
-    return None if x in (None, "") else float(x)
+def xfloat(x: Union[None, str, SupportsFloat]) -> Optional[float]:
+    return None if x is None or x == "" else float(x)
 
 
 def to_ms_timestamp(d: datetime.datetime) -> int:
