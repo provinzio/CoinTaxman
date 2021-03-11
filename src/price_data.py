@@ -91,9 +91,9 @@ class PriceData:
         # Some combinations do not exist (e.g. `TWTEUR`), but almost anything
         # is paired with BTC. Calculate `TWTEUR` as `TWTBTC * BTCEUR`.
         if (
-            isinstance(data, dict) and
-            data.get("code") == -1121 and
-            data.get("msg") == "Invalid symbol."
+            isinstance(data, dict)
+            and data.get("code") == -1121
+            and data.get("msg") == "Invalid symbol."
         ):
             if quote_asset == "BTC":
                 # If we are already comparing with BTC, we might have to swap
@@ -194,7 +194,7 @@ class PriceData:
                     break
                 else:
                     num_retries -= 1
-                    sleep_duration = 2**(10-num_retries)
+                    sleep_duration = 2**(10 - num_retries)
                     log.warning(
                         f"Querying trades for {pair} at {utc_time} "
                         f"(offset={minutes_offset}m): "

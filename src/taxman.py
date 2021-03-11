@@ -17,7 +17,6 @@
 import csv
 from pathlib import Path
 import logging
-import re
 
 from balance_queue import *
 from book import Book
@@ -110,13 +109,10 @@ class Taxman:
                     # foreign currency) will not be taxed.
                     for sc in sold_coins:
                         if (
-                            not config.IS_LONG_TERM(sc.op.utc_time,
-                                                    op.utc_time) and
-                            not (isinstance(sc.op, (Airdrop,
-                                                    CoinLendInterest,
-                                                    StakingInterest,
-                                                    Commission)) and
-                                 not sc.op.coin == config.FIAT)
+                            not config.IS_LONG_TERM(sc.op.utc_time, op.utc_time)
+                            and not (isinstance(sc.op, (Airdrop, CoinLendInterest,
+                                                        StakingInterest, Commission))
+                                     and not sc.op.coin == config.FIAT)
                         ):
                             partial_win = (sc.sold / op.change) * total_win
                             taxed_gain += partial_win - \
@@ -216,7 +212,7 @@ class Taxman:
                 ["# updated", datetime.date.today().strftime("%x")])
 
             header = ["Date", "Taxation Type", f"Taxed Gain in {config.FIAT}",
-                      "Action", "Amount", "Asset",  "Remark"]
+                      "Action", "Amount", "Asset", "Remark"]
             writer.writerow(header)
             # Tax events are currently sorted by coin. Sort by time instead.
             for tx in sorted(self.tax_events, key=lambda tx: tx.op.utc_time):

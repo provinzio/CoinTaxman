@@ -71,23 +71,23 @@ def get_offset_timestamps(
     Returns:
         Tuple[int, int]: Timestamps in milliseconds.
     """
-    start = utc_time - offset/2
-    end = utc_time + offset/2
+    start = utc_time - offset / 2
+    end = utc_time + offset / 2
     return to_ms_timestamp(start), to_ms_timestamp(end)
 
 
-def group_by(l: list, key: str) -> dict[str, list]:
+def group_by(lst: list, key: str) -> dict[str, list]:
     """Group a list of objects by `key`.
 
     Args:
-        l (list)
+        lst (list)
         key (str)
 
     Returns:
         dict[str, list]: Dict with different `key`as keys.
     """
     d = collections.defaultdict(list)
-    for e in l:
+    for e in lst:
         d[getattr(e, key)].append(e)
     return dict(d)
 
