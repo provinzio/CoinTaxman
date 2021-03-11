@@ -26,6 +26,7 @@ from price_data import PriceData
 import transaction as tr
 from core import kraken_asset_map
 
+
 log = logging.getLogger(__name__)
 
 

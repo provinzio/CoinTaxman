@@ -27,6 +27,7 @@ import misc
 from price_data import PriceData
 import transaction
 
+
 log = logging.getLogger(__name__)
 
 

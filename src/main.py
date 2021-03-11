@@ -21,6 +21,7 @@ import log_config  # pylint: disable=unused-import
 from price_data import PriceData
 from taxman import Taxman
 
+
 log = logging.getLogger(__name__)
 
 

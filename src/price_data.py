@@ -28,7 +28,7 @@ import requests
 import config
 from core import kraken_pair_map
 import misc
-from transaction import *
+
 
 log = logging.getLogger(__name__)
 
