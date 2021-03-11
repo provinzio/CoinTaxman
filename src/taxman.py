@@ -17,14 +17,15 @@
 import csv
 from pathlib import Path
 import logging
+import datetime
 
-from balance_queue import *
+import balance_queue
 from book import Book
 import config
 import core
 import misc
 from price_data import PriceData
-from transaction import *
+import transaction
 
 log = logging.getLogger(__name__)
 
@@ -34,8 +35,8 @@ class Taxman:
         self.book = book
         self.price_data = price_data
 
-        self.tax_events: list[TaxEvent] = []
-        self.balances: dict[str, BalanceQueue] = {}
+        self.tax_events: list[transaction.TaxEvent] = []
+        self.balances: dict[str, balance_queue.BalanceQueue] = {}
 
         # Determine used functions/classes depending on the config.
         country = config.COUNTRY.name
@@ -47,39 +48,40 @@ class Taxman:
                 f"Unable to evaluate taxation for {country=}.")
 
         if config.PRINCIPLE == core.Principle.FIFO:
-            self.BalanceType = BalanceQueue
+            self.BalanceType = balance_queue.BalanceQueue
         elif config.PRINCIPLE == core.Principle.LIFO:
-            self.BalanceType = BalanceLIFOQueue
+            self.BalanceType = balance_queue.BalanceLIFOQueue
         else:
             raise NotImplementedError(
-                f"Unable to evaluate taxation for {config.PRINCIPLE=}.")
+                f"Unable to evaluate taxation for {config.PRINCIPLE=}."
+            )
 
-    def in_tax_year(self, op: Operation) -> bool:
+    def in_tax_year(self, op: transaction.Operation) -> bool:
         return op.utc_time.year == config.TAX_YEAR
 
     def _evaluate_taxation_GERMANY(
         self,
         coin: str,
-        operations: list[Operation],
+        operations: list[transaction.Operation],
     ) -> None:
         balance = self.BalanceType()
 
         for op in operations:
-            if isinstance(op, Fee):
+            if isinstance(op, transaction.Fee):
                 balance.remove_fee(op.change)
                 if self.in_tax_year(op):
                     # Fees reduce taxed gain.
                     taxation_type = "Sonstige Einkünfte"
                     taxed_gain = -self.price_data.get_cost(op)
-                    tx = TaxEvent(taxation_type, taxed_gain, op)
+                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
                     self.tax_events.append(tx)
-            elif isinstance(op, CoinLend):
+            elif isinstance(op, transaction.CoinLend):
                 pass
-            elif isinstance(op, CoinLendEnd):
+            elif isinstance(op, transaction.CoinLendEnd):
                 pass
-            elif isinstance(op, Buy):
+            elif isinstance(op, transaction.Buy):
                 balance.put(op)
-            elif isinstance(op, Sell):
+            elif isinstance(op, transaction.Sell):
                 sold_coins = balance.sell(op.change)
                 if sold_coins is None:
                     # Queue ran out of items to sell...
@@ -110,8 +112,10 @@ class Taxman:
                     for sc in sold_coins:
                         if (
                             not config.IS_LONG_TERM(sc.op.utc_time, op.utc_time)
-                            and not (isinstance(sc.op, (Airdrop, CoinLendInterest,
-                                                        StakingInterest, Commission))
+                            and not (isinstance(sc.op, (transaction.Airdrop,
+                                                        transaction.CoinLendInterest,
+                                                        transaction.StakingInterest,
+                                                        transaction.Commission))
                                      and not sc.op.coin == config.FIAT)
                         ):
                             partial_win = (sc.sold / op.change) * total_win
@@ -120,33 +124,34 @@ class Taxman:
                     remark = ", ".join(
                         f"{sc.sold} from {sc.op.utc_time} "
                         f"({sc.op.__class__.__name__})" for sc in sold_coins)
-                    tx = TaxEvent(taxation_type, taxed_gain, op, remark)
+                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op, remark)
                     self.tax_events.append(tx)
-            elif isinstance(op, (CoinLendInterest, StakingInterest)):
+            elif isinstance(op, (transaction.CoinLendInterest,
+                                 transaction.StakingInterest)):
                 balance.put(op)
                 if self.in_tax_year(op):
                     if misc.is_fiat(coin):
-                        assert not isinstance(op, StakingInterest), (
+                        assert not isinstance(op, transaction.StakingInterest), (
                             "You can not stake fiat currencies."
                         )
                         taxation_type = "Einkünfte aus Kapitalvermögen"
                     else:
                         taxation_type = "Einkünfte aus sonstigen Leistungen"
                     taxed_gain = self.price_data.get_cost(op)
-                    tx = TaxEvent(taxation_type, taxed_gain, op)
+                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
                     self.tax_events.append(tx)
-            elif isinstance(op, Airdrop):
+            elif isinstance(op, transaction.Airdrop):
                 balance.put(op)
-            elif isinstance(op, Commission):
+            elif isinstance(op, transaction.Commission):
                 balance.put(op)
                 if self.in_tax_year(op):
                     taxation_type = "Einkünfte aus sonstigen Leistungen"
                     taxed_gain = self.price_data.get_cost(op)
-                    tx = TaxEvent(taxation_type, taxed_gain, op)
+                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
                     self.tax_events.append(tx)
-            elif isinstance(op, Deposit):
+            elif isinstance(op, transaction.Deposit):
                 pass
-            elif isinstance(op, Withdraw):
+            elif isinstance(op, transaction.Withdraw):
                 pass
             else:
                 raise NotImplementedError
