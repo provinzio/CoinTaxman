@@ -20,7 +20,7 @@ import logging
 from typing import Deque, Union, Optional
 import queue
 
-from transaction import *
+import transaction
 
 
 log = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 
 @dataclasses.dataclass
 class BalancedOperation:
-    op: Operation
+    op: transaction.Operation
     sold: float = 0.0
 
 
@@ -38,15 +38,15 @@ class BalanceQueue:
         self.queue: Deque[BalancedOperation] = collections.deque()
         self.buffer_fee: list[float] = []
 
-    def put(self, item: Union[Operation, BalancedOperation]) -> None:
+    def put(self, item: Union[transaction.Operation, BalancedOperation]) -> None:
         """Put a new item in the queue.
 
         Args:
             item (Union[Operation, BalancedOperation])
         """
-        if not isinstance(item, (Operation, BalancedOperation)):
+        if not isinstance(item, (transaction.Operation, BalancedOperation)):
             raise ValueError
-        if isinstance(item, Operation):
+        if isinstance(item, transaction.Operation):
             item = BalancedOperation(item)
 
         self._put(item)
@@ -103,7 +103,7 @@ class BalanceQueue:
             else:
                 fee -= not_sold
 
-    def sell(self, change: float) -> Optional[list[SoldCoin]]:
+    def sell(self, change: float) -> Optional[list[transaction.SoldCoin]]:
         """Sell/remove coins from the queue, returning the sold coins.
 
         Depending on the QueueType, the coins will be removed FIFO or LIFO.
@@ -118,7 +118,7 @@ class BalanceQueue:
             ...or None, if the queue ran out of items to sell.
         """
         assert change > 0
-        sold_coins: list[SoldCoin] = []
+        sold_coins: list[transaction.SoldCoin] = []
         while change > 0:
             bop: Optional[BalancedOperation] = self.get()
 
@@ -131,11 +131,11 @@ class BalanceQueue:
             if not_sold > change:
                 bop.sold += change
                 self.queue.append(bop)
-                sold_coins.append(SoldCoin(bop.op, change))
+                sold_coins.append(transaction.SoldCoin(bop.op, change))
                 break
             else:
                 change -= not_sold
-                sold_coins.append(SoldCoin(bop.op, not_sold))
+                sold_coins.append(transaction.SoldCoin(bop.op, not_sold))
 
         return sold_coins
 
