@@ -146,4 +146,5 @@ class BalanceLIFOQueue(queue.LifoQueue, BalanceQueue):
         self.queue.append(item)
 
     def _get(self) -> BalancedOperation:
-        return self.queue.pop()
+        item: BalancedOperation = self.queue.pop()
+        return item
