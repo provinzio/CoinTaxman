@@ -140,7 +140,8 @@ class PriceData:
         self,
         base_asset: str,
         utc_time: datetime.datetime,
-        quote_asset: str, minutes_step: int = 10,
+        quote_asset: str,
+        minutes_step: int = 10,
     ) -> float:
         """Retrieve price from Kraken official REST API.
 
