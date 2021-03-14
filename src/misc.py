@@ -144,7 +144,7 @@ def get_next_file_path(path: Path, base_filename: str, extension: str) -> Path:
         Path: Path to next free file.
     """
     i = 1
-    regex = re.compile(base_filename + "_rev(\d{3})." + extension)
+    regex = re.compile(base_filename + r"_rev(\d{3})." + extension)
     for p in path.iterdir():
         if p.is_file():
             if m := regex.match(p.name):

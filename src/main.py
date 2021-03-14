@@ -17,7 +17,7 @@
 import logging
 
 from book import Book
-import log_config  # pylint: disable=unused-import
+import log_config  # noqa: F401
 from price_data import PriceData
 from taxman import Taxman
 
