@@ -15,12 +15,12 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from __future__ import annotations
+
 import dataclasses
 import datetime
 import logging
 import typing
 from pathlib import Path
-
 
 log = logging.getLogger(__name__)
 

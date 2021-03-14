@@ -17,11 +17,10 @@
 import collections
 import dataclasses
 import logging
-from typing import Deque, Union, Optional
 import queue
+from typing import Deque, Optional, Union
 
 import transaction
-
 
 log = logging.getLogger(__name__)
 

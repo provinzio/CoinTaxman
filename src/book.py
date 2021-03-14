@@ -22,10 +22,9 @@ from typing import Optional
 
 import config
 import misc
-from price_data import PriceData
 import transaction as tr
 from core import kraken_asset_map
-
+from price_data import PriceData
 
 log = logging.getLogger(__name__)
 

@@ -15,18 +15,17 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import csv
-from pathlib import Path
-import logging
 import datetime
+import logging
+from pathlib import Path
 
 import balance_queue
-from book import Book
 import config
 import core
 import misc
-from price_data import PriceData
 import transaction
-
+from book import Book
+from price_data import PriceData
 
 log = logging.getLogger(__name__)
 

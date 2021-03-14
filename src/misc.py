@@ -16,25 +16,24 @@
 
 import collections
 import datetime
-from pathlib import Path
 import random
 import re
 import subprocess
 import time
+from pathlib import Path
 from typing import (
     Any,
     Callable,
-    cast,
     Optional,
     SupportsFloat,
     SupportsInt,
     Tuple,
     TypeVar,
     Union,
+    cast,
 )
 
 import core
-
 
 F = TypeVar('F', bound=Callable[..., Any])
 L = TypeVar('L', bound=list[Any])

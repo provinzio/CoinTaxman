@@ -26,10 +26,9 @@ from typing import Any, Optional, Union
 import requests
 
 import config
-from core import kraken_pair_map
 import misc
 import transaction
-
+from core import kraken_pair_map
 
 log = logging.getLogger(__name__)
 

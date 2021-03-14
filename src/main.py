@@ -16,11 +16,10 @@
 
 import logging
 
-from book import Book
 import log_config  # noqa: F401
+from book import Book
 from price_data import PriceData
 from taxman import Taxman
-
 
 log = logging.getLogger(__name__)
 
