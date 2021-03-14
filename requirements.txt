@@ -1,16 +1,7 @@
-## The following requirements were added by pip freeze:
 certifi==2020.12.5
 chardet==4.0.0
-flake8==3.8.4
 idna==2.10
-mccabe==0.6.1
-mypy==0.812
-mypy-extensions==0.4.3
-pycodestyle==2.6.0
-pyflakes==2.2.0
 python-dateutil==2.8.1
 requests==2.25.1
 six==1.15.0
-typed-ast==1.4.2
-typing-extensions==3.7.4.3
 urllib3==1.26.3
