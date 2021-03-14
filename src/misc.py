@@ -21,9 +21,23 @@ import random
 import re
 import subprocess
 import time
-from typing import Optional, SupportsInt, Tuple, Union, SupportsFloat
+from typing import (
+    Any,
+    Callable,
+    cast,
+    Optional,
+    SupportsFloat,
+    SupportsInt,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 import core
+
+
+F = TypeVar('F', bound=Callable[..., Any])
+L = TypeVar('L', bound=list[Any])
 
 
 def xint(x: Union[None, str, SupportsInt]) -> Optional[int]:
@@ -76,7 +90,7 @@ def get_offset_timestamps(
     return to_ms_timestamp(start), to_ms_timestamp(end)
 
 
-def group_by(lst: list, key: str) -> dict[str, list]:
+def group_by(lst: L, key: str) -> dict[str, L]:
     """Group a list of objects by `key`.
 
     Args:
@@ -95,7 +109,7 @@ def group_by(lst: list, key: str) -> dict[str, list]:
 __delayed: dict[int, datetime.datetime] = {}
 
 
-def delayed(func):
+def delayed(func: F) -> F:
     """Randomly delay calls to the same function."""
     def wrapper(*args, **kwargs):
         global __delayed
@@ -110,7 +124,7 @@ def delayed(func):
         __delayed[id(func)] = datetime.datetime.now() + delay
 
         return ret
-    return wrapper
+    return cast(F, wrapper)
 
 
 def is_fiat(symbol: Union[str, core.Fiat]) -> bool:

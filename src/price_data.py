@@ -21,7 +21,7 @@ import logging
 import sqlite3
 import time
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 import requests
 
@@ -276,8 +276,8 @@ class PriceData:
                         return None
                     raise e
 
-                if price := cur.fetchone():
-                    return price[0]
+                if prices := cur.fetchone():
+                    return float(prices[0])
 
         return None
 
@@ -360,7 +360,7 @@ class PriceData:
         coin: str,
         utc_time: datetime.datetime,
         reference_coin: str = config.FIAT,
-        **kwargs,
+        **kwargs: Any,
     ) -> float:
         """Get the price of a coin pair from a specific `platform` at `utc_time`.
 
