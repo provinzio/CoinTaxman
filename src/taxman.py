@@ -41,11 +41,9 @@ class Taxman:
         # Determine used functions/classes depending on the config.
         country = config.COUNTRY.name
         try:
-            self.__evaluate_taxation = getattr(
-                self, f"_evaluate_taxation_{country}")
+            self.__evaluate_taxation = getattr(self, f"_evaluate_taxation_{country}")
         except AttributeError:
-            raise NotImplementedError(
-                f"Unable to evaluate taxation for {country=}.")
+            raise NotImplementedError(f"Unable to evaluate taxation for {country=}.")
 
         if config.PRINCIPLE == core.Principle.FIFO:
             self.BalanceType = balance_queue.BalanceQueue
@@ -110,30 +108,38 @@ class Taxman:
                     # which come from an Airdrop, CoinLend or Commission (in an
                     # foreign currency) will not be taxed.
                     for sc in sold_coins:
-                        if (
-                            not config.IS_LONG_TERM(sc.op.utc_time, op.utc_time)
-                            and not (isinstance(sc.op, (transaction.Airdrop,
-                                                        transaction.CoinLendInterest,
-                                                        transaction.StakingInterest,
-                                                        transaction.Commission))
-                                     and not sc.op.coin == config.FIAT)
+                        if not config.IS_LONG_TERM(
+                            sc.op.utc_time, op.utc_time
+                        ) and not (
+                            isinstance(
+                                sc.op,
+                                (
+                                    transaction.Airdrop,
+                                    transaction.CoinLendInterest,
+                                    transaction.StakingInterest,
+                                    transaction.Commission,
+                                ),
+                            )
+                            and not sc.op.coin == config.FIAT
                         ):
                             partial_win = (sc.sold / op.change) * total_win
-                            taxed_gain += partial_win - \
-                                self.price_data.get_cost(sc)
+                            taxed_gain += partial_win - self.price_data.get_cost(sc)
                     remark = ", ".join(
                         f"{sc.sold} from {sc.op.utc_time} "
-                        f"({sc.op.__class__.__name__})" for sc in sold_coins)
+                        f"({sc.op.__class__.__name__})"
+                        for sc in sold_coins
+                    )
                     tx = transaction.TaxEvent(taxation_type, taxed_gain, op, remark)
                     self.tax_events.append(tx)
-            elif isinstance(op, (transaction.CoinLendInterest,
-                                 transaction.StakingInterest)):
+            elif isinstance(
+                op, (transaction.CoinLendInterest, transaction.StakingInterest)
+            ):
                 balance.put(op)
                 if self.in_tax_year(op):
                     if misc.is_fiat(coin):
-                        assert not isinstance(op, transaction.StakingInterest), (
-                            "You can not stake fiat currencies."
-                        )
+                        assert not isinstance(
+                            op, transaction.StakingInterest
+                        ), "You can not stake fiat currencies."
                         taxation_type = "Einkünfte aus Kapitalvermögen"
                     else:
                         taxation_type = "Einkünfte aus sonstigen Leistungen"
@@ -159,9 +165,9 @@ class Taxman:
         # Check that all relevant positions were considered.
         if balance.buffer_fee:
             log.warning(
-                "Balance has outstanding fees which were not considered: "
-                "%s %s",
-                ", ".join(str(fee) for fee in balance.buffer_fee), coin
+                "Balance has outstanding fees which were not considered: " "%s %s",
+                ", ".join(str(fee) for fee in balance.buffer_fee),
+                coin,
             )
 
         self.balances[coin] = balance
@@ -169,8 +175,7 @@ class Taxman:
     def evaluate_taxation(self) -> None:
         """Evaluate the taxation per coin using country specific function."""
         log.debug("Starting evaluation...")
-        for coin, operations in misc.group_by(self.book.operations,
-                                              "coin").items():
+        for coin, operations in misc.group_by(self.book.operations, "coin").items():
             operations = sorted(operations, key=lambda op: op.utc_time)
             self.__evaluate_taxation(coin, operations)
 
@@ -179,8 +184,9 @@ class Taxman:
         if self.tax_events:
             print()
             print(f"Your tax evaluation for {config.TAX_YEAR}:")
-            for taxation_type, tax_events in misc.group_by(self.tax_events,
-                                                           "taxation_type").items():
+            for taxation_type, tax_events in misc.group_by(
+                self.tax_events, "taxation_type"
+            ).items():
                 taxed_gains = sum(tx.taxed_gain for tx in tax_events)
                 print(f"{taxation_type}: {taxed_gains} {config.FIAT}")
         else:
@@ -202,29 +208,39 @@ class Taxman:
             Path: Path to the exported file.
         """
         file_path = misc.get_next_file_path(
-            config.EXPORT_PATH, str(config.TAX_YEAR), "csv")
+            config.EXPORT_PATH, str(config.TAX_YEAR), "csv"
+        )
 
         with open(file_path, "w", newline="") as f:
             writer = csv.writer(f)
             # Add embedded metadata info
-            writer.writerow([
-                "# software",
-                "CoinTaxman <https://github.com/provinzio/CoinTaxman>"
-            ])
+            writer.writerow(
+                ["# software", "CoinTaxman <https://github.com/provinzio/CoinTaxman>"]
+            )
             if commit_hash := misc.get_current_commit_hash():
                 writer.writerow(["# commit", commit_hash])
-            writer.writerow(
-                ["# updated", datetime.date.today().strftime("%x")])
+            writer.writerow(["# updated", datetime.date.today().strftime("%x")])
 
-            header = ["Date", "Taxation Type", f"Taxed Gain in {config.FIAT}",
-                      "Action", "Amount", "Asset", "Remark"]
+            header = [
+                "Date",
+                "Taxation Type",
+                f"Taxed Gain in {config.FIAT}",
+                "Action",
+                "Amount",
+                "Asset",
+                "Remark",
+            ]
             writer.writerow(header)
             # Tax events are currently sorted by coin. Sort by time instead.
             for tx in sorted(self.tax_events, key=lambda tx: tx.op.utc_time):
                 line = [
-                    tx.op.utc_time, tx.taxation_type, tx.taxed_gain,
-                    tx.op.__class__.__name__, tx.op.change, tx.op.coin,
-                    tx.remark
+                    tx.op.utc_time,
+                    tx.taxation_type,
+                    tx.taxed_gain,
+                    tx.op.__class__.__name__,
+                    tx.op.change,
+                    tx.op.coin,
+                    tx.remark,
                 ]
                 writer.writerow(line)
 

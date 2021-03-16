@@ -38,8 +38,8 @@ log = logging.getLogger(__name__)
 #      - Add a database for each exchange (added with ATTACH DATABASE)
 #      - Tables in database stay the same
 
-class PriceData:
 
+class PriceData:
     def get_db_path(self, platform: str) -> Path:
         return Path(config.DATA_PATH, f"{platform}.db")
 
@@ -81,7 +81,8 @@ class PriceData:
         root_url = "https://api.binance.com/api/v3/aggTrades"
         symbol = f"{base_asset}{quote_asset}"
         startTime, endTime = misc.get_offset_timestamps(
-            utc_time, datetime.timedelta(minutes=1))
+            utc_time, datetime.timedelta(minutes=1)
+        )
         url = f"{root_url}?{symbol=:}&{startTime=:}&{endTime=:}"
 
         log.debug("Calling %s", url)
@@ -102,13 +103,11 @@ class PriceData:
                 # order.
                 # If this does not help, we need to think of something else.
                 if swapped_symbols:
-                    raise RuntimeError(
-                        f"Can not retrieve {symbol=} from binance")
+                    raise RuntimeError(f"Can not retrieve {symbol=} from binance")
                 # Changeing the order of the assets require to
                 # invert the price.
                 price = self.get_price(
-                    "binance", quote_asset, utc_time, base_asset,
-                    swapped_symbols=True
+                    "binance", quote_asset, utc_time, base_asset, swapped_symbols=True
                 )
                 return 0 if price == 0 else 1 / price
 
@@ -119,8 +118,7 @@ class PriceData:
         response.raise_for_status()
 
         if len(data) == 0:
-            log.warning(
-                "Binance offers no price for `%s` at %s", symbol, utc_time)
+            log.warning("Binance offers no price for `%s` at %s", symbol, utc_time)
             return 0
 
         # Calculate average price.
@@ -178,14 +176,16 @@ class PriceData:
             minutes_offset += minutes_step
 
             since = misc.to_ns_timestamp(
-                utc_time - datetime.timedelta(minutes=minutes_offset))
+                utc_time - datetime.timedelta(minutes=minutes_offset)
+            )
             url = f"{root_url}?{pair=:}&{since=:}"
 
             num_retries = 10
             while num_retries:
                 log.debug(
                     f"Querying trades for {pair} at {utc_time} "
-                    f"(offset={minutes_offset}m): Calling %s", url
+                    f"(offset={minutes_offset}m): Calling %s",
+                    url,
                 )
                 response = requests.get(url)
                 response.raise_for_status()
@@ -195,7 +195,7 @@ class PriceData:
                     break
                 else:
                     num_retries -= 1
-                    sleep_duration = 2**(10 - num_retries)
+                    sleep_duration = 2 ** (10 - num_retries)
                     log.warning(
                         f"Querying trades for {pair} at {utc_time} "
                         f"(offset={minutes_offset}m): "
@@ -215,11 +215,12 @@ class PriceData:
             # Find closest timestamp match
             data = data["result"][pair]
             data_timestamps_ms = [int(float(d[2]) * 1000) for d in data]
-            closest_match_index = bisect.bisect_left(
-                data_timestamps_ms, target_timestamp) - 1
+            closest_match_index = (
+                bisect.bisect_left(data_timestamps_ms, target_timestamp) - 1
+            )
 
             # The desired timestamp is in the past; increase the offset
-            if closest_match_index == - 1:
+            if closest_match_index == -1:
                 continue
 
             # The desired timestamp is in the future
@@ -232,20 +233,20 @@ class PriceData:
                     # We missed the desired timestamp because our initial step
                     # size was too large; reduce step size
                     log.debug(
-                        f"Querying trades for {pair} at {utc_time}: "
-                        "Reducing step"
+                        f"Querying trades for {pair} at {utc_time}: " "Reducing step"
                     )
                     return self._get_price_kraken(
-                        base_asset, utc_time,
-                        quote_asset, minutes_step - 1
+                        base_asset, utc_time, quote_asset, minutes_step - 1
                     )
 
             price = float(data[closest_match_index][0])
             return price
 
-        log.warning(f"Querying trades for {pair} at {utc_time}: "
-                    f"Failed to find matching exchange rate. "
-                    "Please create an Issue or PR.")
+        log.warning(
+            f"Querying trades for {pair} at {utc_time}: "
+            f"Failed to find matching exchange rate. "
+            "Please create an Issue or PR."
+        )
         return 0
 
     def __get_price_db(
@@ -300,15 +301,16 @@ class PriceData:
         """
         with sqlite3.connect(db_path) as conn:
             cur = conn.cursor()
-            query = (f"INSERT INTO `{tablename}`"
-                     "('utc_time', 'price') VALUES (?, ?);")
+            query = f"INSERT INTO `{tablename}`" "('utc_time', 'price') VALUES (?, ?);"
             try:
                 cur.execute(query, (utc_time, price))
             except sqlite3.OperationalError as e:
                 if str(e) == f"no such table: {tablename}":
-                    create_query = (f"CREATE TABLE `{tablename}`"
-                                    "(utc_time DATETIME PRIMARY KEY, "
-                                    "price FLOAT NOT NULL);")
+                    create_query = (
+                        f"CREATE TABLE `{tablename}`"
+                        "(utc_time DATETIME PRIMARY KEY, "
+                        "price FLOAT NOT NULL);"
+                    )
                     cur.execute(create_query)
                     cur.execute(query, (utc_time, price))
                 else:
@@ -343,8 +345,7 @@ class PriceData:
             self.__set_price_db(db_path, tablename, utc_time, price)
         except sqlite3.IntegrityError as e:
             if str(e) == f"UNIQUE constraint failed: {tablename}.utc_time":
-                price_db = self.get_price(
-                    platform, coin, utc_time, reference_coin)
+                price_db = self.get_price(platform, coin, utc_time, reference_coin)
                 if price != price_db:
                     log.warning(
                         "Tried to write price to database, "
@@ -388,25 +389,25 @@ class PriceData:
         tablename = self.get_tablename(coin, reference_coin)
 
         # Check if price exists already in our database.
-        if ((price := self.__get_price_db(db_path, tablename, utc_time))
-                is not None):
+        if (price := self.__get_price_db(db_path, tablename, utc_time)) is not None:
             return price
 
         try:
             get_price = getattr(self, f"_get_price_{platform}")
         except AttributeError:
-            raise NotImplementedError(
-                "Unable to read data from %s", platform)
+            raise NotImplementedError("Unable to read data from %s", platform)
 
         price = get_price(coin, utc_time, reference_coin, **kwargs)
         self.__set_price_db(db_path, tablename, utc_time, price)
         return price
 
-    def get_cost(self, tr: Union[transaction.Operation, transaction.SoldCoin],
-                 reference_coin: str = config.FIAT) -> float:
+    def get_cost(
+        self,
+        tr: Union[transaction.Operation, transaction.SoldCoin],
+        reference_coin: str = config.FIAT,
+    ) -> float:
         op = tr if isinstance(tr, transaction.Operation) else tr.op
-        price = self.get_price(op.platform, op.coin,
-                               op.utc_time, reference_coin)
+        price = self.get_price(op.platform, op.coin, op.utc_time, reference_coin)
         if isinstance(tr, transaction.Operation):
             return price * tr.change
         if isinstance(tr, transaction.SoldCoin):
