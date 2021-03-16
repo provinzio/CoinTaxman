@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from __future__ import annotations
+
 import dataclasses
 import datetime
 import logging
@@ -41,22 +42,25 @@ class Operation:
 
     def validate_types(self) -> bool:
         ret = True
-        for field_name, field_def in self.__dataclass_fields__.items():
-            if isinstance(field_def.type, typing._SpecialForm):
-                # No check for typing.Any, typing.Union, typing.ClassVar (without parameters)
+        for field in dataclasses.fields(self):
+            if isinstance(field.type, typing._SpecialForm):
+                # No check for typing.Any, typing.Union, typing.ClassVar
+                # (without parameters)
                 continue
 
-            actual_type = typing.get_origin(field_def.type) or field_def.type
+            actual_type = typing.get_origin(field.type) or field.type
 
             if isinstance(actual_type, str):
                 actual_type = eval(actual_type)
             elif isinstance(actual_type, typing._SpecialForm):
-                actual_type = field_def.type.__args__
+                actual_type = field.type.__args__
 
-            actual_value = getattr(self, field_name)
+            actual_value = getattr(self, field.name)
             if not isinstance(actual_value, actual_type):
                 log.warning(
-                    f"\t{field_name}: '{type(actual_value)}' instead of '{field_def.type}'")
+                    f"\t{field.name}: '{type(actual_value)}' "
+                    f"instead of '{field.type}'"
+                )
                 ret = False
         return ret
 
@@ -111,6 +115,7 @@ class Withdraw(Transaction):
 
 
 # Helping variables
+
 
 @dataclasses.dataclass
 class SoldCoin:

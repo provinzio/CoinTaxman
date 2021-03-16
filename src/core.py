@@ -193,12 +193,16 @@ class Fiat(Enum):
     ZWD = "Zimbabwe Dollar"
 
 
-# Kraken's "dirty" asset codes don't seem to follow any system. Only "clean" names are used in CoinTaxman internally.
-#     kraken_asset_map:  Converts Kraken "dirty" asset codes to "clean" asset names           (e.g. ZEUR   -> EUR)
-#     kraken_pair_map:   Converts clean fiat / clean crypto pairs to "dirty" API asset pairs  (e.g. ETHEUR -> XETHZEUR)
-# Analyzed using asset pairs API data: https://api.kraken.com/0/public/AssetPairs (retrieved at 2021-02-21)
-# … because this is deprecated: https://support.kraken.com/hc/en-us/articles/360001185506-Explanation-of-Asset-Codes
-# See also: https://support.kraken.com/hc/en-us/articles/202944246-All-available-currencies-and-trading-pairs-on-Kraken
+# Kraken's "dirty" asset codes don't seem to follow any system.
+# Only "clean" names are used in CoinTaxman internally.
+#     kraken_asset_map:
+#         Converts Kraken "dirty" asset codes to "clean" asset names
+#         (e.g. ZEUR   -> EUR)
+#     kraken_pair_map:
+#         Converts clean fiat / clean crypto pairs to "dirty" API asset pairs
+#         (e.g. ETHEUR -> XETHZEUR)
+# Analyzed using asset pairs API data:
+# https://api.kraken.com/0/public/AssetPairs (retrieved at 2021-02-21)
 kraken_asset_map = {
     # Fiat:
     "ZUSD": "USD",
@@ -215,15 +219,57 @@ kraken_asset_map = {
     "XXDG": "XDG",
     "XXRP": "XRP"
 }
-kraken_pair_map = {  # Only these asset pairs violate the rule "clean name" + "clean name" = "asset pair"
-    'USDTUSD': 'USDTZUSD', 'XETCETH': 'XETCXETH', 'XETCXBT': 'XETCXXBT', 'XETCEUR': 'XETCZEUR', 'XETCUSD': 'XETCZUSD',
-    'ETHXBT': 'XETHXXBT', 'ETHCAD': 'XETHZCAD', 'ETHEUR': 'XETHZEUR', 'ETHGBP': 'XETHZGBP', 'ETHJPY': 'XETHZJPY',
-    'ETHUSD': 'XETHZUSD', 'LTCXBT': 'XLTCXXBT', 'LTCEUR': 'XLTCZEUR', 'LTCJPY': 'XLTCZJPY', 'LTCUSD': 'XLTCZUSD',
-    'XMLNETH': 'XMLNXETH', 'XMLNXBT': 'XMLNXXBT', 'XMLNEUR': 'XMLNZEUR', 'XMLNUSD': 'XMLNZUSD', 'XREPETH': 'XREPXETH',
-    'XREPXBT': 'XREPXXBT', 'XREPEUR': 'XREPZEUR', 'XREPUSD': 'XREPZUSD', 'XBTCAD': 'XXBTZCAD', 'XBTEUR': 'XXBTZEUR',
-    'XBTGBP': 'XXBTZGBP', 'XBTJPY': 'XXBTZJPY', 'XBTUSD': 'XXBTZUSD', 'XDGXBT': 'XXDGXXBT', 'XXLMXBT': 'XXLMXXBT',
-    'XXLMAUD': 'XXLMZAUD', 'XXLMEUR': 'XXLMZEUR', 'XXLMGBP': 'XXLMZGBP', 'XXLMUSD': 'XXLMZUSD', 'XXMRXBT': 'XXMRXXBT',
-    'XXMREUR': 'XXMRZEUR', 'XXMRUSD': 'XXMRZUSD', 'XRPXBT': 'XXRPXXBT', 'XRPCAD': 'XXRPZCAD', 'XRPEUR': 'XXRPZEUR',
-    'XRPJPY': 'XXRPZJPY', 'XRPUSD': 'XXRPZUSD', 'XZECXBT': 'XZECXXBT', 'XZECEUR': 'XZECZEUR', 'XZECUSD': 'XZECZUSD',
-    'EURUSD': 'ZEURZUSD', 'GBPUSD': 'ZGBPZUSD', 'USDCAD': 'ZUSDZCAD', 'USDJPY': 'ZUSDZJPY'
+
+# Only these asset pairs violate the rule
+# "clean name" + "clean name" = "asset pair"
+kraken_pair_map = {
+    'USDTUSD': 'USDTZUSD',
+    'XETCETH': 'XETCXETH',
+    'XETCXBT': 'XETCXXBT',
+    'XETCEUR': 'XETCZEUR',
+    'XETCUSD': 'XETCZUSD',
+    'ETHXBT': 'XETHXXBT',
+    'ETHCAD': 'XETHZCAD',
+    'ETHEUR': 'XETHZEUR',
+    'ETHGBP': 'XETHZGBP',
+    'ETHJPY': 'XETHZJPY',
+    'ETHUSD': 'XETHZUSD',
+    'LTCXBT': 'XLTCXXBT',
+    'LTCEUR': 'XLTCZEUR',
+    'LTCJPY': 'XLTCZJPY',
+    'LTCUSD': 'XLTCZUSD',
+    'XMLNETH': 'XMLNXETH',
+    'XMLNXBT': 'XMLNXXBT',
+    'XMLNEUR': 'XMLNZEUR',
+    'XMLNUSD': 'XMLNZUSD',
+    'XREPETH': 'XREPXETH',
+    'XREPXBT': 'XREPXXBT',
+    'XREPEUR': 'XREPZEUR',
+    'XREPUSD': 'XREPZUSD',
+    'XBTCAD': 'XXBTZCAD',
+    'XBTEUR': 'XXBTZEUR',
+    'XBTGBP': 'XXBTZGBP',
+    'XBTJPY': 'XXBTZJPY',
+    'XBTUSD': 'XXBTZUSD',
+    'XDGXBT': 'XXDGXXBT',
+    'XXLMXBT': 'XXLMXXBT',
+    'XXLMAUD': 'XXLMZAUD',
+    'XXLMEUR': 'XXLMZEUR',
+    'XXLMGBP': 'XXLMZGBP',
+    'XXLMUSD': 'XXLMZUSD',
+    'XXMRXBT': 'XXMRXXBT',
+    'XXMREUR': 'XXMRZEUR',
+    'XXMRUSD': 'XXMRZUSD',
+    'XRPXBT': 'XXRPXXBT',
+    'XRPCAD': 'XXRPZCAD',
+    'XRPEUR': 'XXRPZEUR',
+    'XRPJPY': 'XXRPZJPY',
+    'XRPUSD': 'XXRPZUSD',
+    'XZECXBT': 'XZECXXBT',
+    'XZECEUR': 'XZECZEUR',
+    'XZECUSD': 'XZECZUSD',
+    'EURUSD': 'ZEURZUSD',
+    'GBPUSD': 'ZGBPZUSD',
+    'USDCAD': 'ZUSDZCAD',
+    'USDJPY': 'ZUSDZJPY',
 }

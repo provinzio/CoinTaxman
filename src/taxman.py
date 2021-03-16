@@ -15,17 +15,17 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import csv
-from pathlib import Path
+import datetime
 import logging
-import re
+from pathlib import Path
 
-from balance_queue import *
-from book import Book
+import balance_queue
 import config
 import core
 import misc
+import transaction
+from book import Book
 from price_data import PriceData
-from transaction import *
 
 log = logging.getLogger(__name__)
 
@@ -35,8 +35,8 @@ class Taxman:
         self.book = book
         self.price_data = price_data
 
-        self.tax_events: list[TaxEvent] = []
-        self.balances: dict[str, BalanceQueue] = {}
+        self.tax_events: list[transaction.TaxEvent] = []
+        self.balances: dict[str, balance_queue.BalanceQueue] = {}
 
         # Determine used functions/classes depending on the config.
         country = config.COUNTRY.name
@@ -48,35 +48,40 @@ class Taxman:
                 f"Unable to evaluate taxation for {country=}.")
 
         if config.PRINCIPLE == core.Principle.FIFO:
-            self.BalanceType = BalanceQueue
+            self.BalanceType = balance_queue.BalanceQueue
         elif config.PRINCIPLE == core.Principle.LIFO:
-            self.BalanceType = BalanceLIFOQueue
+            self.BalanceType = balance_queue.BalanceLIFOQueue
         else:
             raise NotImplementedError(
-                f"Unable to evaluate taxation for {config.PRINCIPLE=}.")
+                f"Unable to evaluate taxation for {config.PRINCIPLE=}."
+            )
 
-    def in_tax_year(self, op: Operation) -> bool:
+    def in_tax_year(self, op: transaction.Operation) -> bool:
         return op.utc_time.year == config.TAX_YEAR
 
-    def _evaluate_taxation_GERMANY(self, coin: str, operations: list[Operation]) -> None:
+    def _evaluate_taxation_GERMANY(
+        self,
+        coin: str,
+        operations: list[transaction.Operation],
+    ) -> None:
         balance = self.BalanceType()
 
         for op in operations:
-            if isinstance(op, Fee):
+            if isinstance(op, transaction.Fee):
                 balance.remove_fee(op.change)
                 if self.in_tax_year(op):
                     # Fees reduce taxed gain.
                     taxation_type = "Sonstige Einkünfte"
                     taxed_gain = -self.price_data.get_cost(op)
-                    tx = TaxEvent(taxation_type, taxed_gain, op)
+                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
                     self.tax_events.append(tx)
-            elif isinstance(op, CoinLend):
+            elif isinstance(op, transaction.CoinLend):
                 pass
-            elif isinstance(op, CoinLendEnd):
+            elif isinstance(op, transaction.CoinLendEnd):
                 pass
-            elif isinstance(op, Buy):
+            elif isinstance(op, transaction.Buy):
                 balance.put(op)
-            elif isinstance(op, Sell):
+            elif isinstance(op, transaction.Sell):
                 sold_coins = balance.sell(op.change)
                 if sold_coins is None:
                     # Queue ran out of items to sell...
@@ -87,9 +92,13 @@ class Taxman:
                         # ...but not for crypto coins (taxable)
                         log.error(
                             f"{op.file_path.name}: Line {op.line}: "
-                            f"Not enough {coin} in queue to sell (transaction from {op.utc_time} on {op.platform})\n"
-                            f"\tIs your account statement missing any transactions?\n"
-                            f"\tThis error may also occur after deposits from unknown sources.\n"
+                            f"Not enough {coin} in queue to sell "
+                            f"(transaction from {op.utc_time} "
+                            f"on {op.platform})\n"
+                            "\tIs your account statement missing "
+                            "any transactions?\n"
+                            "\tThis error may also occur after deposits "
+                            "from unknown sources.\n"
                         )
                         raise RuntimeError
                 if self.in_tax_year(op) and coin != config.FIAT:
@@ -101,53 +110,67 @@ class Taxman:
                     # which come from an Airdrop, CoinLend or Commission (in an
                     # foreign currency) will not be taxed.
                     for sc in sold_coins:
-                        if not config.IS_LONG_TERM(sc.op.utc_time, op.utc_time) and not (isinstance(sc.op, (Airdrop, CoinLendInterest, StakingInterest, Commission)) and not sc.op.coin == config.FIAT):
+                        if (
+                            not config.IS_LONG_TERM(sc.op.utc_time, op.utc_time)
+                            and not (isinstance(sc.op, (transaction.Airdrop,
+                                                        transaction.CoinLendInterest,
+                                                        transaction.StakingInterest,
+                                                        transaction.Commission))
+                                     and not sc.op.coin == config.FIAT)
+                        ):
                             partial_win = (sc.sold / op.change) * total_win
                             taxed_gain += partial_win - \
                                 self.price_data.get_cost(sc)
                     remark = ", ".join(
-                        f"{sc.sold} from {sc.op.utc_time} ({sc.op.__class__.__name__})" for sc in sold_coins)
-                    tx = TaxEvent(taxation_type, taxed_gain, op, remark)
+                        f"{sc.sold} from {sc.op.utc_time} "
+                        f"({sc.op.__class__.__name__})" for sc in sold_coins)
+                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op, remark)
                     self.tax_events.append(tx)
-            elif isinstance(op, (CoinLendInterest, StakingInterest)):
+            elif isinstance(op, (transaction.CoinLendInterest,
+                                 transaction.StakingInterest)):
                 balance.put(op)
                 if self.in_tax_year(op):
                     if misc.is_fiat(coin):
-                        assert not isinstance(
-                            op, StakingInterest), "You can not stake fiat currencies."
+                        assert not isinstance(op, transaction.StakingInterest), (
+                            "You can not stake fiat currencies."
+                        )
                         taxation_type = "Einkünfte aus Kapitalvermögen"
                     else:
                         taxation_type = "Einkünfte aus sonstigen Leistungen"
                     taxed_gain = self.price_data.get_cost(op)
-                    tx = TaxEvent(taxation_type, taxed_gain, op)
+                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
                     self.tax_events.append(tx)
-            elif isinstance(op, Airdrop):
+            elif isinstance(op, transaction.Airdrop):
                 balance.put(op)
-            elif isinstance(op, Commission):
+            elif isinstance(op, transaction.Commission):
                 balance.put(op)
                 if self.in_tax_year(op):
                     taxation_type = "Einkünfte aus sonstigen Leistungen"
                     taxed_gain = self.price_data.get_cost(op)
-                    tx = TaxEvent(taxation_type, taxed_gain, op)
+                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
                     self.tax_events.append(tx)
-            elif isinstance(op, Deposit):
+            elif isinstance(op, transaction.Deposit):
                 pass
-            elif isinstance(op, Withdraw):
+            elif isinstance(op, transaction.Withdraw):
                 pass
             else:
                 raise NotImplementedError
 
         # Check that all relevant positions were considered.
         if balance.buffer_fee:
-            log.warning("Balance has outstanding fees which were not considered: %s %s", ", ".join(
-                str(fee) for fee in balance.buffer_fee), coin)
+            log.warning(
+                "Balance has outstanding fees which were not considered: "
+                "%s %s",
+                ", ".join(str(fee) for fee in balance.buffer_fee), coin
+            )
 
         self.balances[coin] = balance
 
     def evaluate_taxation(self) -> None:
-        """Evaluate the taxation per coin using the country specific function."""
+        """Evaluate the taxation per coin using country specific function."""
         log.debug("Starting evaluation...")
-        for coin, operations in misc.group_by(self.book.operations, "coin").items():
+        for coin, operations in misc.group_by(self.book.operations,
+                                              "coin").items():
             operations = sorted(operations, key=lambda op: op.utc_time)
             self.__evaluate_taxation(coin, operations)
 
@@ -156,12 +179,15 @@ class Taxman:
         if self.tax_events:
             print()
             print(f"Your tax evaluation for {config.TAX_YEAR}:")
-            for taxation_type, tax_events in misc.group_by(self.tax_events, "taxation_type").items():
+            for taxation_type, tax_events in misc.group_by(self.tax_events,
+                                                           "taxation_type").items():
                 taxed_gains = sum(tx.taxed_gain for tx in tax_events)
                 print(f"{taxation_type}: {taxed_gains} {config.FIAT}")
         else:
             print(
-                f"Either the evaluation has not run or there are no tax events for {config.TAX_YEAR}.")
+                "Either the evaluation has not run or there are no tax events "
+                f"for {config.TAX_YEAR}."
+            )
 
     def export_evaluation_as_csv(self) -> Path:
         """Export detailed summary of all tax events to CSV.
@@ -181,20 +207,25 @@ class Taxman:
         with open(file_path, "w", newline="") as f:
             writer = csv.writer(f)
             # Add embedded metadata info
-            writer.writerow(
-                ["# software", "CoinTaxman <https://github.com/provinzio/CoinTaxman>"])
+            writer.writerow([
+                "# software",
+                "CoinTaxman <https://github.com/provinzio/CoinTaxman>"
+            ])
             if commit_hash := misc.get_current_commit_hash():
                 writer.writerow(["# commit", commit_hash])
             writer.writerow(
                 ["# updated", datetime.date.today().strftime("%x")])
 
             header = ["Date", "Taxation Type", f"Taxed Gain in {config.FIAT}",
-                      "Action", "Amount", "Asset",  "Remark"]
+                      "Action", "Amount", "Asset", "Remark"]
             writer.writerow(header)
             # Tax events are currently sorted by coin. Sort by time instead.
             for tx in sorted(self.tax_events, key=lambda tx: tx.op.utc_time):
-                line = [tx.op.utc_time, tx.taxation_type, tx.taxed_gain,
-                        tx.op.__class__.__name__, tx.op.change, tx.op.coin, tx.remark]
+                line = [
+                    tx.op.utc_time, tx.taxation_type, tx.taxed_gain,
+                    tx.op.__class__.__name__, tx.op.change, tx.op.coin,
+                    tx.remark
+                ]
                 writer.writerow(line)
 
         log.info("Saved evaluation in %s.", file_path)

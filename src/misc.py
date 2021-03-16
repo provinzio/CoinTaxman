@@ -16,22 +16,35 @@
 
 import collections
 import datetime
-from pathlib import Path
 import random
 import re
 import subprocess
 import time
-from typing import Optional, Tuple, Union
+from pathlib import Path
+from typing import (
+    Any,
+    Callable,
+    Optional,
+    SupportsFloat,
+    SupportsInt,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import core
 
+F = TypeVar("F", bound=Callable[..., Any])
+L = TypeVar("L", bound=list[Any])
 
-def xint(x) -> Optional[int]:
-    return None if x in (None, "") else int(x)
+
+def xint(x: Union[None, str, SupportsInt]) -> Optional[int]:
+    return None if x is None or x == "" else int(x)
 
 
-def xfloat(x) -> Optional[float]:
-    return None if x in (None, "") else float(x)
+def xfloat(x: Union[None, str, SupportsFloat]) -> Optional[float]:
+    return None if x is None or x == "" else float(x)
 
 
 def to_ms_timestamp(d: datetime.datetime) -> int:
@@ -58,7 +71,10 @@ def to_ns_timestamp(d: datetime.datetime) -> int:
     return int(d.timestamp() * 1000000000)
 
 
-def get_offset_timestamps(utc_time: datetime.datetime, offset: datetime.timedelta) -> Tuple[int, int]:
+def get_offset_timestamps(
+    utc_time: datetime.datetime,
+    offset: datetime.timedelta,
+) -> Tuple[int, int]:
     """Return timestamps in milliseconds `offset/2` before/after `utc_time`.
 
     Args:
@@ -68,23 +84,23 @@ def get_offset_timestamps(utc_time: datetime.datetime, offset: datetime.timedelt
     Returns:
         Tuple[int, int]: Timestamps in milliseconds.
     """
-    start = utc_time - offset/2
-    end = utc_time + offset/2
+    start = utc_time - offset / 2
+    end = utc_time + offset / 2
     return to_ms_timestamp(start), to_ms_timestamp(end)
 
 
-def group_by(l: list, key: str) -> dict[str, list]:
+def group_by(lst: L, key: str) -> dict[str, L]:
     """Group a list of objects by `key`.
 
     Args:
-        l (list)
+        lst (list)
         key (str)
 
     Returns:
         dict[str, list]: Dict with different `key`as keys.
     """
     d = collections.defaultdict(list)
-    for e in l:
+    for e in lst:
         d[getattr(e, key)].append(e)
     return dict(d)
 
@@ -92,8 +108,9 @@ def group_by(l: list, key: str) -> dict[str, list]:
 __delayed: dict[int, datetime.datetime] = {}
 
 
-def delayed(func):
+def delayed(func: F) -> F:
     """Randomly delay calls to the same function."""
+
     def wrapper(*args, **kwargs):
         global __delayed
         if delayed := __delayed.get(id(func)):
@@ -107,7 +124,8 @@ def delayed(func):
         __delayed[id(func)] = datetime.datetime.now() + delay
 
         return ret
-    return wrapper
+
+    return cast(F, wrapper)
 
 
 def is_fiat(symbol: Union[str, core.Fiat]) -> bool:
@@ -134,13 +152,14 @@ def get_next_file_path(path: Path, base_filename: str, extension: str) -> Path:
         extension (str)
 
     Raises:
-        AssertitionError: When {base_filename}_rev999.{extension} already exists.
+        AssertitionError: When {base_filename}_rev999.{extension}
+                          already exists.
 
     Returns:
         Path: Path to next free file.
     """
     i = 1
-    regex = re.compile(base_filename + "_rev(\d{3})." + extension)
+    regex = re.compile(base_filename + r"_rev(\d{3})." + extension)
     for p in path.iterdir():
         if p.is_file():
             if m := regex.match(p.name):
@@ -157,6 +176,10 @@ def get_next_file_path(path: Path, base_filename: str, extension: str) -> Path:
 
 def get_current_commit_hash() -> Optional[str]:
     try:
-        return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("UTF-8").strip()
+        return (
+            subprocess.check_output(["git", "rev-parse", "HEAD"])
+            .decode("UTF-8")
+            .strip()
+        )
     except subprocess.CalledProcessError:
         return None

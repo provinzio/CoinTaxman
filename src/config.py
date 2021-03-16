@@ -21,7 +21,6 @@ from dateutil.relativedelta import relativedelta
 
 import core
 
-
 # User specific constants.
 COUNTRY = core.Country.GERMANY
 TAX_YEAR = 2020
@@ -33,6 +32,8 @@ if COUNTRY == core.Country.GERMANY:
 
     def IS_LONG_TERM(buy: datetime, sell: datetime) -> bool:
         return buy + relativedelta(years=1) < sell
+
+
 else:
     raise NotImplementedError(f"Your country {COUNTRY} is not supported.")
 
