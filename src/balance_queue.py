@@ -32,7 +32,6 @@ class BalancedOperation:
 
 
 class BalanceQueue:
-
     def __init__(self) -> None:
         self.queue: Deque[BalancedOperation] = collections.deque()
         self.buffer_fee: list[float] = []
@@ -140,7 +139,6 @@ class BalanceQueue:
 
 
 class BalanceLIFOQueue(queue.LifoQueue, BalanceQueue):
-
     def _put(self, item: BalancedOperation) -> None:
         self.queue.append(item)
 

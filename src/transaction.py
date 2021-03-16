@@ -116,6 +116,7 @@ class Withdraw(Transaction):
 
 # Helping variables
 
+
 @dataclasses.dataclass
 class SoldCoin:
     op: Operation

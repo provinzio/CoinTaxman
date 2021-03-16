@@ -30,7 +30,6 @@ log = logging.getLogger(__name__)
 
 
 class Book:
-
     def __init__(self, price_data: PriceData) -> None:
         self.price_data = price_data
 
@@ -55,7 +54,10 @@ class Book:
         except AttributeError:
             log.warning(
                 "Could not recognize operation `%s` in  %s file `%s:%i`.",
-                operation, platform, file_path, row
+                operation,
+                platform,
+                file_path,
+                row,
             )
             return
 
@@ -84,8 +86,7 @@ class Book:
                 row = reader.line_num
 
                 # Parse data.
-                utc_time = datetime.datetime.strptime(
-                    _utc_time, "%Y-%m-%d %H:%M:%S")
+                utc_time = datetime.datetime.strptime(_utc_time, "%Y-%m-%d %H:%M:%S")
                 utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
                 change = float(_change)
                 operation = operation_mapping.get(operation, operation)
@@ -111,11 +112,14 @@ class Book:
                 if remark:
                     log.warning(
                         "I may have missed a remark in %s:%i: `%s`.",
-                        file_path, row, remark
+                        file_path,
+                        row,
+                        remark,
                     )
 
-                self.append_operation(operation, utc_time, platform,
-                                      change, coin, row, file_path)
+                self.append_operation(
+                    operation, utc_time, platform, change, coin, row, file_path
+                )
 
     def _read_coinbase(self, file_path: Path) -> None:
         platform = "coinbase"
@@ -135,12 +139,17 @@ class Book:
                 assert next(reader) == ["Transactions"]
                 assert next(reader)  # user row
                 assert next(reader) == []
-                assert next(reader) == ['Timestamp', 'Transaction Type',
-                                        'Asset', 'Quantity Transacted',
-                                        'EUR Spot Price at Transaction',
-                                        'EUR Subtotal',
-                                        'EUR Total (inclusive of fees)',
-                                        'EUR Fees', 'Notes']
+                assert next(reader) == [
+                    "Timestamp",
+                    "Transaction Type",
+                    "Asset",
+                    "Quantity Transacted",
+                    "EUR Spot Price at Transaction",
+                    "EUR Subtotal",
+                    "EUR Total (inclusive of fees)",
+                    "EUR Fees",
+                    "Notes",
+                ]
             except AssertionError as e:
                 msg = (
                     "Unable to read coinbase file: Malformed header. "
@@ -150,13 +159,21 @@ class Book:
                 log.exception(e)
                 return
 
-            for _utc_time, operation, coin, _change, _eur_spot, \
-                    _eur_subtotal, _eur_total, _eur_fee, remark in reader:
+            for (
+                _utc_time,
+                operation,
+                coin,
+                _change,
+                _eur_spot,
+                _eur_subtotal,
+                _eur_total,
+                _eur_fee,
+                remark,
+            ) in reader:
                 row = reader.line_num
 
                 # Parse data.
-                utc_time = datetime.datetime.strptime(
-                    _utc_time, "%Y-%m-%dT%H:%M:%SZ")
+                utc_time = datetime.datetime.strptime(_utc_time, "%Y-%m-%dT%H:%M:%SZ")
                 utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
                 operation = operation_mapping.get(operation, operation)
                 change = float(_change)
@@ -178,25 +195,28 @@ class Book:
                 assert change
                 assert eur_spot
 
-                self.append_operation(operation, utc_time, platform,
-                                      change, coin, row, file_path)
+                self.append_operation(
+                    operation, utc_time, platform, change, coin, row, file_path
+                )
 
                 # Save price in our local database for later.
-                self.price_data.set_price_db(
-                    platform, coin, "EUR", utc_time, eur_spot)
+                self.price_data.set_price_db(platform, coin, "EUR", utc_time, eur_spot)
 
                 if operation == "Sell":
                     assert isinstance(eur_subtotal, float)
-                    self.append_operation("Buy", utc_time, platform,
-                                          eur_subtotal, "EUR", row, file_path)
+                    self.append_operation(
+                        "Buy", utc_time, platform, eur_subtotal, "EUR", row, file_path
+                    )
                 elif operation == "Buy":
                     assert isinstance(eur_subtotal, float)
-                    self.append_operation("Sell", utc_time, platform,
-                                          eur_subtotal, "EUR", row, file_path)
+                    self.append_operation(
+                        "Sell", utc_time, platform, eur_subtotal, "EUR", row, file_path
+                    )
 
                 if eur_fee:
-                    self.append_operation("Fee", utc_time, platform,
-                                          eur_fee, "EUR", row, file_path)
+                    self.append_operation(
+                        "Fee", utc_time, platform, eur_fee, "EUR", row, file_path
+                    )
 
     def _read_kraken_trades(self, file_path: Path) -> None:
         log.error(
@@ -233,8 +253,8 @@ class Book:
         #   dup_state["withdrawal"] == 1:
         #       Withdrawal is broadcast to blockchain
         #       > Taxable event (is in public trade history)
-        dup_state, dup_skip = {"deposit": 0, "withdrawal": 0}, {
-            "deposit": 1, "withdrawal": 0}
+        dup_state = {"deposit": 0, "withdrawal": 0}
+        dup_skip = {"deposit": 1, "withdrawal": 0}
 
         with open(file_path, encoding="utf8") as f:
             reader = csv.reader(f)
@@ -247,13 +267,32 @@ class Book:
                 num_columns = len(columns)
                 # Kraken ledgers export format from October 2020 and ongoing
                 if num_columns == 10:
-                    (txid, refid, _utc_time, _type, subtype, aclass, _asset,
-                     _amount, _fee, balance) = columns
+                    (
+                        txid,
+                        refid,
+                        _utc_time,
+                        _type,
+                        subtype,
+                        aclass,
+                        _asset,
+                        _amount,
+                        _fee,
+                        balance,
+                    ) = columns
 
                 # Kraken ledgers export format from September 2020 and before
                 elif num_columns == 9:
-                    (txid, refid, _utc_time, _type, aclass, _asset, _amount,
-                     _fee, balance) = columns
+                    (
+                        txid,
+                        refid,
+                        _utc_time,
+                        _type,
+                        aclass,
+                        _asset,
+                        _amount,
+                        _fee,
+                        balance,
+                    ) = columns
                 else:
                     raise RuntimeError(
                         "Unknown Kraken ledgers format: "
@@ -270,8 +309,7 @@ class Book:
                         continue
 
                 # Parse data.
-                utc_time = datetime.datetime.strptime(
-                    _utc_time, "%Y-%m-%d %H:%M:%S")
+                utc_time = datetime.datetime.strptime(_utc_time, "%Y-%m-%d %H:%M:%S")
                 utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
                 change = float(_amount)
                 coin = kraken_asset_map.get(_asset, _asset)
@@ -301,16 +339,17 @@ class Book:
                 assert coin
                 assert change
 
-                self.append_operation(operation, utc_time, platform,
-                                      change, coin, row, file_path)
+                self.append_operation(
+                    operation, utc_time, platform, change, coin, row, file_path
+                )
 
                 if fee != 0:
-                    self.append_operation("Fee", utc_time, platform,
-                                          fee, coin, row, file_path)
+                    self.append_operation(
+                        "Fee", utc_time, platform, fee, coin, row, file_path
+                    )
 
         assert dup_state["deposit"] == 0, (
-            "Orphaned deposit. (Must always come in pairs). "
-            "Is your file corrupted?"
+            "Orphaned deposit. (Must always come in pairs). " "Is your file corrupted?"
         )
         assert dup_state["withdrawal"] == 0, (
             "Orphaned withdrawal. (Must always come in pairs). "
@@ -328,26 +367,58 @@ class Book:
                 header = next(reader, None)
 
             expected_headers = {
-                "binance": ['UTC_Time', 'Account',
-                            'Operation', 'Coin', 'Change', 'Remark'],
+                "binance": [
+                    "UTC_Time",
+                    "Account",
+                    "Operation",
+                    "Coin",
+                    "Change",
+                    "Remark",
+                ],
                 "coinbase": [
-                    'You can use this transaction report to inform your '
-                    'likely tax obligations. For US customers, Sells, '
-                    'Converts, and Rewards Income, and Coinbase Earn '
-                    'transactions are taxable events. For final tax '
-                    'obligations, please consult your tax advisor.'
+                    "You can use this transaction report to inform your "
+                    "likely tax obligations. For US customers, Sells, "
+                    "Converts, and Rewards Income, and Coinbase Earn "
+                    "transactions are taxable events. For final tax "
+                    "obligations, please consult your tax advisor."
                 ],
                 "kraken_ledgers_old": [
-                    "txid", "refid", "time", "type", "aclass", "asset",
-                    "amount", "fee", "balance"
+                    "txid",
+                    "refid",
+                    "time",
+                    "type",
+                    "aclass",
+                    "asset",
+                    "amount",
+                    "fee",
+                    "balance",
                 ],
                 "kraken_ledgers": [
-                    "txid", "refid", "time", "type", "subtype", "aclass",
-                    "asset", "amount", "fee", "balance"
+                    "txid",
+                    "refid",
+                    "time",
+                    "type",
+                    "subtype",
+                    "aclass",
+                    "asset",
+                    "amount",
+                    "fee",
+                    "balance",
                 ],
                 "kraken_trades": [
-                    "txid", "ordertxid", "pair", "time", "type", "ordertype",
-                    "price", "cost", "fee", "vol", "margin", "misc", "ledgers"
+                    "txid",
+                    "ordertxid",
+                    "pair",
+                    "time",
+                    "type",
+                    "ordertype",
+                    "price",
+                    "cost",
+                    "fee",
+                    "vol",
+                    "margin",
+                    "misc",
+                    "ledgers",
                 ],
             }
             for exchange, expected in expected_headers.items():
@@ -377,8 +448,7 @@ class Book:
                 )
                 return
 
-            log.info("Reading file from exchange %s at %s",
-                     exchange, file_path)
+            log.info("Reading file from exchange %s at %s", exchange, file_path)
             read_file(file_path)
         else:
             log.warning(
@@ -417,8 +487,10 @@ class Book:
         paths = self.get_account_statement_paths(config.ACCOUNT_STATMENTS_PATH)
 
         if not paths:
-            log.warning("No account statement files located in %s.",
-                        config.ACCOUNT_STATMENTS_PATH)
+            log.warning(
+                "No account statement files located in %s.",
+                config.ACCOUNT_STATMENTS_PATH,
+            )
             return False
 
         for file_path in paths:

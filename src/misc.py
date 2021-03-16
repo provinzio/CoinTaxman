@@ -35,8 +35,8 @@ from typing import (
 
 import core
 
-F = TypeVar('F', bound=Callable[..., Any])
-L = TypeVar('L', bound=list[Any])
+F = TypeVar("F", bound=Callable[..., Any])
+L = TypeVar("L", bound=list[Any])
 
 
 def xint(x: Union[None, str, SupportsInt]) -> Optional[int]:
@@ -110,6 +110,7 @@ __delayed: dict[int, datetime.datetime] = {}
 
 def delayed(func: F) -> F:
     """Randomly delay calls to the same function."""
+
     def wrapper(*args, **kwargs):
         global __delayed
         if delayed := __delayed.get(id(func)):
@@ -123,6 +124,7 @@ def delayed(func: F) -> F:
         __delayed[id(func)] = datetime.datetime.now() + delay
 
         return ret
+
     return cast(F, wrapper)
 
 
@@ -174,8 +176,10 @@ def get_next_file_path(path: Path, base_filename: str, extension: str) -> Path:
 
 def get_current_commit_hash() -> Optional[str]:
     try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "HEAD"]
-        ).decode("UTF-8").strip()
+        return (
+            subprocess.check_output(["git", "rev-parse", "HEAD"])
+            .decode("UTF-8")
+            .strip()
+        )
     except subprocess.CalledProcessError:
         return None
