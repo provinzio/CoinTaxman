@@ -145,5 +145,6 @@ class BalanceLIFOQueue(queue.LifoQueue, BalanceQueue):
         self.queue.append(item)
 
     def _get(self) -> BalancedOperation:
-        item: BalancedOperation = self.queue.pop()
+        item = self.queue.pop()
+        assert isinstance(item, BalancedOperation)
         return item
