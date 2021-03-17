@@ -17,7 +17,11 @@ isort:
 black:
 	black src
 
+install:
+	python -m pip install --upgrade pip
+	pip install -r requirements.txt -r requirements-dev.txt
+
 run:
 	python src/main.py
 
-.PHONY: flake8 mypy check-isort lint isort black run
+.PHONY: flake8 mypy check-isort lint isort black install run
