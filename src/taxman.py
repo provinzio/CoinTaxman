@@ -16,6 +16,7 @@
 
 import csv
 import datetime
+import decimal
 import logging
 from pathlib import Path
 
@@ -103,7 +104,7 @@ class Taxman:
                     taxation_type = "Sonstige Einkünfte"
                     # Price of the sell.
                     total_win = self.price_data.get_cost(op)
-                    taxed_gain = 0.0
+                    taxed_gain = decimal.Decimal()
                     # Coins which are older than (in this case) one year or
                     # which come from an Airdrop, CoinLend or Commission (in an
                     # foreign currency) will not be taxed.

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime
+import decimal
 import logging
 import typing
 from pathlib import Path
@@ -29,7 +30,7 @@ log = logging.getLogger(__name__)
 class Operation:
     utc_time: datetime.datetime
     platform: str
-    change: float
+    change: decimal.Decimal
     coin: str
     line: int
     file_path: Path
@@ -120,12 +121,12 @@ class Withdraw(Transaction):
 @dataclasses.dataclass
 class SoldCoin:
     op: Operation
-    sold: float
+    sold: decimal.Decimal
 
 
 @dataclasses.dataclass
 class TaxEvent:
     taxation_type: str
-    taxed_gain: float
+    taxed_gain: decimal.Decimal
     op: Operation
     remark: str = ""

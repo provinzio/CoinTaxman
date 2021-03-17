@@ -16,6 +16,7 @@
 
 import collections
 import dataclasses
+import decimal
 import logging
 import queue
 from typing import Deque, Optional, Union
@@ -28,13 +29,13 @@ log = logging.getLogger(__name__)
 @dataclasses.dataclass
 class BalancedOperation:
     op: transaction.Operation
-    sold: float = 0.0
+    sold: decimal.Decimal = decimal.Decimal()
 
 
 class BalanceQueue:
     def __init__(self) -> None:
         self.queue: Deque[BalancedOperation] = collections.deque()
-        self.buffer_fee: list[float] = []
+        self.buffer_fee: list[decimal.Decimal] = []
 
     def put(self, item: Union[transaction.Operation, BalancedOperation]) -> None:
         """Put a new item in the queue.
@@ -74,11 +75,11 @@ class BalanceQueue:
         except IndexError:
             return None
 
-    def remove_fee(self, fee: float) -> None:
+    def remove_fee(self, fee: decimal.Decimal) -> None:
         """Remove fee from the last added transaction.
 
         Args:
-            fee: float
+            fee: decimal.Decimal
         """
         while True:
             try:
@@ -101,13 +102,13 @@ class BalanceQueue:
             else:
                 fee -= not_sold
 
-    def sell(self, change: float) -> Optional[list[transaction.SoldCoin]]:
+    def sell(self, change: decimal.Decimal) -> Optional[list[transaction.SoldCoin]]:
         """Sell/remove coins from the queue, returning the sold coins.
 
         Depending on the QueueType, the coins will be removed FIFO or LIFO.
 
         Args:
-            change (float): Amount of sold coins which will be removed
+            change (decimal.Decimal): Amount of sold coins which will be removed
                             from the queue.
 
         Returns:

@@ -16,6 +16,7 @@
 
 import bisect
 import datetime
+import decimal
 import json
 import logging
 import sqlite3
@@ -53,7 +54,7 @@ class PriceData:
         utc_time: datetime.datetime,
         quote_asset: str,
         swapped_symbols: bool = False,
-    ) -> float:
+    ) -> decimal.Decimal:
         """Retrieve price from binance official REST API.
 
         The price is calculated as the average price in a
@@ -76,7 +77,7 @@ class PriceData:
             RuntimeError: Unable to retrieve price data.
 
         Returns:
-            float: Price of asset pair.
+            decimal.Decimal: Price of asset pair.
         """
         root_url = "https://api.binance.com/api/v3/aggTrades"
         symbol = f"{base_asset}{quote_asset}"
@@ -109,7 +110,7 @@ class PriceData:
                 price = self.get_price(
                     "binance", quote_asset, utc_time, base_asset, swapped_symbols=True
                 )
-                return 0 if price == 0 else 1 / price
+                return misc.reciprocal(price)
 
             btc = self.get_price("binance", base_asset, utc_time, "BTC")
             quote = self.get_price("binance", "BTC", utc_time, quote_asset)
@@ -119,14 +120,14 @@ class PriceData:
 
         if len(data) == 0:
             log.warning("Binance offers no price for `%s` at %s", symbol, utc_time)
-            return 0
+            return decimal.Decimal()
 
         # Calculate average price.
-        total_cost = 0.0
-        total_quantity = 0.0
+        total_cost = decimal.Decimal()
+        total_quantity = decimal.Decimal()
         for d in data:
-            price = float(d["p"])
-            quantity = float(d["q"])
+            price = misc.force_decimal(d["p"])
+            quantity = misc.force_decimal(d["q"])
             total_cost += price * quantity
             total_quantity += quantity
         average_price = total_cost / total_quantity
@@ -139,7 +140,7 @@ class PriceData:
         utc_time: datetime.datetime,
         quote_asset: str,
         minutes_step: int = 10,
-    ) -> float:
+    ) -> decimal.Decimal:
         """Retrieve price from Kraken official REST API.
 
         We select the data point closest to the desired timestamp (utc_time),
@@ -163,7 +164,7 @@ class PriceData:
                                 Kraken API requests. Defaults to 10.
 
         Returns:
-            float: Price of asset pair at target time
+            decimal.Decimal: Price of asset pair at target time
                    (0 if price couldn't be determined)
         """
         target_timestamp = misc.to_ms_timestamp(utc_time)
@@ -239,7 +240,7 @@ class PriceData:
                         base_asset, utc_time, quote_asset, minutes_step - 1
                     )
 
-            price = float(data[closest_match_index][0])
+            price = misc.force_decimal(data[closest_match_index][0])
             return price
 
         log.warning(
@@ -247,14 +248,14 @@ class PriceData:
             f"Failed to find matching exchange rate. "
             "Please create an Issue or PR."
         )
-        return 0
+        return decimal.Decimal()
 
     def __get_price_db(
         self,
         db_path: Path,
         tablename: str,
         utc_time: datetime.datetime,
-    ) -> Optional[float]:
+    ) -> Optional[decimal.Decimal]:
         """Try to retrieve the price from our local database.
 
         Args:
@@ -263,7 +264,7 @@ class PriceData:
             utc_time (datetime.datetime)
 
         Returns:
-            Optional[float]: Price.
+            Optional[decimal.Decimal]: Price.
         """
         if db_path.is_file():
             with sqlite3.connect(db_path) as conn:
@@ -278,7 +279,7 @@ class PriceData:
                     raise e
 
                 if prices := cur.fetchone():
-                    return float(prices[0])
+                    return misc.force_decimal(prices[0])
 
         return None
 
@@ -287,7 +288,7 @@ class PriceData:
         db_path: Path,
         tablename: str,
         utc_time: datetime.datetime,
-        price: float,
+        price: decimal.Decimal,
     ) -> None:
         """Write price to database.
 
@@ -297,13 +298,13 @@ class PriceData:
             db_path (Path)
             tablename (str)
             utc_time (datetime.datetime)
-            price (float)
+            price (decimal.Decimal)
         """
         with sqlite3.connect(db_path) as conn:
             cur = conn.cursor()
             query = f"INSERT INTO `{tablename}`" "('utc_time', 'price') VALUES (?, ?);"
             try:
-                cur.execute(query, (utc_time, price))
+                cur.execute(query, (utc_time, str(price)))
             except sqlite3.OperationalError as e:
                 if str(e) == f"no such table: {tablename}":
                     create_query = (
@@ -312,7 +313,7 @@ class PriceData:
                         "price FLOAT NOT NULL);"
                     )
                     cur.execute(create_query)
-                    cur.execute(query, (utc_time, price))
+                    cur.execute(query, (utc_time, str(price)))
                 else:
                     raise e
             conn.commit()
@@ -323,7 +324,7 @@ class PriceData:
         coin: str,
         reference_coin: str,
         utc_time: datetime.datetime,
-        price: float,
+        price: decimal.Decimal,
     ) -> None:
         """Write price to database.
 
@@ -336,7 +337,7 @@ class PriceData:
             coin (str): [description]
             reference_coin (str): [description]
             utc_time (datetime.datetime): [description]
-            price (float): [description]
+            price (decimal.Decimal): [description]
         """
         assert coin != reference_coin
         db_path = self.get_db_path(platform)
@@ -362,7 +363,7 @@ class PriceData:
         utc_time: datetime.datetime,
         reference_coin: str = config.FIAT,
         **kwargs: Any,
-    ) -> float:
+    ) -> decimal.Decimal:
         """Get the price of a coin pair from a specific `platform` at `utc_time`.
 
         The function tries to retrieve the price from the local database first.
@@ -380,10 +381,10 @@ class PriceData:
                                  implemented.
 
         Returns:
-            float: Price of the coin pair.
+            decimal.Decimal: Price of the coin pair.
         """
         if coin == reference_coin:
-            return 1.0
+            return decimal.Decimal("1")
 
         db_path = self.get_db_path(platform)
         tablename = self.get_tablename(coin, reference_coin)
@@ -405,7 +406,7 @@ class PriceData:
         self,
         tr: Union[transaction.Operation, transaction.SoldCoin],
         reference_coin: str = config.FIAT,
-    ) -> float:
+    ) -> decimal.Decimal:
         op = tr if isinstance(tr, transaction.Operation) else tr.op
         price = self.get_price(op.platform, op.coin, op.utc_time, reference_coin)
         if isinstance(tr, transaction.Operation):

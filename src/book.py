@@ -16,6 +16,7 @@
 
 import csv
 import datetime
+import decimal
 import logging
 from pathlib import Path
 from typing import Optional
@@ -43,7 +44,7 @@ class Book:
         operation: str,
         utc_time: datetime.datetime,
         platform: str,
-        change: float,
+        change: decimal.Decimal,
         coin: str,
         row: int,
         file_path: Path,
@@ -88,7 +89,7 @@ class Book:
                 # Parse data.
                 utc_time = datetime.datetime.strptime(_utc_time, "%Y-%m-%d %H:%M:%S")
                 utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
-                change = float(_change)
+                change = misc.force_decimal(_change)
                 operation = operation_mapping.get(operation, operation)
                 if operation in (
                     "The Easiest Way to Trade",
@@ -176,14 +177,14 @@ class Book:
                 utc_time = datetime.datetime.strptime(_utc_time, "%Y-%m-%dT%H:%M:%SZ")
                 utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
                 operation = operation_mapping.get(operation, operation)
-                change = float(_change)
+                change = misc.force_decimal(_change)
                 #  Current price from exchange.
-                eur_spot = float(_eur_spot)
+                eur_spot = misc.force_decimal(_eur_spot)
                 #  Cost without fees.
-                eur_subtotal = misc.xfloat(_eur_subtotal)
+                eur_subtotal = misc.xdecimal(_eur_subtotal)
                 #  Cost with fees.
-                eur_total = misc.xfloat(_eur_total)
-                eur_fee = misc.xfloat(_eur_fee)
+                eur_total = misc.xdecimal(_eur_total)
+                eur_fee = misc.xdecimal(_eur_fee)
 
                 # Unused variables.
                 del eur_total
@@ -203,12 +204,12 @@ class Book:
                 self.price_data.set_price_db(platform, coin, "EUR", utc_time, eur_spot)
 
                 if operation == "Sell":
-                    assert isinstance(eur_subtotal, float)
+                    assert isinstance(eur_subtotal, decimal.Decimal)
                     self.append_operation(
                         "Buy", utc_time, platform, eur_subtotal, "EUR", row, file_path
                     )
                 elif operation == "Buy":
-                    assert isinstance(eur_subtotal, float)
+                    assert isinstance(eur_subtotal, decimal.Decimal)
                     self.append_operation(
                         "Sell", utc_time, platform, eur_subtotal, "EUR", row, file_path
                     )
@@ -311,9 +312,9 @@ class Book:
                 # Parse data.
                 utc_time = datetime.datetime.strptime(_utc_time, "%Y-%m-%d %H:%M:%S")
                 utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
-                change = float(_amount)
+                change = misc.force_decimal(_amount)
                 coin = kraken_asset_map.get(_asset, _asset)
-                fee = float(_fee)
+                fee = misc.force_decimal(_fee)
                 operation = operation_mapping.get(_type)
                 if operation is None:
                     if _type == "trade":

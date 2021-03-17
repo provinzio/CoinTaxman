@@ -16,6 +16,7 @@
 
 import collections
 import datetime
+import decimal
 import random
 import re
 import subprocess
@@ -45,6 +46,49 @@ def xint(x: Union[None, str, SupportsInt]) -> Optional[int]:
 
 def xfloat(x: Union[None, str, SupportsFloat]) -> Optional[float]:
     return None if x is None or x == "" else float(x)
+
+
+def xdecimal(x: Union[None, str, int, float]) -> Optional[decimal.Decimal]:
+    """Convert to decimal, but make sure, that empty values return as None.
+
+    Integer and floats are converted to strings first to receive
+    "real" Decimal values.
+
+    Args:
+        x (Union[None, str, int, float])
+
+    Returns:
+        Optional[decimal.Decimal]
+    """
+    if isinstance(x, (int, float)):
+        x = str(x)
+    assert x is None or isinstance(x, str)
+    return None if x is None or x == "" else decimal.Decimal(x)
+
+
+def force_decimal(x: Union[str, int, float]) -> decimal.Decimal:
+    """Convert to decimal, but make sure, that empty values raise an error.
+
+    See `xdecimal` for further informations.
+
+    Args:
+        x (Union[None, str, int, float])
+
+    Raises:
+        KeyError: The given argument can not be parsed accordingly.
+
+    Returns:
+        decimal.Decimal
+    """
+    d = xdecimal(x)
+    if isinstance(d, decimal.Decimal):
+        return d
+    else:
+        raise KeyError(f"Could not parse `{d}` to decimal")
+
+
+def reciprocal(d: decimal.Decimal) -> decimal.Decimal:
+    return decimal.Decimal() if d == 0 else decimal.Decimal(1) / d
 
 
 def to_ms_timestamp(d: datetime.datetime) -> int:
