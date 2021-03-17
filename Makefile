@@ -17,4 +17,7 @@ isort:
 black:
 	black src
 
-.PHONY: flake8 mypy check-isort lint isort black
+run:
+	python src/main.py
+
+.PHONY: flake8 mypy check-isort lint isort black run
