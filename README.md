@@ -94,6 +94,7 @@ Hit the thumbs up button of that issue or participate in the process.
 - Extend `src/config.py` to fit your tax regulation
 - Add a country specific tax evaluation function in `src/taxman.py` like `Taxman._evaluate_taxation_GERMANY`
 - Depending on your specific tax regulation, you might need to add additional functionality and might want to add or edit the enums in `src/core.py`
+- Update the README with a documentation about the taxation guidelines in your country
 
 #### Adding a new exchange
 
