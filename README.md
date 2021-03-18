@@ -99,6 +99,7 @@ Hit the thumbs up button of that issue or participate in the process.
 
 - Add a read-in function like `Book._read_binance` in `src/book.py`
 - Add a way to retrieve price data from this exchange in `src/price_data.py` like `PriceData._get_price_binance`
+- Setup a wiki entry on how to retrieve the account statement and other useful information, which I can copy paste in our [Wiki](https://github.com/provinzio/CoinTaxman/wiki)
 
 # Ideas on crypto-taxation
 
