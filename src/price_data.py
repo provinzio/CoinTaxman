@@ -142,8 +142,8 @@ class PriceData:
     def _get_price_coinbase_pro(self, base_asset: str, utc_time: datetime.datetime, quote_asset: str, swapped_symbols: bool = False) -> decimal.Decimal:
         """Retrieve price from Coinbase Pro official REST API.
 
-        The price is calculated as the average price in a
-        time frame of 1 minute around `utc_time`.
+        The price is calculated as the average price of the opening and closing price
+        around 1 minute around `utc_time`.
 
         None existing pairs like `TWTEUR` are calculated as
         `TWTBTC * BTCEUR`.
@@ -153,7 +153,7 @@ class PriceData:
         Args:
             start	        Start time in ISO 8601
             end	            End time in ISO 8601
-            granularity	    Desired timeslice in seconds (one of 60, 300, 900, 3600, 21600 or 86400)
+            granularity	    Desired timeslice in seconds (60, 300, 900, 3600, 21600 or 86400)
 
         Raises:
             RuntimeError: Unable to retrieve price data.
@@ -201,6 +201,7 @@ class PriceData:
             log.warning("Coinbase Pro offers no price for `%s` at %s", symbol, utc_time)
             return 0
 
+        # there's only one single item because we used 60s granularity with a 60s time window
         single_result = data[0]
         open_price = decimal.Decimal(single_result[3])
         close_price = decimal.Decimal(single_result[4])

@@ -195,7 +195,7 @@ class Book:
                 assert change
 
                 if operation == "Convert":
-                    # parse buy change + coin from remark which is in format "0,123 ETH to 0,456 BTC"
+                    # parse change + coin from remark which is in format "0,123 ETH to 0,456 BTC"
                     remark_target = remark.split(' to ')[-1]
                     remark_target_parts = remark_target.split(' ')
                     _convert_change = remark_target_parts[0].replace(',', '.')
