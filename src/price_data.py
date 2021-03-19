@@ -164,8 +164,8 @@ class PriceData:
 
         root_url = "https://api.pro.coinbase.com"
         symbol = f"{base_asset}-{quote_asset}"
-        startTime = misc.to_iso_timestamp(utc_time - datetime.timedelta(seconds=30))
-        endTime = misc.to_iso_timestamp(utc_time + datetime.timedelta(seconds=30))
+        startTime = misc.to_iso_timestamp(utc_time - datetime.timedelta(minutes=5))
+        endTime = misc.to_iso_timestamp(utc_time + datetime.timedelta(minutes=5))
         sub_url = f"/products/{symbol}/candles?start={startTime}&end={endTime}&granularity=60"
         url = root_url + sub_url
 
@@ -185,7 +185,7 @@ class PriceData:
                 if swapped_symbols:
                     raise RuntimeError(
                         f"Can not retrieve {symbol=} from coinbase_pro")
-                # Changeing the order of the assets require to invert the price.
+                # Changing the order of the assets require to invert the price.
                 log.debug("Getting price with swapped symbols...")
                 price = self.get_price(
                     "coinbase_pro", quote_asset, utc_time, base_asset, swapped_symbols=True)
@@ -201,10 +201,20 @@ class PriceData:
             log.warning("Coinbase Pro offers no price for `%s` at %s", symbol, utc_time)
             return 0
 
-        # there's only one single item because we used 60s granularity with a 60s time window
-        single_result = data[0]
-        open_price = decimal.Decimal(single_result[3])
-        close_price = decimal.Decimal(single_result[4])
+        # Find closest timestamp match
+        target_timestamp = misc.to_ms_timestamp(utc_time)
+        data_timestamps_ms = [int(float(d[2]) * 1000) for d in data]
+        closest_match_index = (
+            bisect.bisect_left(data_timestamps_ms, target_timestamp) - 1
+        )
+
+        # Use item in the middle if no closest match found
+        if closest_match_index == -1:
+            closest_match_index = int(len(data) / 2)
+
+        closest_match = data[closest_match_index]
+        open_price = misc.force_decimal(closest_match[3])
+        close_price = misc.force_decimal(closest_match[4])
 
         return (open_price + close_price) / 2
 
