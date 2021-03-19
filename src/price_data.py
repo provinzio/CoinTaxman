@@ -97,7 +97,7 @@ class PriceData:
             and data.get("code") == -1121
             and data.get("msg") == "Invalid symbol."
         ):
-            if quote_asset == "BTC":
+            if quote_asset == "BTC" or base_asset == "BTC":
                 # If we are already comparing with BTC, we might have to swap
                 # the assets to generate the correct symbol.
                 # Check a last time, if we find the pair by changing the symbol
@@ -132,6 +132,80 @@ class PriceData:
             total_quantity += quantity
         average_price = total_cost / total_quantity
         return average_price
+
+    @misc.delayed
+    def _get_price_coinbase(self, base_asset: str, utc_time: datetime.datetime, quote_asset: str, swapped_symbols: bool = False) -> decimal.Decimal:
+        # Use Coinbase Pro prices
+        return self._get_price_coinbase_pro(base_asset, utc_time, quote_asset, swapped_symbols)
+
+    @misc.delayed
+    def _get_price_coinbase_pro(self, base_asset: str, utc_time: datetime.datetime, quote_asset: str, swapped_symbols: bool = False) -> decimal.Decimal:
+        """Retrieve price from Coinbase Pro official REST API.
+
+        The price is calculated as the average price in a
+        time frame of 1 minute around `utc_time`.
+
+        None existing pairs like `TWTEUR` are calculated as
+        `TWTBTC * BTCEUR`.
+
+        Documentation: https://docs.pro.coinbase.com
+
+        Args:
+            start	        Start time in ISO 8601
+            end	            End time in ISO 8601
+            granularity	    Desired timeslice in seconds (one of 60, 300, 900, 3600, 21600 or 86400)
+
+        Raises:
+            RuntimeError: Unable to retrieve price data.
+
+        Returns:
+            Decimal: Price of asset pair.
+        """
+
+        root_url = "https://api.pro.coinbase.com"
+        symbol = f"{base_asset}-{quote_asset}"
+        startTime = misc.to_iso_timestamp(utc_time - datetime.timedelta(seconds=30))
+        endTime = misc.to_iso_timestamp(utc_time + datetime.timedelta(seconds=30))
+        sub_url = f"/products/{symbol}/candles?start={startTime}&end={endTime}&granularity=60"
+        url = root_url + sub_url
+
+        log.debug("Calling %s", url)
+        response = requests.get(url)
+        data = json.loads(response.text)
+
+        # Some combinations do not exist (e.g. `TWTEUR`), but almost anything
+        # is paired with BTC. Calculate `TWTEUR` as `TWTBTC * BTCEUR`.
+        if isinstance(data, dict) and data.get("message") == "NotFound":
+            if quote_asset == "BTC" or base_asset == "BTC":
+                # If we are already comparing with BTC, we might have to swap
+                # the assets to generate the correct symbol.
+                # Check a last time, if we find the pair by changing the symbol
+                # order.
+                # If this does not help, we need to think of something else.
+                if swapped_symbols:
+                    raise RuntimeError(
+                        f"Can not retrieve {symbol=} from coinbase_pro")
+                # Changeing the order of the assets require to invert the price.
+                log.debug("Getting price with swapped symbols...")
+                price = self.get_price(
+                    "coinbase_pro", quote_asset, utc_time, base_asset, swapped_symbols=True)
+                return misc.reciprocal(price)
+
+            btc = self.get_price("coinbase_pro", base_asset, utc_time, "BTC")
+            quote = self.get_price("coinbase_pro", "BTC", utc_time, quote_asset)
+            return btc * quote
+
+        response.raise_for_status()
+
+        if len(data) == 0:
+            log.warning("Coinbase Pro offers no price for `%s` at %s", symbol, utc_time)
+            return 0
+
+        single_result = data[0]
+        open_price = decimal.Decimal(single_result[3])
+        close_price = decimal.Decimal(single_result[4])
+
+        return (open_price + close_price) / 2
 
     @misc.delayed
     def _get_price_kraken(

@@ -133,6 +133,18 @@ def get_offset_timestamps(
     return to_ms_timestamp(start), to_ms_timestamp(end)
 
 
+def to_iso_timestamp(d: datetime.datetime) -> str:
+    """Return timestamp as ISO8601 timestamp.
+
+    Args:
+        d (datetime.datetime)
+
+    Returns:
+        str: ISI8601 timestamp.
+    """
+    return d.isoformat().replace("+00:00", "Z")
+
+
 def group_by(lst: L, key: str) -> dict[str, L]:
     """Group a list of objects by `key`.
 
