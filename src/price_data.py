@@ -449,9 +449,10 @@ class PriceData:
                 elif market[1] == coin and market[0] == reference_coin:
                     return [reference_coin, coin, True]  # True=inverted
 
-        pair = get_pair(coin, reference_coin)
-        if not pair:
+        if pair := get_pair(coin, reference_coin)
+            return [pair, ]
 
+        else:
             for market in self.markets:
                 pair = get_pair(market[1], reference_coin)
 
@@ -460,8 +461,6 @@ class PriceData:
                         return [[market[0], market[1], False], pair]
                     elif market[1] == coin:
                         return [[market[1], market[0], True], pair]
-        else:
-            return [pair, ]
 
     def _get_binance_bulk_pair_data(self, operations: list, symbol: str, invert: str=False) ->list:
         timestamps = []
