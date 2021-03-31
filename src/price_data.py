@@ -423,9 +423,9 @@ class PriceData:
             # get 2min before and after range
             return self.exchange.fetch_ohlcv(symbol, '1m', start-1000*60*2, max(int((stop-start)/1000/60)+5, 1))
         else:
-            logging.warning(
+            logging.error(
                 "fetchOHLCV not implemented on exchange, skipping priceloading using ohlcv")
-            raise None
+            return None
 
     def initialize_ccxt(self):
         exchange_id = 'binance'
