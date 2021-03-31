@@ -439,50 +439,49 @@ class PriceData:
             # caches a list of all pairs on the exchange
             self.markets.append(market["symbol"].split("/"))
 
-    def _get_binance_bulk_pair_list(self, reference_coin: str = config.FIAT, coin) -> list:
-
+    def _get_bulk_pair_list(self, coin,reference_coin: str = config.FIAT) -> list:
+        def cmp_asset_pairs(our_pair: tuple[str, str], market_pair: tuple[str, str]) -> Optional[tuple[str, str, bool]]:
+            if our_pair == market_pair:
+                return *market_pair, False
+            if reversed(our_pair) == market_pair:
+                return *market_pair, True
+            return None
+        
         def get_pair(coin, reference_coin:str):
-
+            our_symbols = [coin, reference_coin]
             for market in self.markets:
-                if market[0] == coin and market[1] == reference_coin:
-                    return [coin, reference_coin, False]  # False=not inverted
-                elif market[1] == coin and market[0] == reference_coin:
-                    return [reference_coin, coin, True]  # True=inverted
+                if cmp := cmp_asset_pairs(our_symbols, market):
+                    return cmp 
 
-        if pair := get_pair(coin, reference_coin)
-            return [pair, ]
+        if pair := get_pair(coin, reference_coin):
+            return [pair]
 
         else:
             for market in self.markets:
-                pair = get_pair(market[1], reference_coin)
-
-                if pair:
+                if pair:=get_pair(market[1], reference_coin):
                     if market[0] == coin:
-                        return [[market[0], market[1], False], pair]
-                    elif market[1] == coin:
-                        return [[market[1], market[0], True], pair]
+                        return [(*market, False), pair]
+                    if market[1] == coin:
+                        return [(*market, True), pair]
 
-    def _get_binance_bulk_pair_data(self, operations: list, symbol: str, invert: str=False) ->list:
+    def _get_bulk_pair_data(self, operations: list, symbol: str, invert: str=False) ->list:
         timestamps = []
         timestamppairs = []
         data = []
 
-        for op in operations:
-            timestamps.append(op.utc_time)
+        timestamps = (op.utc_time for op in operations)
 
-        while len(timestamps) > 0:
-            timestamp = timestamps.pop(0)
+        for timestamp in timestamps:
 
             if len(timestamppairs) > 0 and timestamppairs[-1][0]+datetime.timedelta(minutes=995) > timestamp:
                 timestamppairs[-1].append(timestamp)
             else:
-                timestamppairs.append([timestamp, ])
+                timestamppairs.append([timestamp])
 
         for batch in timestamppairs:
             # ccxt works with timestamps in milliseconds
-            last = int(max(batch).timestamp() * 1000)
-            first = int(min(batch).timestamp() * 1000)
-
+            first = misc.to_ms_timestamp(batch[0])
+            last = misc.to_ms_timestamp(batch[-1])
             if invert:
                 tempdata = list(
                     map(lambda x: (x[0], 1/((x[1]+x[4])/2)), self.get_candles(first, last, symbol)))
@@ -495,7 +494,7 @@ class PriceData:
                     # TODO discuss which candle is picked current is closest to original date (often off by about 1-20s, but can be after the Trade)
                     # times do not always line up perfectly so take one nearest
                     ts = list(
-                        map(lambda x: (abs(operation.timestamp()*1000-x[0]), x), tempdata))
+                        map(lambda x: (abs(misc.to_ms_timestamp(operation.timestamp)*1000-x[0]), x), tempdata))
                     data.append((operation, min(ts, key=lambda x: x[0])[1][1]))
         return data
 
@@ -503,20 +502,17 @@ class PriceData:
 
         reference_coin = config.FIAT
         # get pairs used for calculating the price
-        lis = self._get_binance_bulk_pair_list(reference_coin, coin)
         db_path = self.get_db_path("binance")
         operations_filtered = []
         tablename = self.get_tablename(coin, reference_coin)
 
-        if lis:
+        if lis:=self._get_bulk_pair_list(coin,reference_coin):
 
-            for operation in operations:
-                if not self.__get_price_db(db_path, tablename, operation.utc_time):
-                    operations_filtered.append(operation)
+            operations_filtered = [op for op in operations if not self.__get_price_db(db_path, tablename, op.utc_time)]
 
             # len 1== direct pairing with base currency
             if len(lis) == 1 and lis[0]:
-                data = self._get_binance_bulk_pair_data(
+                data = self._get_bulk_pair_data(
                     operations_filtered, f"{lis[0][0]}/{lis[0][1]}", lis[0][2])
                 for element in data:
                     self.__set_price_db(db_path, tablename,
@@ -525,10 +521,10 @@ class PriceData:
             # len 2 == calculates price using two pairs e.g IOTA/ETH + ETH/EUR
             elif len(lis) == 2 and lis[0] and lis[1]:
                 # get data for first pair
-                data = self._get_binance_bulk_pair_data(
+                data = self._get_bulk_pair_data(
                     operations_filtered, f"{lis[0][0]}/{lis[0][1]}", lis[0][2])
                 # get data for second pair
-                data2 = self._get_binance_bulk_pair_data(
+                data2 = self._get_bulk_pair_data(
                     operations_filtered, f"{lis[1][0]}/{lis[1][1]}", lis[1][2])
 
                 for element in data:
@@ -542,6 +538,5 @@ class PriceData:
                     if factor:
                         price = element[1]*factor
                         # check if timestamp already exists to prevent a duplicate error
-                        if not self.__get_price_db(db_path, tablename, element[0]):
-                            self.__set_price_db(
-                                db_path, tablename, element[0], price)
+                        self.set_price_db(
+                            db_path, tablename, element[0], price)
