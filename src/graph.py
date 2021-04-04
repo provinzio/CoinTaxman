@@ -1,0 +1,195 @@
+import ccxt
+from datetime import datetime
+from time import sleep, time_ns
+
+
+class graph:
+
+    def __init__(self, gdict=None, cache=None):
+        if not gdict:
+            gdict = {}
+        if not cache:
+            cache = {}
+        self.gdict = gdict
+        self.cache = cache
+
+    def edges(self):
+        return self.findedges()
+# Find the distinct list of edges
+
+    def findedges(self):
+        edgename = []
+        for vrtx in self.gdict:
+            for nxtvrtx in self.gdict[vrtx]:
+                if {nxtvrtx, vrtx} not in edgename:
+                    edgename.append({vrtx, nxtvrtx})
+        return edgename
+
+    def getVertices(self):
+        return list(self.gdict.keys())
+
+# Add the vertex as a key
+    def addVertex(self, vrtx):
+       if vrtx not in self.gdict:
+           self.gdict[vrtx] = []
+
+    def addEdge(self, vrtx1, vrtx2, data):
+        if vrtx1 in self.gdict:
+            self.gdict[vrtx1].append((vrtx2, data))
+        else:
+            self.gdict[vrtx1] = [vrtx2]
+
+    def _getpath(self, start, stop, maxdepth, depth=0):
+        paths = []
+        if (edges := g.gdict.get(start)) and maxdepth > depth:
+            for edge in edges:
+                if depth == 0 and edge[0] == stop:
+                    paths.append([edge, ])
+                elif edge[0] == stop:
+                    paths.append(edge)
+                else:
+                    path = self._getpath(
+                        edge[0], stop, maxdepth, depth=depth+1)
+                    if len(path) and path is not None:
+                        for p in path:
+                            if p[0] == stop:
+                                newpath = [edge, ]
+                                newpath.append(p)
+                                paths.append(newpath)
+        #if len(paths)>3 and depth in [0,1]:
+        #    print(len(paths))
+        return paths
+
+    def getpath(self, start, stop, starttime=0, stoptime=0, preferredexchange=None, maxdepth=3):
+        def comb_sort_key(path):
+            if preferredexchange:
+                # prioritze pairs with the preferred exchange
+                return len(path)+sum([0 if pair[1]["exchange"] == preferredexchange else 1 for pair in path])
+            else:
+                return len(path)
+
+        def check_cache(pair):
+
+            if pair[1].get("starttime") or pair[1].get("stoptime"):
+                return True, pair
+            if cacheres := self.cache.get(pair[1]["exchange"]+pair[1]["symbol"]):
+                pair[1]["starttime"] = cacheres[0]
+                pair[1]["stoptime"] = cacheres[1]
+                pair[1]["avg_vol"] = cacheres[2]
+                return True, pair
+            return False, pair
+
+        def get_active_timeframe(path, starttimestamp=0, stoptimestamp=-1):
+            rangeinms = 0
+            timeframe = int(6.048e+8)  # week in ms
+            if starttimestamp == 0:
+                starttimestamp = 1325372400*1000
+            if stoptimestamp == -1:
+                stoptimestamp = time_ns() // 1_000_000  # get cur time in ms
+            starttimestamp -= timeframe  # to handle edge cases
+            if stoptimestamp > starttimestamp:
+                rangeinms = stoptimestamp-starttimestamp
+            else:
+                rangeinms = 0  # maybe throw error
+
+            # add one candle to the end to ensure the needed timeslot is in the requested candles
+            rangeincandles = int(rangeinms/timeframe)+1
+
+            #todo: cache already used pairs
+            globalstarttime = 0
+            globalstoptime = 0
+            for i in range(len(path)):
+                cached, path[i] = check_cache(path[i])
+                if not cached:
+                    exchange_class = getattr(ccxt, path[i][1]["exchange"])
+                    exchange = exchange_class()
+                    sleep(exchange.rateLimit / 1000)
+                    timeframeexchange = exchange.timeframes.get("1w")
+                    if timeframeexchange:  # this must be handled better maybe choose timeframe dynamically
+                        # maybe cache this per pair
+                        ohlcv = exchange.fetch_ohlcv(
+                            path[i][1]["symbol"], "1w", starttimestamp, rangeincandles)
+                    else:
+                        ohlcv = []  # do not check fail later
+                    if len(ohlcv) > 1:
+                        # (candle ends after the date + timeframe)
+                        path[i][1]["stoptime"] = ohlcv[-1][0]+timeframe
+                        path[i][1]["avg_vol"] = sum(
+                            [vol[-1] for vol in ohlcv])/len(ohlcv)  # avg vol in curr
+                        path[i][1]["starttime"] = ohlcv[0][0]
+                        if path[i][1]["stoptime"] < globalstoptime or globalstoptime == 0:
+                            globalstoptime = path[i][1]["stoptime"]
+                        if path[i][1]["starttime"] > globalstarttime:
+                            globalstarttime = path[i][1]["starttime"]
+                    else:
+                        path[i][1]["stoptime"] = 0
+                        path[i][1]["starttime"] = 0
+                        path[i][1]["avg_vol"] = 0
+                    self.cache[path[i][1]["exchange"]+path[i][1]["symbol"]] = (
+                        path[i][1]["starttime"], path[i][1]["stoptime"], path[i][1]["avg_vol"])
+                else:
+                    if path[i][1]["stoptime"] < globalstoptime or globalstoptime == 0:
+                        globalstoptime = path[i][1]["stoptime"]
+                    if path[i][1]["starttime"] > globalstarttime:
+                        globalstarttime = path[i][1]["starttime"]
+                    ohlcv = []
+                print(len(ohlcv)-rangeincandles, rangeincandles)
+            return (globalstarttime, globalstoptime), path
+
+        # get all possible paths which are no longer than 4 pairs long
+        paths = self._getpath(start, stop, maxdepth)
+        # sort by path length to get minimal conversion chain to reduce error
+        paths = sorted(paths, key=comb_sort_key)
+        #get timeframe in which a path is viable 
+        for path in paths:
+            timest, newpath = get_active_timeframe(path)
+            # this is implemented as a generator (hence the yield) to reduce the amount of computing needed. if the first
+            if starttime == 0 and stoptime == 0:
+                yield timest, newpath
+            elif starttime == 0:
+                if stoptime < timest[1]:
+                    yield timest, newpath
+            elif stoptime == 0:
+                if starttime > timest[0]:
+                    yield timest, newpath
+            else:
+                if stoptime < timest[1] and starttime > timest[0]:
+                    yield timest, newpath
+
+
+if __name__ == "__main__":
+    g = graph()
+    allpairs = []
+    for exchange_id in ["binance", "coinbase", "kraken", "coinbasepro", "aax", "bittrex", "bitvavo"]:
+        exchange_class = getattr(ccxt, exchange_id)
+        exchange = exchange_class()
+        markets = []
+        markets = exchange.fetch_markets()
+        if exchange.has['fetchOHLCV']:
+
+            allpairs.extend(
+                [(i["base"], i["quote"], exchange_id, i["symbol"])for i in markets])
+        else:
+            print(
+                f"{exchange.name} Does not support fetch ohlcv. ignoring exchange and {len(markets)} pairs.")
+        #print(len([(i["base"],i["quote"],exchange_id,i["symbol"])for i in markets]),len(markets))
+    allpairs = list(set(allpairs))
+    print("Total Pairs to check:", len(allpairs))
+    for i in allpairs:
+        base = i[0]
+        quote = i[1]
+        g.addVertex(base)
+        g.addVertex(quote)
+        g.addEdge(base, quote, {
+                  "exchange": i[2], "symbol": i[3], "inverted": False})
+        g.addEdge(quote, base, {
+                  "exchange": i[2], "symbol": i[3], "inverted": True})
+
+    start = "IOTA"
+    to = "EUR"
+    preferredexchange = "binance"
+    path = g.getpath(start, to, maxdepth=2,
+                     preferredexchange=preferredexchange)
+    #debug only in actual use we would iterate over the path object fetching new paths as needed
+    path = list(path)
+    print(len(path))
