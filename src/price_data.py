@@ -515,10 +515,7 @@ class PriceData:
                             ts = list(
                                 map(
                                     lambda x: (
-                                        abs(
-                                            misc.to_ms_timestamp(operation) * 1000
-                                            - x[0]
-                                        ),
+                                        abs(misc.to_ms_timestamp(operation) - x[0]),
                                         x,
                                     ),
                                     tempdata,
