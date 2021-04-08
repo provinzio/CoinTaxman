@@ -9,7 +9,8 @@ class PricePath:
             exchanges = ["binance", "coinbasepro"]
         self.gdict = gdict
         self.cache = cache
-        self.priority: dict = {}
+        self.priority: dict[str,int] = {} 
+        #saves the priority for a certain path so that bad paths can be skipped
         allpairs = []
 
         for exchange_id in exchanges:
@@ -26,9 +27,10 @@ class PricePath:
                 print(
                     f"{exchange.name} Does not support fetch ohlcv. ignoring exchange and {len(markets)} pairs."
                 )
-        allpairs = list(set(allpairs))
+        allpairs = list(set(allpairs)) # fast an easy deduplication
         # print("Total Pairs to check:", len(allpairs))
-        allpairs.sort(key=lambda x: x[3])
+        allpairs.sort(key=lambda x: x[3]) 
+        #sorting by symbol for pair to have the same result on every run due to the set
         for i in allpairs:
             base = i[0]
             quote = i[1]
@@ -69,6 +71,9 @@ class PricePath:
             self.gdict[vrtx1] = [vrtx2]
 
     def _getpath(self, start, stop, maxdepth, depth=0):
+        """
+        a recursive function for finding all possible paths between to edges
+        """
         paths = []
         if (edges := self.gdict.get(start)) and maxdepth > depth:
             for edge in edges:
@@ -103,6 +108,14 @@ class PricePath:
         self, start, stop, starttime=0, stoptime=0, preferredexchange=None, maxdepth=3
     ):
         def comb_sort_key(path):
+            """
+            Sorting funtction which is used to prioritze paths by (in order of magnitude):
+            - smallest length -> +1 per element
+            - preferred exchange -> +1 per exchange which is not preferred
+            - priority -> +0.5 per unfinished execution of path
+            - volume (if known) -> 1/sum(avg_vol per pair) 
+            - volume (if not known) -> 1 -> always smaller if volume is known 
+            """
             if preferredexchange:
                 # prioritze pairs with the preferred exchange
                 volume = 1
@@ -141,7 +154,10 @@ class PricePath:
                 return len(path)
 
         def check_cache(pair):
-
+            """
+            checking if the start and stoptime of a pair is already known
+            or if it needs to be downloaded
+            """
             if pair[1].get("starttime") or pair[1].get("stoptime"):
                 return True, pair
             if cacheres := self.cache.get(pair[1]["exchange"] + pair[1]["symbol"]):
@@ -240,7 +256,8 @@ class PricePath:
             elif stoptime == 0:
                 if starttime > timest[0]:
                     yield timest, newpath
-
+            # The most ideal situation is if the timerange of the path is known 
+            # and larger than the needed timerange
             else:
                 if stoptime < timest[1] and starttime > timest[0]:
                     yield timest, newpath
