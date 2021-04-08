@@ -1,6 +1,6 @@
 from time import sleep, time_ns
 
-import ccxt  # type: ignore
+import ccxt
 
 
 class PricePath:

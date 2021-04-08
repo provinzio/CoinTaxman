@@ -25,7 +25,7 @@ from pathlib import Path
 from time import sleep
 from typing import Any, Optional, Union
 
-import ccxt  # type: ignore
+import ccxt
 import requests
 
 import config
