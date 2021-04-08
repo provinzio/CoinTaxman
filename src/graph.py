@@ -10,7 +10,7 @@ class PricePath:
             exchanges = ["binance", "coinbasepro"]
         self.gdict = gdict
         self.cache = cache
-        self.priority : dict= {}
+        self.priority: dict = {}
         allpairs = []
 
         for exchange_id in exchanges:

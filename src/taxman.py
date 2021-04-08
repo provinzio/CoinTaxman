@@ -45,8 +45,6 @@ class Taxman:
             self.__evaluate_taxation = getattr(self, f"_evaluate_taxation_{country}")
         except AttributeError:
             raise NotImplementedError(f"Unable to evaluate taxation for {country=}.")
-        
-        
 
         if config.PRINCIPLE == core.Principle.FIFO:
             self.BalanceType = balance_queue.BalanceQueue
