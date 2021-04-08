@@ -456,11 +456,12 @@ class PriceData:
         if not preferredexchange:
             preferredexchange="binance"
 
+        current_first = None
         for timestamp in timestamps:
-
-            if len(timestamppairs) > 0 and timestamppairs[-1][0]+datetime.timedelta(minutes=maxminutes-4) > timestamp:
+            if current_first and current_first+datetime.timedelta(minutes=maxminutes-4) > timestamp:
                 timestamppairs[-1].append(timestamp)
             else:
+                current_first = timestamp
                 timestamppairs.append([timestamp])
         datacomb=[]
         for batch in timestamppairs:
