@@ -1,6 +1,9 @@
+import logging
 from time import sleep, time_ns
 
 import ccxt
+
+log = logging.getLogger(__name__)
 
 
 class PricePath:
@@ -24,7 +27,7 @@ class PricePath:
                     [(i["base"], i["quote"], exchange_id, i["symbol"]) for i in markets]
                 )
             else:
-                print(
+                logging.warning(
                     f"{exchange.name} Does not support fetch ohlcv. ignoring exchange and {len(markets)} pairs."
                 )
         allpairs = list(set(allpairs))  # fast an easy deduplication
