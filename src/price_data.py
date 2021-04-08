@@ -45,7 +45,7 @@ log = logging.getLogger(__name__)
 
 class PriceData:
     def __init__(self):
-        self.path=PricePath()
+        self.path = PricePath()
 
     def get_db_path(self, platform: str) -> Path:
         return Path(config.DATA_PATH, f"{platform}.db")
@@ -420,124 +420,126 @@ class PriceData:
         if isinstance(tr, transaction.SoldCoin):
             return price * tr.sold
         raise NotImplementedError
-    
-    def get_candles(self, start: int, stop: int, symbol: str,exchange: str) ->list:
+
+    def get_candles(self, start: int, stop: int, symbol: str, exchange: str) -> list:
         exchange_class = getattr(ccxt, exchange)
         exchange = exchange_class()
         if exchange.has['fetchOHLCV']:
             sleep(exchange.rateLimit / 1000)  # time.sleep wants seconds
             # get 2min before and after range
-            startval=start-1000*60*2
-            rang=max(int((stop-start)/1000/60)+2, 1)
-            return exchange.fetch_ohlcv(symbol, '1m', startval, rang )
+            startval = start - 1000 * 60 * 2
+            rang = max(int((stop - start) / 1000 / 60) + 2, 1)
+            return exchange.fetch_ohlcv(symbol, '1m', startval, rang)
         else:
             log.error(
                 "fetchOHLCV not implemented on exchange, skipping priceloading using ohlcv")
             return None
 
-    def _get_bulk_pair_data_path(self, operations: list, coin: str,reference_coin: str,preferredexchange:str="binance") ->list:
-        def merge_prices(a:list,b:list=None):
-            prices=[]
-            if not b :
+    def _get_bulk_pair_data_path(self, operations: list, coin: str, reference_coin: str, preferredexchange: str = "binance") -> list:
+        def merge_prices(a: list, b: list = None):
+            prices = []
+            if not b:
                 return a
             for i in a:
-                factor=None
+                factor = None
                 for j in b:
-                    if i[0]==j[0]:
-                        factor=j[1]
+                    if i[0] == j[0]:
+                        factor = j[1]
                         break
-                prices.append((i[0],i[1]*factor))
+                prices.append((i[0], i[1] * factor))
             return prices
 
         timestamps = []
         timestamppairs = []
-        maxminutes=300 #coinbasepro only allows a max of 300 minutes need a better solution
+        maxminutes = 300  # coinbasepro only allows a max of 300 minutes need a better solution
         timestamps = (op.utc_time for op in operations)
         if not preferredexchange:
-            preferredexchange="binance"
+            preferredexchange = "binance"
 
         current_first = None
         for timestamp in timestamps:
-            if current_first and current_first+datetime.timedelta(minutes=maxminutes-4) > timestamp:
+            if current_first and current_first + datetime.timedelta(minutes=maxminutes - 4) > timestamp:
                 timestamppairs[-1].append(timestamp)
             else:
                 current_first = timestamp
                 timestamppairs.append([timestamp])
-        datacomb=[]
+        datacomb = []
         for batch in timestamppairs:
             # ccxt works with timestamps in milliseconds
             first = misc.to_ms_timestamp(batch[0])
             last = misc.to_ms_timestamp(batch[-1])
-            firststr=batch[0].strftime('%d-%b-%Y (%H:%M)')
-            laststr=batch[-1].strftime('%d-%b-%Y (%H:%M)')
-            log.info(f"getting data from {str(firststr)} to {str(laststr)} for {str(coin)}")
-            path=self.path.getpath(coin,reference_coin,first,last,preferredexchange=preferredexchange)
+            firststr = batch[0].strftime('%d-%b-%Y (%H:%M)')
+            laststr = batch[-1].strftime('%d-%b-%Y (%H:%M)')
+            log.info(
+                f"getting data from {str(firststr)} to {str(laststr)} for {str(coin)}")
+            path = self.path.getpath(coin, reference_coin, first,
+                                     last, preferredexchange=preferredexchange)
             for p in path:
-                tempdatalis=[]
-                printstr=[ a[1]["symbol"] for a in  p[1] ]
+                tempdatalis = []
+                printstr = [a[1]["symbol"] for a in p[1]]
                 log.debug(f"found path over {' -> '.join(printstr)}")
                 for i in range(len(p[1])):
                     tempdatalis.append([])
-                    symbol=p[1][i][1]["symbol"]
-                    exchange=p[1][i][1]["exchange"]
-                    invert=p[1][i][1]["inverted"]
-                    candles=self.get_candles(first, last, symbol,exchange)
+                    symbol = p[1][i][1]["symbol"]
+                    exchange = p[1][i][1]["exchange"]
+                    invert = p[1][i][1]["inverted"]
+                    candles = self.get_candles(first, last, symbol, exchange)
                     if invert:
                         tempdata = list(
-                            map(lambda x: (x[0], 1/((x[1]+x[4])/2)), candles))
+                            map(lambda x: (x[0], 1 / ((x[1] + x[4]) / 2)), candles))
                     else:
                         tempdata = list(
-                            map(lambda x: (x[0], (x[1]+x[4])/2), candles))
+                            map(lambda x: (x[0], (x[1] + x[4]) / 2), candles))
 
                     if tempdata:
                         for operation in batch:
                             # TODO discuss which candle is picked current is closest to original date (often off by about 1-20s, but can be after the Trade)
                             # times do not always line up perfectly so take one nearest
                             ts = list(
-                                map(lambda x: (abs(misc.to_ms_timestamp(operation)*1000-x[0]), x), tempdata))
-                            tempdatalis[i].append((operation, min(ts, key=lambda x: x[0])[1][1]))
+                                map(lambda x: (abs(misc.to_ms_timestamp(operation) * 1000 - x[0]), x), tempdata))
+                            tempdatalis[i].append(
+                                (operation, min(ts, key=lambda x: x[0])[1][1]))
                     else:
-                        tempdatalis=[]
-                        self.path.change_prio(printstr,0.2) # do not try already failed again
+                        tempdatalis = []
+                        # do not try already failed again
+                        self.path.change_prio(printstr, 0.2)
                         break
                 if tempdatalis:
-                    wantedlen=len(tempdatalis[0])
+                    wantedlen = len(tempdatalis[0])
                     for li in tempdatalis:
-                        if not len(li)==wantedlen:
-                            self.path.change_prio(printstr,0.2)
+                        if not len(li) == wantedlen:
+                            self.path.change_prio(printstr, 0.2)
                             break
                     else:
-                        prices=[]
+                        prices = []
                         for d in tempdatalis:
-                            prices=merge_prices(d,prices)
+                            prices = merge_prices(d, prices)
                         datacomb.extend(prices)
                         break
                 log.debug("path failed trying new path")
-     
+
         return datacomb
 
-    def preload_price_data_path(self,operations: list, coin: str,exchange:str=None):
-        
-            
+    def preload_price_data_path(self, operations: list, coin: str, exchange: str = None):
 
         reference_coin = config.FIAT
         # get pairs used for calculating the price
         operations_filtered = []
-        
+
         tablename = self.get_tablename(coin, reference_coin)
-        operations_filtered = [op for op in operations if not self.__get_price_db(self.get_db_path(op.platform), tablename, op.utc_time)]
-        operations_grouped={}
+        operations_filtered = [op for op in operations if not self.__get_price_db(
+            self.get_db_path(op.platform), tablename, op.utc_time)]
+        operations_grouped = {}
         if operations_filtered:
             for i in operations_filtered:
-                if i.coin==config.FIAT:
+                if i.coin == config.FIAT:
                     pass
                 elif operations_grouped.get(i.platform):
                     operations_grouped[i.platform].append(i)
                 else:
-                    operations_grouped[i.platform]=[i]
+                    operations_grouped[i.platform] = [i]
             for platf in operations_grouped.keys():
-                data=self._get_bulk_pair_data_path(operations_grouped[platf],coin,reference_coin,preferredexchange=platf)
+                data = self._get_bulk_pair_data_path(
+                    operations_grouped[platf], coin, reference_coin, preferredexchange=platf)
                 for p in data:
-                    self.set_price_db(platf,coin,reference_coin, p[0], p[1])
-
-
+                    self.set_price_db(platf, coin, reference_coin, p[0], p[1])
