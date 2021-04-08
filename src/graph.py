@@ -5,16 +5,12 @@ import ccxt
 
 
 class PricePath:
-    def __init__(self, exchanges: list = None, gdict: dict = None, cache: dict = None):
-        if not gdict:
-            gdict = {}
-        if not cache:
-            cache = {}
+    def __init__(self, exchanges: list = [], gdict: dict = {}, cache: dict = {}):
         if not exchanges:
             exchanges = ["binance", "coinbasepro"]
         self.gdict = gdict
         self.cache = cache
-        self.priority = {}
+        self.priority : dict= {}
         allpairs = []
 
         for exchange_id in exchanges:
@@ -249,7 +245,6 @@ class PricePath:
 
 if __name__ == "__main__":
     g = PricePath()
-    allpairs = []
     start = "IOTA"
     to = "EUR"
     preferredexchange = "binance"

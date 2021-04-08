@@ -423,13 +423,13 @@ class PriceData:
 
     def get_candles(self, start: int, stop: int, symbol: str, exchange: str) -> list:
         exchange_class = getattr(ccxt, exchange)
-        exchange = exchange_class()
-        if exchange.has["fetchOHLCV"]:
-            sleep(exchange.rateLimit / 1000)  # time.sleep wants seconds
+        exchange_obj = exchange_class()
+        if exchange_obj.has["fetchOHLCV"]:
+            sleep(exchange_obj.rateLimit / 1000)  # time.sleep wants seconds
             # get 2min before and after range
             startval = start - 1000 * 60 * 2
             rang = max(int((stop - start) / 1000 / 60) + 2, 1)
-            return exchange.fetch_ohlcv(symbol, "1m", startval, rang)
+            return list(exchange_obj.fetch_ohlcv(symbol, "1m", startval, rang))
         else:
             log.error(
                 "fetchOHLCV not implemented on exchange, skipping priceloading using ohlcv"
