@@ -76,6 +76,7 @@ class Book:
             "Commission Fee Shared With You": "Commission",
             "Launchpool Interest": "StakingInterest",
             "Cash Voucher distribution": "Airdrop",
+            "Super BNB Mining": "CoinLendInterest",
         }
 
         with open(file_path, encoding="utf8") as f:
