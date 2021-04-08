@@ -9,8 +9,8 @@ class PricePath:
             exchanges = ["binance", "coinbasepro"]
         self.gdict = gdict
         self.cache = cache
-        self.priority: dict[str,int] = {} 
-        #saves the priority for a certain path so that bad paths can be skipped
+        self.priority: dict[str, int] = {}
+        # saves the priority for a certain path so that bad paths can be skipped
         allpairs = []
 
         for exchange_id in exchanges:
@@ -27,10 +27,10 @@ class PricePath:
                 print(
                     f"{exchange.name} Does not support fetch ohlcv. ignoring exchange and {len(markets)} pairs."
                 )
-        allpairs = list(set(allpairs)) # fast an easy deduplication
+        allpairs = list(set(allpairs))  # fast an easy deduplication
         # print("Total Pairs to check:", len(allpairs))
-        allpairs.sort(key=lambda x: x[3]) 
-        #sorting by symbol for pair to have the same result on every run due to the set
+        allpairs.sort(key=lambda x: x[3])
+        # sorting by symbol for pair to have the same result on every run due to the set
         for i in allpairs:
             base = i[0]
             quote = i[1]
@@ -113,8 +113,8 @@ class PricePath:
             - smallest length -> +1 per element
             - preferred exchange -> +1 per exchange which is not preferred
             - priority -> +0.5 per unfinished execution of path
-            - volume (if known) -> 1/sum(avg_vol per pair) 
-            - volume (if not known) -> 1 -> always smaller if volume is known 
+            - volume (if known) -> 1/sum(avg_vol per pair)
+            - volume (if not known) -> 1 -> always smaller if volume is known
             """
             if preferredexchange:
                 # prioritze pairs with the preferred exchange
@@ -256,7 +256,7 @@ class PricePath:
             elif stoptime == 0:
                 if starttime > timest[0]:
                     yield timest, newpath
-            # The most ideal situation is if the timerange of the path is known 
+            # The most ideal situation is if the timerange of the path is known
             # and larger than the needed timerange
             else:
                 if stoptime < timest[1] and starttime > timest[0]:

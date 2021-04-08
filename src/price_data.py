@@ -431,9 +431,7 @@ class PriceData:
             rang = max(int((stop - start) / 1000 / 60) + 2, 1)
             return list(exchange_obj.fetch_ohlcv(symbol, "1m", startval, rang))
         else:
-            log.error(
-                "fetchOHLCV not implemented on exchange, skipping ohlcv"
-            )
+            log.error("fetchOHLCV not implemented on exchange, skipping ohlcv")
             # shouldnt happen technically because exchanges are filterd for fetchohlcv
             return []
 
