@@ -25,7 +25,7 @@ from pathlib import Path
 from time import sleep
 from typing import Any, Optional, Union
 
-import ccxt #type: ignore
+import ccxt  # type: ignore
 import requests
 
 import config
@@ -432,8 +432,9 @@ class PriceData:
             return list(exchange_obj.fetch_ohlcv(symbol, "1m", startval, rang))
         else:
             log.error(
-                "fetchOHLCV not implemented on exchange, skipping priceloading using ohlcv"
+                "fetchOHLCV not implemented on exchange, skipping ohlcv"
             )
+            # shouldnt happen technically because exchanges are filterd for fetchohlcv
             return []
 
     def _get_bulk_pair_data_path(
@@ -443,7 +444,7 @@ class PriceData:
         reference_coin: str,
         preferredexchange: str = "binance",
     ) -> list:
-        def merge_prices(a: list, b: list = []) -> list: 
+        def merge_prices(a: list, b: list = []) -> list:
             prices = []
             if not b:
                 return a
@@ -461,7 +462,7 @@ class PriceData:
         maxminutes = (
             300  # coinbasepro only allows a max of 300 minutes need a better solution
         )
-        timestamps = (op.utc_time for op in operations) # type: ignore
+        timestamps = [op.utc_time for op in operations]
         if not preferredexchange:
             preferredexchange = "binance"
 
@@ -510,7 +511,9 @@ class PriceData:
 
                     if tempdata:
                         for operation in batch:
-                            # TODO discuss which candle is picked current is closest to original date (often off by about 1-20s, but can be after the Trade)
+                            # TODO discuss which candle is picked
+                            # current is closest to original date
+                            # (often off by about 1-20s, but can be after the Trade)
                             # times do not always line up perfectly so take one nearest
                             ts = list(
                                 map(
@@ -525,7 +528,7 @@ class PriceData:
                                 )
                             )
                             tempdatalis[i].append(
-                                (operation, min(ts, key=lambda x: x[0])[1][1]) # type: ignore
+                                (operation, min(ts, key=lambda x: x[0])[1][1])
                             )
                     else:
                         tempdatalis = []
@@ -564,7 +567,7 @@ class PriceData:
                 self.get_db_path(op.platform), tablename, op.utc_time
             )
         ]
-        operations_grouped:dict = {}
+        operations_grouped: dict = {}
         if operations_filtered:
             for i in operations_filtered:
                 if i.coin == config.FIAT:

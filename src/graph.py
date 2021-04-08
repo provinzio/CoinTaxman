@@ -1,7 +1,6 @@
-from datetime import datetime
 from time import sleep, time_ns
 
-import ccxt #type: ignore
+import ccxt  # type: ignore
 
 
 class PricePath:
@@ -10,7 +9,7 @@ class PricePath:
             exchanges = ["binance", "coinbasepro"]
         self.gdict = gdict
         self.cache = cache
-        self.priority : dict= {}
+        self.priority: dict = {}
         allpairs = []
 
         for exchange_id in exchanges:
@@ -29,7 +28,7 @@ class PricePath:
                 )
         allpairs = list(set(allpairs))
         # print("Total Pairs to check:", len(allpairs))
-        allpairs.sort(key=lambda x: x[3]) #type: ignore
+        allpairs.sort(key=lambda x: x[3])
         for i in allpairs:
             base = i[0]
             quote = i[1]
@@ -119,7 +118,8 @@ class PricePath:
                         if c[1][1]["stoptime"] == 0:
                             break
                         elif c[1][1]["avg_vol"] != 0:
-                            # is very much off because volume is not in the same currency something for later
+                            # is very much off because volume is not in the same
+                            # currency something for later
                             volumenew += c[1][1]["avg_vol"]
 
                     else:
@@ -164,7 +164,8 @@ class PricePath:
             else:
                 rangeinms = 0  # maybe throw error
 
-            # add one candle to the end to ensure the needed timeslot is in the requested candles
+            # add one candle to the end to ensure the needed
+            # timeslot is in the requested candles
             rangeincandles = int(rangeinms / timeframe) + 1
 
             # todo: cache already used pairs
@@ -175,7 +176,8 @@ class PricePath:
                 if not cached:
                     exchange_class = getattr(ccxt, path[i][1]["exchange"])
                     exchange = exchange_class()
-                    # maybe a more elaborate ratelimit wich counts execution time to waiting
+                    # TODO maybe a more elaborate ratelimit wich removes execution
+                    # time to from the ratelimit
                     sleep(exchange.rateLimit / 1000)
                     timeframeexchange = exchange.timeframes.get("1w")
                     if (
@@ -228,7 +230,8 @@ class PricePath:
         # get timeframe in which a path is viable
         for path in paths:
             timest, newpath = get_active_timeframe(path)
-            # this is implemented as a generator (hence the yield) to reduce the amount of computing needed. if the first
+            # this is implemented as a generator (hence the yield) to reduce
+            # the amount of computing needed. if the first path fails the next is used
             if starttime == 0 and stoptime == 0:
                 yield timest, newpath
             elif starttime == 0:
@@ -249,6 +252,7 @@ if __name__ == "__main__":
     to = "EUR"
     preferredexchange = "binance"
     path = g.getpath(start, to, maxdepth=2, preferredexchange=preferredexchange)
-    # debug only in actual use we would iterate over the path object fetching new paths as needed
+    # debug only in actual use we would iterate over
+    # the path object fetching new paths as needed
     path = list(path)
     print(len(path))
