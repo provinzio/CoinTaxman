@@ -22,17 +22,16 @@ import logging
 import sqlite3
 import time
 from pathlib import Path
-from time import sleep
 from typing import Any, Optional, Union
 
 import ccxt
 import requests
 
 import config
+import graph
 import misc
 import transaction
 from core import kraken_pair_map
-from graph import PricePath
 
 log = logging.getLogger(__name__)
 
@@ -45,7 +44,7 @@ log = logging.getLogger(__name__)
 
 class PriceData:
     def __init__(self):
-        self.path = PricePath()
+        self.path = graph.PricePath()
 
     def get_db_path(self, platform: str) -> Path:
         return Path(config.DATA_PATH, f"{platform}.db")
@@ -425,7 +424,7 @@ class PriceData:
         exchange_class = getattr(ccxt, exchange)
         exchange_obj = exchange_class()
         if exchange_obj.has["fetchOHLCV"]:
-            sleep(exchange_obj.rateLimit / 1000)  # time.sleep wants seconds
+            time.sleep(exchange_obj.rateLimit / 1000)  # time.sleep wants seconds
             # get 2min before and after range
             startval = start - 1000 * 60 * 2
             rang = max(int((stop - start) / 1000 / 60) + 2, 1)

@@ -1,5 +1,5 @@
 import logging
-from time import sleep, time_ns
+import time
 
 import ccxt
 
@@ -176,7 +176,7 @@ class PricePath:
             if starttimestamp == 0:
                 starttimestamp = 1325372400 * 1000
             if stoptimestamp == -1:
-                stoptimestamp = time_ns() // 1_000_000  # get cur time in ms
+                stoptimestamp = time.time_ns() // 1_000_000  # get cur time in ms
             starttimestamp -= timeframe  # to handle edge cases
             if stoptimestamp > starttimestamp:
                 rangeinms = stoptimestamp - starttimestamp
@@ -197,7 +197,7 @@ class PricePath:
                     exchange = exchange_class()
                     # TODO maybe a more elaborate ratelimit wich removes execution
                     # time to from the ratelimit
-                    sleep(exchange.rateLimit / 1000)
+                    time.sleep(exchange.rateLimit / 1000)
                     timeframeexchange = exchange.timeframes.get("1w")
                     if (
                         timeframeexchange
