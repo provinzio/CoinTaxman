@@ -25,7 +25,7 @@ from pathlib import Path
 from time import sleep
 from typing import Any, Optional, Union
 
-import ccxt
+import ccxt #type: ignore
 import requests
 
 import config
@@ -434,7 +434,7 @@ class PriceData:
             log.error(
                 "fetchOHLCV not implemented on exchange, skipping priceloading using ohlcv"
             )
-            return None
+            return []
 
     def _get_bulk_pair_data_path(
         self,
@@ -443,7 +443,7 @@ class PriceData:
         reference_coin: str,
         preferredexchange: str = "binance",
     ) -> list:
-        def merge_prices(a: list, b: list = None):
+        def merge_prices(a: list, b: list = []) -> list: 
             prices = []
             if not b:
                 return a
@@ -456,12 +456,12 @@ class PriceData:
                 prices.append((i[0], i[1] * factor))
             return prices
 
-        timestamps = []
-        timestamppairs = []
+        timestamps: list = []
+        timestamppairs: list = []
         maxminutes = (
             300  # coinbasepro only allows a max of 300 minutes need a better solution
         )
-        timestamps = (op.utc_time for op in operations)
+        timestamps = (op.utc_time for op in operations) # type: ignore
         if not preferredexchange:
             preferredexchange = "binance"
 
@@ -490,7 +490,7 @@ class PriceData:
                 coin, reference_coin, first, last, preferredexchange=preferredexchange
             )
             for p in path:
-                tempdatalis = []
+                tempdatalis: list = []
                 printstr = [a[1]["symbol"] for a in p[1]]
                 log.debug(f"found path over {' -> '.join(printstr)}")
                 for i in range(len(p[1])):
@@ -525,7 +525,7 @@ class PriceData:
                                 )
                             )
                             tempdatalis[i].append(
-                                (operation, min(ts, key=lambda x: x[0])[1][1])
+                                (operation, min(ts, key=lambda x: x[0])[1][1]) # type: ignore
                             )
                     else:
                         tempdatalis = []
@@ -539,7 +539,7 @@ class PriceData:
                             self.path.change_prio(printstr, 0.2)
                             break
                     else:
-                        prices = []
+                        prices: list = []
                         for d in tempdatalis:
                             prices = merge_prices(d, prices)
                         datacomb.extend(prices)
@@ -549,8 +549,8 @@ class PriceData:
         return datacomb
 
     def preload_price_data_path(
-        self, operations: list, coin: str, exchange: str = None
-    ):
+        self, operations: list, coin: str, exchange: str = ""
+    ) -> None:
 
         reference_coin = config.FIAT
         # get pairs used for calculating the price
@@ -564,7 +564,7 @@ class PriceData:
                 self.get_db_path(op.platform), tablename, op.utc_time
             )
         ]
-        operations_grouped = {}
+        operations_grouped:dict = {}
         if operations_filtered:
             for i in operations_filtered:
                 if i.coin == config.FIAT:

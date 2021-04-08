@@ -1,7 +1,7 @@
 from datetime import datetime
 from time import sleep, time_ns
 
-import ccxt
+import ccxt #type: ignore
 
 
 class PricePath:
@@ -10,7 +10,7 @@ class PricePath:
             exchanges = ["binance", "coinbasepro"]
         self.gdict = gdict
         self.cache = cache
-        self.priority: dict = {}
+        self.priority : dict= {}
         allpairs = []
 
         for exchange_id in exchanges:
@@ -29,7 +29,7 @@ class PricePath:
                 )
         allpairs = list(set(allpairs))
         # print("Total Pairs to check:", len(allpairs))
-        allpairs.sort(key=lambda x: x[3])
+        allpairs.sort(key=lambda x: x[3]) #type: ignore
         for i in allpairs:
             base = i[0]
             quote = i[1]
