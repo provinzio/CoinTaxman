@@ -22,11 +22,11 @@ import logging
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Optional, Union
 from time import sleep
+from typing import Any, Optional, Union
 
-import requests
 import ccxt
+import requests
 
 import config
 import misc
@@ -424,18 +424,25 @@ class PriceData:
     def get_candles(self, start: int, stop: int, symbol: str, exchange: str) -> list:
         exchange_class = getattr(ccxt, exchange)
         exchange = exchange_class()
-        if exchange.has['fetchOHLCV']:
+        if exchange.has["fetchOHLCV"]:
             sleep(exchange.rateLimit / 1000)  # time.sleep wants seconds
             # get 2min before and after range
             startval = start - 1000 * 60 * 2
             rang = max(int((stop - start) / 1000 / 60) + 2, 1)
-            return exchange.fetch_ohlcv(symbol, '1m', startval, rang)
+            return exchange.fetch_ohlcv(symbol, "1m", startval, rang)
         else:
             log.error(
-                "fetchOHLCV not implemented on exchange, skipping priceloading using ohlcv")
+                "fetchOHLCV not implemented on exchange, skipping priceloading using ohlcv"
+            )
             return None
 
-    def _get_bulk_pair_data_path(self, operations: list, coin: str, reference_coin: str, preferredexchange: str = "binance") -> list:
+    def _get_bulk_pair_data_path(
+        self,
+        operations: list,
+        coin: str,
+        reference_coin: str,
+        preferredexchange: str = "binance",
+    ) -> list:
         def merge_prices(a: list, b: list = None):
             prices = []
             if not b:
@@ -451,14 +458,20 @@ class PriceData:
 
         timestamps = []
         timestamppairs = []
-        maxminutes = 300  # coinbasepro only allows a max of 300 minutes need a better solution
+        maxminutes = (
+            300  # coinbasepro only allows a max of 300 minutes need a better solution
+        )
         timestamps = (op.utc_time for op in operations)
         if not preferredexchange:
             preferredexchange = "binance"
 
         current_first = None
         for timestamp in timestamps:
-            if current_first and current_first + datetime.timedelta(minutes=maxminutes - 4) > timestamp:
+            if (
+                current_first
+                and current_first + datetime.timedelta(minutes=maxminutes - 4)
+                > timestamp
+            ):
                 timestamppairs[-1].append(timestamp)
             else:
                 current_first = timestamp
@@ -468,12 +481,14 @@ class PriceData:
             # ccxt works with timestamps in milliseconds
             first = misc.to_ms_timestamp(batch[0])
             last = misc.to_ms_timestamp(batch[-1])
-            firststr = batch[0].strftime('%d-%b-%Y (%H:%M)')
-            laststr = batch[-1].strftime('%d-%b-%Y (%H:%M)')
+            firststr = batch[0].strftime("%d-%b-%Y (%H:%M)")
+            laststr = batch[-1].strftime("%d-%b-%Y (%H:%M)")
             log.info(
-                f"getting data from {str(firststr)} to {str(laststr)} for {str(coin)}")
-            path = self.path.getpath(coin, reference_coin, first,
-                                     last, preferredexchange=preferredexchange)
+                f"getting data from {str(firststr)} to {str(laststr)} for {str(coin)}"
+            )
+            path = self.path.getpath(
+                coin, reference_coin, first, last, preferredexchange=preferredexchange
+            )
             for p in path:
                 tempdatalis = []
                 printstr = [a[1]["symbol"] for a in p[1]]
@@ -486,19 +501,32 @@ class PriceData:
                     candles = self.get_candles(first, last, symbol, exchange)
                     if invert:
                         tempdata = list(
-                            map(lambda x: (x[0], 1 / ((x[1] + x[4]) / 2)), candles))
+                            map(lambda x: (x[0], 1 / ((x[1] + x[4]) / 2)), candles)
+                        )
                     else:
                         tempdata = list(
-                            map(lambda x: (x[0], (x[1] + x[4]) / 2), candles))
+                            map(lambda x: (x[0], (x[1] + x[4]) / 2), candles)
+                        )
 
                     if tempdata:
                         for operation in batch:
                             # TODO discuss which candle is picked current is closest to original date (often off by about 1-20s, but can be after the Trade)
                             # times do not always line up perfectly so take one nearest
                             ts = list(
-                                map(lambda x: (abs(misc.to_ms_timestamp(operation) * 1000 - x[0]), x), tempdata))
+                                map(
+                                    lambda x: (
+                                        abs(
+                                            misc.to_ms_timestamp(operation) * 1000
+                                            - x[0]
+                                        ),
+                                        x,
+                                    ),
+                                    tempdata,
+                                )
+                            )
                             tempdatalis[i].append(
-                                (operation, min(ts, key=lambda x: x[0])[1][1]))
+                                (operation, min(ts, key=lambda x: x[0])[1][1])
+                            )
                     else:
                         tempdatalis = []
                         # do not try already failed again
@@ -520,15 +548,22 @@ class PriceData:
 
         return datacomb
 
-    def preload_price_data_path(self, operations: list, coin: str, exchange: str = None):
+    def preload_price_data_path(
+        self, operations: list, coin: str, exchange: str = None
+    ):
 
         reference_coin = config.FIAT
         # get pairs used for calculating the price
         operations_filtered = []
 
         tablename = self.get_tablename(coin, reference_coin)
-        operations_filtered = [op for op in operations if not self.__get_price_db(
-            self.get_db_path(op.platform), tablename, op.utc_time)]
+        operations_filtered = [
+            op
+            for op in operations
+            if not self.__get_price_db(
+                self.get_db_path(op.platform), tablename, op.utc_time
+            )
+        ]
         operations_grouped = {}
         if operations_filtered:
             for i in operations_filtered:
@@ -540,6 +575,10 @@ class PriceData:
                     operations_grouped[i.platform] = [i]
             for platf in operations_grouped.keys():
                 data = self._get_bulk_pair_data_path(
-                    operations_grouped[platf], coin, reference_coin, preferredexchange=platf)
+                    operations_grouped[platf],
+                    coin,
+                    reference_coin,
+                    preferredexchange=platf,
+                )
                 for p in data:
                     self.set_price_db(platf, coin, reference_coin, p[0], p[1])

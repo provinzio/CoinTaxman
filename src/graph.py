@@ -1,10 +1,10 @@
-import ccxt
 from datetime import datetime
 from time import sleep, time_ns
 
+import ccxt
+
 
 class PricePath:
-
     def __init__(self, exchanges: list = None, gdict: dict = None, cache: dict = None):
         if not gdict:
             gdict = {}
@@ -22,29 +22,34 @@ class PricePath:
             exchange = exchange_class()
             markets = []
             markets = exchange.fetch_markets()
-            if exchange.has['fetchOHLCV']:
+            if exchange.has["fetchOHLCV"]:
 
                 allpairs.extend(
-                    [(i["base"], i["quote"], exchange_id, i["symbol"])for i in markets])
+                    [(i["base"], i["quote"], exchange_id, i["symbol"]) for i in markets]
+                )
             else:
                 print(
-                    f"{exchange.name} Does not support fetch ohlcv. ignoring exchange and {len(markets)} pairs.")
+                    f"{exchange.name} Does not support fetch ohlcv. ignoring exchange and {len(markets)} pairs."
+                )
         allpairs = list(set(allpairs))
-        #print("Total Pairs to check:", len(allpairs))
+        # print("Total Pairs to check:", len(allpairs))
         allpairs.sort(key=lambda x: x[3])
         for i in allpairs:
             base = i[0]
             quote = i[1]
             self.addVertex(base)
             self.addVertex(quote)
-            self.addEdge(base, quote, {
-                "exchange": i[2], "symbol": i[3], "inverted": False})
-            self.addEdge(quote, base, {
-                "exchange": i[2], "symbol": i[3], "inverted": True})
+            self.addEdge(
+                base, quote, {"exchange": i[2], "symbol": i[3], "inverted": False}
+            )
+            self.addEdge(
+                quote, base, {"exchange": i[2], "symbol": i[3], "inverted": True}
+            )
 
     def edges(self):
         return self.findedges()
-# Find the distinct list of edges
+
+    # Find the distinct list of edges
 
     def findedges(self):
         edgename = []
@@ -57,7 +62,7 @@ class PricePath:
     def getVertices(self):
         return list(self.gdict.keys())
 
-# Add the vertex as a key
+    # Add the vertex as a key
     def addVertex(self, vrtx):
         if vrtx not in self.gdict:
             self.gdict[vrtx] = []
@@ -73,16 +78,21 @@ class PricePath:
         if (edges := self.gdict.get(start)) and maxdepth > depth:
             for edge in edges:
                 if depth == 0 and edge[0] == stop:
-                    paths.append([edge, ])
+                    paths.append(
+                        [
+                            edge,
+                        ]
+                    )
                 elif edge[0] == stop:
                     paths.append(edge)
                 else:
-                    path = self._getpath(
-                        edge[0], stop, maxdepth, depth=depth + 1)
+                    path = self._getpath(edge[0], stop, maxdepth, depth=depth + 1)
                     if len(path) and path is not None:
                         for p in path:
                             if p[0] == stop:
-                                newpath = [edge, ]
+                                newpath = [
+                                    edge,
+                                ]
                                 newpath.append(p)
                                 paths.append(newpath)
         return paths
@@ -94,13 +104,19 @@ class PricePath:
         else:
             self.priority[ke] = value
 
-    def getpath(self, start, stop, starttime=0, stoptime=0, preferredexchange=None, maxdepth=3):
+    def getpath(
+        self, start, stop, starttime=0, stoptime=0, preferredexchange=None, maxdepth=3
+    ):
         def comb_sort_key(path):
             if preferredexchange:
                 # prioritze pairs with the preferred exchange
                 volume = 1
                 volumenew = 0
-                if not (priority := self.priority.get("-".join([a[1]["symbol"] for a in path]))):
+                if not (
+                    priority := self.priority.get(
+                        "-".join([a[1]["symbol"] for a in path])
+                    )
+                ):
                     priority = 0
                 for c in [a if (a := check_cache(pair)) else None for pair in path]:
                     if c and c[0]:
@@ -114,7 +130,17 @@ class PricePath:
                         break
                 else:
                     volume = 1 / volumenew
-                return len(path) + sum([0 if pair[1]["exchange"] == preferredexchange else 1 for pair in path]) + volume + priority
+                return (
+                    len(path)
+                    + sum(
+                        [
+                            0 if pair[1]["exchange"] == preferredexchange else 1
+                            for pair in path
+                        ]
+                    )
+                    + volume
+                    + priority
+                )
             else:
                 return len(path)
 
@@ -131,7 +157,7 @@ class PricePath:
 
         def get_active_timeframe(path, starttimestamp=0, stoptimestamp=-1):
             rangeinms = 0
-            timeframe = int(6.048e+8)  # week in ms
+            timeframe = int(6.048e8)  # week in ms
             if starttimestamp == 0:
                 starttimestamp = 1325372400 * 1000
             if stoptimestamp == -1:
@@ -156,19 +182,26 @@ class PricePath:
                     # maybe a more elaborate ratelimit wich counts execution time to waiting
                     sleep(exchange.rateLimit / 1000)
                     timeframeexchange = exchange.timeframes.get("1w")
-                    if timeframeexchange:  # this must be handled better maybe choose timeframe dynamically
+                    if (
+                        timeframeexchange
+                    ):  # this must be handled better maybe choose timeframe dynamically
                         # maybe cache this per pair
                         ohlcv = exchange.fetch_ohlcv(
-                            path[i][1]["symbol"], "1w", starttimestamp, rangeincandles)
+                            path[i][1]["symbol"], "1w", starttimestamp, rangeincandles
+                        )
                     else:
                         ohlcv = []  # do not check fail later
                     if len(ohlcv) > 1:
                         # (candle ends after the date + timeframe)
                         path[i][1]["stoptime"] = ohlcv[-1][0] + timeframe
-                        path[i][1]["avg_vol"] = sum(
-                            [vol[-1] for vol in ohlcv]) / len(ohlcv)  # avg vol in curr
+                        path[i][1]["avg_vol"] = sum([vol[-1] for vol in ohlcv]) / len(
+                            ohlcv
+                        )  # avg vol in curr
                         path[i][1]["starttime"] = ohlcv[0][0]
-                        if path[i][1]["stoptime"] < globalstoptime or globalstoptime == 0:
+                        if (
+                            path[i][1]["stoptime"] < globalstoptime
+                            or globalstoptime == 0
+                        ):
                             globalstoptime = path[i][1]["stoptime"]
                         if path[i][1]["starttime"] > globalstarttime:
                             globalstarttime = path[i][1]["starttime"]
@@ -177,10 +210,15 @@ class PricePath:
                         path[i][1]["starttime"] = 0
                         path[i][1]["avg_vol"] = 0
                     self.cache[path[i][1]["exchange"] + path[i][1]["symbol"]] = (
-                        path[i][1]["starttime"], path[i][1]["stoptime"], path[i][1]["avg_vol"])
+                        path[i][1]["starttime"],
+                        path[i][1]["stoptime"],
+                        path[i][1]["avg_vol"],
+                    )
                 else:
 
-                    if (path[i][1]["stoptime"] < globalstoptime or globalstoptime == 0) and path[i][1]["stoptime"] != 0:
+                    if (
+                        path[i][1]["stoptime"] < globalstoptime or globalstoptime == 0
+                    ) and path[i][1]["stoptime"] != 0:
                         globalstoptime = path[i][1]["stoptime"]
                     if path[i][1]["starttime"] > globalstarttime:
                         globalstarttime = path[i][1]["starttime"]
@@ -215,8 +253,7 @@ if __name__ == "__main__":
     start = "IOTA"
     to = "EUR"
     preferredexchange = "binance"
-    path = g.getpath(start, to, maxdepth=2,
-                     preferredexchange=preferredexchange)
+    path = g.getpath(start, to, maxdepth=2, preferredexchange=preferredexchange)
     # debug only in actual use we would iterate over the path object fetching new paths as needed
     path = list(path)
     print(len(path))
