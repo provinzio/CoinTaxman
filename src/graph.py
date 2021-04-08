@@ -3,15 +3,44 @@ from datetime import datetime
 from time import sleep, time_ns
 
 
-class graph:
+class PricePath:
 
-    def __init__(self, gdict=None, cache=None):
+    def __init__(self, exchanges:list=None,gdict:dict=None, cache:dict=None):
         if not gdict:
             gdict = {}
         if not cache:
             cache = {}
+        if not exchanges:
+            exchanges = ["binance","coinbasepro"]
         self.gdict = gdict
         self.cache = cache
+        self.priority={}
+        allpairs=[]
+
+        for exchange_id in exchanges:
+            exchange_class = getattr(ccxt, exchange_id)
+            exchange = exchange_class()
+            markets = []
+            markets = exchange.fetch_markets()
+            if exchange.has['fetchOHLCV']:
+
+                allpairs.extend(
+                    [(i["base"], i["quote"], exchange_id, i["symbol"])for i in markets])
+            else:
+                print(
+                    f"{exchange.name} Does not support fetch ohlcv. ignoring exchange and {len(markets)} pairs.")
+        allpairs = list(set(allpairs))
+        #print("Total Pairs to check:", len(allpairs))
+        allpairs.sort(key=lambda x: x[3])
+        for i in allpairs:
+            base = i[0]
+            quote = i[1]
+            self.addVertex(base)
+            self.addVertex(quote)
+            self.addEdge(base, quote, {
+                    "exchange": i[2], "symbol": i[3], "inverted": False})
+            self.addEdge(quote, base, {
+                    "exchange": i[2], "symbol": i[3], "inverted": True})
 
     def edges(self):
         return self.findedges()
@@ -41,7 +70,7 @@ class graph:
 
     def _getpath(self, start, stop, maxdepth, depth=0):
         paths = []
-        if (edges := g.gdict.get(start)) and maxdepth > depth:
+        if (edges := self.gdict.get(start)) and maxdepth > depth:
             for edge in edges:
                 if depth == 0 and edge[0] == stop:
                     paths.append([edge, ])
@@ -56,15 +85,36 @@ class graph:
                                 newpath = [edge, ]
                                 newpath.append(p)
                                 paths.append(newpath)
-        #if len(paths)>3 and depth in [0,1]:
-        #    print(len(paths))
         return paths
+
+    def change_prio(self,key,value):
+        ke="-".join(key)
+        if self.priority.get(ke):
+            self.priority[ke]+=value
+        else:
+            self.priority[ke]=value
 
     def getpath(self, start, stop, starttime=0, stoptime=0, preferredexchange=None, maxdepth=3):
         def comb_sort_key(path):
             if preferredexchange:
                 # prioritze pairs with the preferred exchange
-                return len(path)+sum([0 if pair[1]["exchange"] == preferredexchange else 1 for pair in path])
+                volume=1
+                volumenew=0
+                if not (priority:=self.priority.get("-".join([ a[1]["symbol"] for a in  path]))):
+                    priority=0
+                for c in [a if (a := check_cache(pair)) else None for pair in path]:
+                    if c and c[0]:
+                        if c[1][1]["stoptime"]==0:
+                            break
+                        elif c[1][1]["avg_vol"]!=0:
+                            volumenew+=c[1][1]["avg_vol"] #is very much off because volume is not in the same currency something for later
+
+
+                    else:
+                        break
+                else:
+                    volume=1/volumenew
+                return len(path)+sum([0 if pair[1]["exchange"] == preferredexchange else 1 for pair in path])+volume+priority
             else:
                 return len(path)
 
@@ -103,7 +153,7 @@ class graph:
                 if not cached:
                     exchange_class = getattr(ccxt, path[i][1]["exchange"])
                     exchange = exchange_class()
-                    sleep(exchange.rateLimit / 1000)
+                    sleep(exchange.rateLimit / 1000) #maybe a more elaborate ratelimit wich counts execution time to waiting
                     timeframeexchange = exchange.timeframes.get("1w")
                     if timeframeexchange:  # this must be handled better maybe choose timeframe dynamically
                         # maybe cache this per pair
@@ -128,12 +178,12 @@ class graph:
                     self.cache[path[i][1]["exchange"]+path[i][1]["symbol"]] = (
                         path[i][1]["starttime"], path[i][1]["stoptime"], path[i][1]["avg_vol"])
                 else:
-                    if path[i][1]["stoptime"] < globalstoptime or globalstoptime == 0:
+
+                    if (path[i][1]["stoptime"] < globalstoptime or globalstoptime == 0) and path[i][1]["stoptime"]!=0:
                         globalstoptime = path[i][1]["stoptime"]
-                    if path[i][1]["starttime"] > globalstarttime:
+                    if path[i][1]["starttime"] > globalstarttime :
                         globalstarttime = path[i][1]["starttime"]
                     ohlcv = []
-                print(len(ohlcv)-rangeincandles, rangeincandles)
             return (globalstarttime, globalstoptime), path
 
         # get all possible paths which are no longer than 4 pairs long
@@ -152,39 +202,15 @@ class graph:
             elif stoptime == 0:
                 if starttime > timest[0]:
                     yield timest, newpath
+            
             else:
                 if stoptime < timest[1] and starttime > timest[0]:
                     yield timest, newpath
 
 
 if __name__ == "__main__":
-    g = graph()
+    g = PricePath()
     allpairs = []
-    for exchange_id in ["binance", "coinbase", "kraken", "coinbasepro", "aax", "bittrex", "bitvavo"]:
-        exchange_class = getattr(ccxt, exchange_id)
-        exchange = exchange_class()
-        markets = []
-        markets = exchange.fetch_markets()
-        if exchange.has['fetchOHLCV']:
-
-            allpairs.extend(
-                [(i["base"], i["quote"], exchange_id, i["symbol"])for i in markets])
-        else:
-            print(
-                f"{exchange.name} Does not support fetch ohlcv. ignoring exchange and {len(markets)} pairs.")
-        #print(len([(i["base"],i["quote"],exchange_id,i["symbol"])for i in markets]),len(markets))
-    allpairs = list(set(allpairs))
-    print("Total Pairs to check:", len(allpairs))
-    for i in allpairs:
-        base = i[0]
-        quote = i[1]
-        g.addVertex(base)
-        g.addVertex(quote)
-        g.addEdge(base, quote, {
-                  "exchange": i[2], "symbol": i[3], "inverted": False})
-        g.addEdge(quote, base, {
-                  "exchange": i[2], "symbol": i[3], "inverted": True})
-
     start = "IOTA"
     to = "EUR"
     preferredexchange = "binance"

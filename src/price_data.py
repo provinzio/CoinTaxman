@@ -32,6 +32,7 @@ import config
 import misc
 import transaction
 from core import kraken_pair_map
+from graph import PricePath
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +44,9 @@ log = logging.getLogger(__name__)
 
 
 class PriceData:
+    def __init__(self):
+        self.path=PricePath()
+
     def get_db_path(self, platform: str) -> Path:
         return Path(config.DATA_PATH, f"{platform}.db")
 
@@ -417,126 +421,122 @@ class PriceData:
             return price * tr.sold
         raise NotImplementedError
     
-    def get_candles(self, start: int, stop: int, symbol: str) ->list:
-        if self.exchange.has['fetchOHLCV']:
-            sleep(self.exchange.rateLimit / 1000)  # time.sleep wants seconds
+    def get_candles(self, start: int, stop: int, symbol: str,exchange: str) ->list:
+        exchange_class = getattr(ccxt, exchange)
+        exchange = exchange_class()
+        if exchange.has['fetchOHLCV']:
+            sleep(exchange.rateLimit / 1000)  # time.sleep wants seconds
             # get 2min before and after range
-            return self.exchange.fetch_ohlcv(symbol, '1m', start-1000*60*2, max(int((stop-start)/1000/60)+5, 1))
+            startval=start-1000*60*2
+            rang=max(int((stop-start)/1000/60)+2, 1)
+            return exchange.fetch_ohlcv(symbol, '1m', startval, rang )
         else:
-            logging.error(
+            log.error(
                 "fetchOHLCV not implemented on exchange, skipping priceloading using ohlcv")
             return None
 
-    def initialize_ccxt(self):
-        exchange_id = 'binance'
-        exchange_class = getattr(ccxt, exchange_id)
-        self.exchange = exchange_class()
-        self.markets = []
-        markets = self.exchange.fetch_markets()
+    def _get_bulk_pair_data_path(self, operations: list, coin: str,reference_coin: str,preferredexchange:str="binance") ->list:
+        def merge_prices(a:list,b:list=None):
+            prices=[]
+            if not b :
+                return a
+            for i in a:
+                factor=None
+                for j in b:
+                    if i[0]==j[0]:
+                        factor=j[1]
+                        break
+                prices.append((i[0],i[1]*factor))
+            return prices
 
-        for market in markets:
-            # may not apply for all exchanges, currently works for binance
-            # caches a list of all pairs on the exchange
-            self.markets.append(market["symbol"].split("/"))
-
-    def _get_bulk_pair_list(self, coin,reference_coin: str = config.FIAT) -> list:
-        def cmp_asset_pairs(our_pair: tuple[str, str], market_pair: tuple[str, str]) -> Optional[tuple[str, str, bool]]:
-            if our_pair == market_pair:
-                return *market_pair, False
-            if reversed(our_pair) == market_pair:
-                return *market_pair, True
-            return None
-        
-        def get_pair(coin, reference_coin:str):
-            our_symbols = [coin, reference_coin]
-            for market in self.markets:
-                if cmp := cmp_asset_pairs(our_symbols, market):
-                    return cmp 
-
-        if pair := get_pair(coin, reference_coin):
-            return [pair]
-
-        else:
-            for market in self.markets:
-                if pair:=get_pair(market[1], reference_coin):
-                    if market[0] == coin:
-                        return [(*market, False), pair]
-                    if market[1] == coin:
-                        return [(*market, True), pair]
-
-    def _get_bulk_pair_data(self, operations: list, symbol: str, invert: str=False) ->list:
         timestamps = []
         timestamppairs = []
-        data = []
-
+        maxminutes=300 #coinbasepro only allows a max of 300 minutes need a better solution
         timestamps = (op.utc_time for op in operations)
+        if not preferredexchange:
+            preferredexchange="binance"
 
         for timestamp in timestamps:
 
-            if len(timestamppairs) > 0 and timestamppairs[-1][0]+datetime.timedelta(minutes=995) > timestamp:
+            if len(timestamppairs) > 0 and timestamppairs[-1][0]+datetime.timedelta(minutes=maxminutes-4) > timestamp:
                 timestamppairs[-1].append(timestamp)
             else:
                 timestamppairs.append([timestamp])
-
+        datacomb=[]
         for batch in timestamppairs:
             # ccxt works with timestamps in milliseconds
             first = misc.to_ms_timestamp(batch[0])
             last = misc.to_ms_timestamp(batch[-1])
-            if invert:
-                tempdata = list(
-                    map(lambda x: (x[0], 1/((x[1]+x[4])/2)), self.get_candles(first, last, symbol)))
-            else:
-                tempdata = list(
-                    map(lambda x: (x[0], (x[1]+x[4])/2), self.get_candles(first, last, symbol)))
+            firststr=batch[0].strftime('%d-%b-%Y (%H:%M)')
+            laststr=batch[-1].strftime('%d-%b-%Y (%H:%M)')
+            log.info(f"getting data from {str(firststr)} to {str(laststr)} for {str(coin)}")
+            path=self.path.getpath(coin,reference_coin,first,last,preferredexchange=preferredexchange)
+            for p in path:
+                tempdatalis=[]
+                printstr=[ a[1]["symbol"] for a in  p[1] ]
+                log.debug(f"found path over {' -> '.join(printstr)}")
+                for i in range(len(p[1])):
+                    tempdatalis.append([])
+                    symbol=p[1][i][1]["symbol"]
+                    exchange=p[1][i][1]["exchange"]
+                    invert=p[1][i][1]["inverted"]
+                    candles=self.get_candles(first, last, symbol,exchange)
+                    if invert:
+                        tempdata = list(
+                            map(lambda x: (x[0], 1/((x[1]+x[4])/2)), candles))
+                    else:
+                        tempdata = list(
+                            map(lambda x: (x[0], (x[1]+x[4])/2), candles))
 
-            if tempdata:
-                for operation in batch:
-                    # TODO discuss which candle is picked current is closest to original date (often off by about 1-20s, but can be after the Trade)
-                    # times do not always line up perfectly so take one nearest
-                    ts = list(
-                        map(lambda x: (abs(misc.to_ms_timestamp(operation.timestamp)*1000-x[0]), x), tempdata))
-                    data.append((operation, min(ts, key=lambda x: x[0])[1][1]))
-        return data
+                    if tempdata:
+                        for operation in batch:
+                            # TODO discuss which candle is picked current is closest to original date (often off by about 1-20s, but can be after the Trade)
+                            # times do not always line up perfectly so take one nearest
+                            ts = list(
+                                map(lambda x: (abs(misc.to_ms_timestamp(operation)*1000-x[0]), x), tempdata))
+                            tempdatalis[i].append((operation, min(ts, key=lambda x: x[0])[1][1]))
+                    else:
+                        tempdatalis=[]
+                        self.path.change_prio(printstr,0.2) # do not try already failed again
+                        break
+                if tempdatalis:
+                    wantedlen=len(tempdatalis[0])
+                    for li in tempdatalis:
+                        if not len(li)==wantedlen:
+                            self.path.change_prio(printstr,0.2)
+                            break
+                    else:
+                        prices=[]
+                        for d in tempdatalis:
+                            prices=merge_prices(d,prices)
+                        datacomb.extend(prices)
+                        break
+                log.debug("path failed trying new path")
+     
+        return datacomb
 
-    def preload_price_data(self, operations: list, coin: str):
+    def preload_price_data_path(self,operations: list, coin: str,exchange:str=None):
+        
+            
 
         reference_coin = config.FIAT
         # get pairs used for calculating the price
-        db_path = self.get_db_path("binance")
         operations_filtered = []
+        
         tablename = self.get_tablename(coin, reference_coin)
+        operations_filtered = [op for op in operations if not self.__get_price_db(self.get_db_path(op.platform), tablename, op.utc_time)]
+        operations_grouped={}
+        if operations_filtered:
+            for i in operations_filtered:
+                if i.coin==config.FIAT:
+                    pass
+                elif operations_grouped.get(i.platform):
+                    operations_grouped[i.platform].append(i)
+                else:
+                    operations_grouped[i.platform]=[i]
+            for platf in operations_grouped.keys():
+                data=self._get_bulk_pair_data_path(operations_grouped[platf],coin,reference_coin,preferredexchange=platf)
+                for p in data:
+                    self.set_price_db(platf,coin,reference_coin, p[0], p[1])
 
-        if lis:=self._get_bulk_pair_list(coin,reference_coin):
 
-            operations_filtered = [op for op in operations if not self.__get_price_db(db_path, tablename, op.utc_time)]
-
-            # len 1== direct pairing with base currency
-            if len(lis) == 1 and lis[0]:
-                data = self._get_bulk_pair_data(
-                    operations_filtered, f"{lis[0][0]}/{lis[0][1]}", lis[0][2])
-                for element in data:
-                    self.__set_price_db(db_path, tablename,
-                                        element[0], element[1])
-
-            # len 2 == calculates price using two pairs e.g IOTA/ETH + ETH/EUR
-            elif len(lis) == 2 and lis[0] and lis[1]:
-                # get data for first pair
-                data = self._get_bulk_pair_data(
-                    operations_filtered, f"{lis[0][0]}/{lis[0][1]}", lis[0][2])
-                # get data for second pair
-                data2 = self._get_bulk_pair_data(
-                    operations_filtered, f"{lis[1][0]}/{lis[1][1]}", lis[1][2])
-
-                for element in data:
-                    factor = None
-
-                    for element2 in data2:
-                        if element[0] == element2[0]:
-                            factor = element2[1]
-                            break
-
-                    if factor:
-                        price = element[1]*factor
-                        # check if timestamp already exists to prevent a duplicate error
-                        self.set_price_db(
-                            db_path, tablename, element[0], price)
