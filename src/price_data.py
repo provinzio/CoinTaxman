@@ -19,6 +19,7 @@ import datetime
 import decimal
 import json
 import logging
+import math
 import sqlite3
 import time
 from pathlib import Path
@@ -420,19 +421,43 @@ class PriceData:
             return price * tr.sold
         raise NotImplementedError
 
-    def get_candles(self, start: int, stop: int, symbol: str, exchange: str) -> list:
-        exchange_class = getattr(ccxt, exchange)
-        exchange_obj = exchange_class()
-        if exchange_obj.has["fetchOHLCV"]:
-            time.sleep(exchange_obj.rateLimit / 1000)  # time.sleep wants seconds
-            # get 2min before and after range
-            startval = start - 1000 * 60 * 2
-            rang = max(int((stop - start) / 1000 / 60) + 2, 1)
-            return list(exchange_obj.fetch_ohlcv(symbol, "1m", startval, rang))
-        else:
-            log.error("fetchOHLCV not implemented on exchange, skipping ohlcv")
-            # shouldnt happen technically because exchanges are filterd for fetchohlcv
-            return []
+    def get_candles(self, start: int, stop: int, symbol: str, exchange_id: str) -> list:
+        """Return list with candles starting 2 minutes before start.
+
+        Args:
+            start (int): Start time in milliseconds since epoch.
+            stop (int): End time in milliseconds.
+            symbol (str)
+            exchange_id (str)
+
+        Returns:
+            list: List of OHLCV candles gathered from ccxt.
+        """
+        assert stop >= start, f"`stop` must be after `start` {stop} !>= {start}."
+
+        exchange_class = getattr(ccxt, exchange_id)
+        exchange = exchange_class()
+        assert isinstance(exchange, ccxt.Exchange)
+
+        # Technically impossible. Unsupported exchanges should be detected earlier.
+        assert exchange.has["fetchOHLCV"]
+
+        # time.sleep wants seconds
+        time.sleep(exchange.rateLimit / 1000)
+
+        # Get candles 2 min before and after start/stop.
+        since = start - 2 * 60 * 1000
+        # `fetch_ohlcv` has no stop value but only a limit (amount of candles fetched).
+        # Calculate the amount of candles in the 1 min timeframe,
+        # so that we get enough candles.
+        # BUG Most exchange have an upper limit (e.g. binance 1000, coinbasepro 300).
+        #     We should throw a warning and make sure that `limit` is below their
+        #     supported maximum.
+        limit = math.ceil((stop - start) / (1000 * 60)) + 2
+
+        candles = exchange.fetch_ohlcv(symbol, "1m", since, limit)
+        assert isinstance(candles, list)
+        return candles
 
     def _get_bulk_pair_data_path(
         self,
