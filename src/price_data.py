@@ -522,6 +522,44 @@ class PriceData:
         assert isinstance(candles, list)
         return candles
 
+    def get_avg_candle_prices(
+        self, start: int, stop: int, symbol: str, exchange_id: str, invert: bool = False
+    ) -> list[tuple[int, decimal.Decimal]]:
+        """Return average price from ohlcv candles.
+
+        The average price of the candle is calculated as the avergae from the
+        open and close price.
+
+        Further information about candle-function can be found in `get_candles`.
+
+        Args:
+            start (int)
+            stop (int)
+            symbol (str)
+            exchange_id (str)
+            invert (bool, optional): Defaults to False.
+
+        Returns:
+            list: Timestamp and average prices of candles containing:
+
+                timestamp (int): Timestamp of candle in milliseconds since epoch.
+                avg_price (decimal.Decimal): Average price of candle.
+        """
+        avg_candle_prices = []
+        candle_prices = self.get_candles(start, stop, symbol, exchange_id)
+
+        for timestamp_ms, _open, _high, _low, _close, _volume in candle_prices:
+            open = misc.force_decimal(_open)
+            close = misc.force_decimal(_close)
+
+            avg_price = (open + close) / 2
+
+            if invert and avg_price != 0:
+                avg_price = 1 / avg_price
+
+            avg_candle_prices.append((timestamp_ms, avg_price))
+        return avg_candle_prices
+
     def _get_bulk_pair_data_path(
         self,
         operations: list,
@@ -584,17 +622,10 @@ class PriceData:
                     symbol = p[1][i][1]["symbol"]
                     exchange = p[1][i][1]["exchange"]
                     invert = p[1][i][1]["inverted"]
-                    candles = self.get_candles(first, last, symbol, exchange)
-                    if invert:
-                        tempdata = list(
-                            map(lambda x: (x[0], 1 / ((x[1] + x[4]) / 2)), candles)
-                        )
-                    else:
-                        tempdata = list(
-                            map(lambda x: (x[0], (x[1] + x[4]) / 2), candles)
-                        )
 
-                    if tempdata:
+                    if tempdata := self.get_avg_candle_prices(
+                        first, last, symbol, exchange, invert
+                    ):
                         for operation in batch:
                             # TODO discuss which candle is picked
                             # current is closest to original date
