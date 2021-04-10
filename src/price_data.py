@@ -485,17 +485,26 @@ class PriceData:
             return price * tr.sold
         raise NotImplementedError
 
-    def get_candles(self, start: int, stop: int, symbol: str, exchange_id: str) -> list:
+    def get_candles(
+        self, start: int, stop: int, symbol: str, exchange_id: str
+    ) -> list[tuple[int, float, float, float, float, float]]:
         """Return list with candles starting 2 minutes before start.
 
         Args:
             start (int): Start time in milliseconds since epoch.
-            stop (int): End time in milliseconds.
+            stop (int): End time in milliseconds since epoch.
             symbol (str)
             exchange_id (str)
 
         Returns:
-            list: List of OHLCV candles gathered from ccxt.
+            list: List of OHLCV candles gathered from ccxt containing:
+
+                timestamp (int): Timestamp of candle in milliseconds since epoch.
+                open_price (float)
+                lowest_price (float)
+                highest_price (float)
+                close_price (float)
+                volume (float)
         """
         assert stop >= start, f"`stop` must be after `start` {stop} !>= {start}."
 
