@@ -75,7 +75,7 @@ def force_decimal(x: Union[str, int, float]) -> decimal.Decimal:
         x (Union[None, str, int, float])
 
     Raises:
-        KeyError: The given argument can not be parsed accordingly.
+        ValueError: The given argument can not be parsed accordingly.
 
     Returns:
         decimal.Decimal
@@ -84,7 +84,7 @@ def force_decimal(x: Union[str, int, float]) -> decimal.Decimal:
     if isinstance(d, decimal.Decimal):
         return d
     else:
-        raise KeyError(f"Could not parse `{d}` to decimal")
+        raise ValueError(f"Could not parse `{d}` to decimal")
 
 
 def reciprocal(d: decimal.Decimal) -> decimal.Decimal:
