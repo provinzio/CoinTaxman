@@ -1,5 +1,7 @@
+import collections
 import logging
 import time
+from typing import Optional
 
 import ccxt
 
@@ -7,43 +9,59 @@ log = logging.getLogger(__name__)
 
 
 class PricePath:
-    def __init__(self, exchanges: list = [], gdict: dict = {}, cache: dict = {}):
-        if not exchanges:
-            exchanges = ["binance", "coinbasepro"]
+    def __init__(
+        self,
+        exchanges: Optional[list[str]] = None,
+        gdict: Optional[dict] = None,
+        cache: Optional[dict] = None,
+    ):
+        if exchanges is None:
+            exchanges = []
+        if gdict is None:
+            gdict = {}
+        if cache is None:
+            cache = {}
+
         self.gdict = gdict
         self.cache = cache
-        self.priority: dict[str, int] = {}
-        # saves the priority for a certain path so that bad paths can be skipped
-        allpairs = []
+
+        # Saves the priority for a certain path so that bad paths can be skipped.
+        self.priority: collections.defaultdict[str, int] = collections.defaultdict(int)
+        allpairs: list[tuple[str, str, str, str]] = []
 
         for exchange_id in exchanges:
             exchange_class = getattr(ccxt, exchange_id)
             exchange = exchange_class()
-            markets = []
             markets = exchange.fetch_markets()
-            if exchange.has["fetchOHLCV"]:
+            assert isinstance(markets, list)
 
+            if exchange.has["fetchOHLCV"]:
                 allpairs.extend(
                     [(i["base"], i["quote"], exchange_id, i["symbol"]) for i in markets]
                 )
             else:
                 logging.warning(
-                    f"{exchange.name} Does not support fetch ohlcv. ignoring exchange and {len(markets)} pairs."
+                    f"{exchange.name} does not support fetch ohlcv. "
+                    f"Ignoring exchange and {len(markets)} pairs."
                 )
-        allpairs = list(set(allpairs))  # fast an easy deduplication
+
+        # Remove duplicate pairs.
+        # TODO It might be faster to create it directly as set.
+        #      Is it even necessary to convert it to a list?
+        allpairs = list(set(allpairs))
         # print("Total Pairs to check:", len(allpairs))
+
+        # Sorting by `symbol` to have the same result on every run due to the set.
         allpairs.sort(key=lambda x: x[3])
-        # sorting by symbol for pair to have the same result on every run due to the set
-        for i in allpairs:
-            base = i[0]
-            quote = i[1]
+
+        for base, quote, exchange, symbol in allpairs:
             self.addVertex(base)
             self.addVertex(quote)
             self.addEdge(
-                base, quote, {"exchange": i[2], "symbol": i[3], "inverted": False}
+                base, quote, {"exchange": exchange, "symbol": symbol, "inverted": False}
             )
             self.addEdge(
-                quote, base, {"exchange": i[2], "symbol": i[3], "inverted": True}
+                quote, base, {"exchange": exchange, "symbol": symbol, "inverted": True}
             )
 
     def edges(self):
@@ -81,11 +99,7 @@ class PricePath:
         if (edges := self.gdict.get(start)) and maxdepth > depth:
             for edge in edges:
                 if depth == 0 and edge[0] == stop:
-                    paths.append(
-                        [
-                            edge,
-                        ]
-                    )
+                    paths.append([edge])
                 elif edge[0] == stop:
                     paths.append(edge)
                 else:
@@ -93,26 +107,22 @@ class PricePath:
                     if len(path) and path is not None:
                         for p in path:
                             if p[0] == stop:
-                                newpath = [
-                                    edge,
-                                ]
+                                newpath = [edge]
                                 newpath.append(p)
                                 paths.append(newpath)
         return paths
 
     def change_prio(self, key, value):
         ke = "-".join(key)
-        if self.priority.get(ke):
-            self.priority[ke] += value
-        else:
-            self.priority[ke] = value
+        self.priority[ke] += value
 
     def getpath(
         self, start, stop, starttime=0, stoptime=0, preferredexchange=None, maxdepth=3
     ):
         def comb_sort_key(path):
             """
-            Sorting funtction which is used to prioritze paths by (in order of magnitude):
+            Sorting function which is used to prioritize paths by:
+            (in order of magnitude)
             - smallest length -> +1 per element
             - preferred exchange -> +1 per exchange which is not preferred
             - priority -> +0.5 per unfinished execution of path
@@ -123,13 +133,11 @@ class PricePath:
                 # prioritze pairs with the preferred exchange
                 volume = 1
                 volumenew = 0
-                if not (
-                    priority := self.priority.get(
-                        "-".join([a[1]["symbol"] for a in path])
-                    )
-                ):
-                    priority = 0
-                for c in [a if (a := check_cache(pair)) else None for pair in path]:
+                priority = self.priority.get(
+                    "-".join([a[1]["symbol"] for a in path]), 0
+                )
+                xl = (a if (a := check_cache(pair)) else None for pair in path)
+                for c in xl:
                     if c and c[0]:
                         if c[1][1]["stoptime"] == 0:
                             break
@@ -267,7 +275,7 @@ class PricePath:
 
 
 if __name__ == "__main__":
-    g = PricePath()
+    g = PricePath(exchanges=["binance", "coinbasepro"])
     start = "IOTA"
     to = "EUR"
     preferredexchange = "binance"

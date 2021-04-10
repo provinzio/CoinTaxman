@@ -576,17 +576,15 @@ class PriceData:
         reference_coin: str,
         preferredexchange: str = "binance",
     ) -> list:
-        def merge_prices(a: list, b: list = []) -> list:
-            prices = []
+        def merge_prices(a: list, b: Optional[list] = None) -> list:
             if not b:
                 return a
+
+            prices = []
             for i in a:
-                factor = None
-                for j in b:
-                    if i[0] == j[0]:
-                        factor = j[1]
-                        break
+                factor = next(j[1] for j in b if i[0] == j[0])
                 prices.append((i[0], i[1] * factor))
+
             return prices
 
         timestamps: list = []
