@@ -218,7 +218,7 @@ class Taxman:
             config.EXPORT_PATH, str(config.TAX_YEAR), "csv"
         )
 
-        with open(file_path, "w", newline="") as f:
+        with open(file_path, "w", newline="", encoding="utf8") as f:
             writer = csv.writer(f)
             # Add embedded metadata info
             writer.writerow(
