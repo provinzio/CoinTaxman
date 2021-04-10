@@ -408,6 +408,70 @@ class PriceData:
         self.__set_price_db(db_path, tablename, utc_time, price)
         return price
 
+    def get_missing_price_operations(
+        self,
+        operations: list[transaction.Operation],
+        coin: str,
+        platform: str,
+        reference_coin: str = config.FIAT,
+    ) -> list[transaction.Operation]:
+        """Return operations for which no price was found in the database.
+
+        Requires the `operations` to have the same `coin` and `platform`.
+
+        Args:
+            operations (list[transaction.Operation])
+            coin (str)
+            platform (str)
+            reference_coin (str): Defaults to `config.FIAT`.
+
+        Returns:
+            list[transaction.Operation]
+        """
+        assert all(op.coin == coin for op in operations)
+        assert all(op.platform == platform for op in operations)
+
+        # We do not have to calculate the price, if there are no operations or the
+        # coin is the same as the reference coin.
+        if not operations or coin == reference_coin:
+            return []
+
+        db_path = self.get_db_path(platform)
+        # If the price database does not exist, we need to query all prices.
+        if not db_path.is_file():
+            return operations
+
+        tablename = self.get_tablename(coin, reference_coin)
+        utc_time_values = ",".join(f"('{op.utc_time}')" for op in operations)
+
+        with sqlite3.connect(db_path) as conn:
+            cur = conn.cursor()
+            # The query returns a list with 0 and 1's.
+            # - 0: a price exists.
+            # - 1: the price is missing.
+            query = (
+                "SELECT t.utc_time IS NULL "
+                f"FROM (VALUES {utc_time_values}) "
+                f"LEFT JOIN `{tablename}` t ON t.utc_time = COLUMN1;"
+            )
+
+            # Execute the query.
+            try:
+                cur.execute(query)
+            except sqlite3.OperationalError as e:
+                if str(e) == f"no such table: {tablename}":
+                    # The corresponding price table does not exist yet.
+                    # We need to query all prices.
+                    return operations
+                raise e
+
+            # Evaluate the result.
+            result = (bool(is_missing) for is_missing, in cur.fetchall())
+            missing_prices_operations = [
+                op for op, is_missing in zip(operations, result) if is_missing
+            ]
+            return missing_prices_operations
+
     def get_cost(
         self,
         tr: Union[transaction.Operation, transaction.SoldCoin],
@@ -569,37 +633,44 @@ class PriceData:
 
         return datacomb
 
-    def preload_price_data_path(
-        self, operations: list, coin: str, exchange: str = ""
+    def preload_prices(
+        self,
+        operations: list[transaction.Operation],
+        coin: str,
+        platform: str,
+        reference_coin: str = config.FIAT,
     ) -> None:
+        """Preload price data.
 
-        reference_coin = config.FIAT
-        # get pairs used for calculating the price
-        operations_filtered = []
+        Requires the operations to have the same `coin` and `exchange`.
 
-        tablename = self.get_tablename(coin, reference_coin)
-        operations_filtered = [
-            op
-            for op in operations
-            if not self.__get_price_db(
-                self.get_db_path(op.platform), tablename, op.utc_time
-            )
-        ]
-        operations_grouped: dict = {}
-        if operations_filtered:
-            for i in operations_filtered:
-                if i.coin == config.FIAT:
-                    pass
-                elif operations_grouped.get(i.platform):
-                    operations_grouped[i.platform].append(i)
-                else:
-                    operations_grouped[i.platform] = [i]
-            for platf in operations_grouped.keys():
-                data = self._get_bulk_pair_data_path(
-                    operations_grouped[platf],
-                    coin,
-                    reference_coin,
-                    preferredexchange=platf,
-                )
-                for p in data:
-                    self.set_price_db(platf, coin, reference_coin, p[0], p[1])
+        Args:
+            operations (list[transaction.Operation])
+            coin (str)
+            platform (str)
+            reference_coin (str): Defaults to `config.FIAT`.
+        """
+        assert all(op.coin == coin for op in operations)
+        assert all(op.platform == platform for op in operations)
+
+        # We do not have to preload prices, if there are no operations or the coin is
+        # the same as the reference coin.
+        if not operations or coin == reference_coin:
+            return
+
+        # Only consider the operations for which we have no prices in the database.
+        missing_prices_operations = self.get_missing_price_operations(
+            operations, coin, platform, reference_coin
+        )
+
+        # Preload the prices.
+        data = self._get_bulk_pair_data_path(
+            missing_prices_operations,
+            coin,
+            reference_coin,
+            preferredexchange=platform,
+        )
+
+        # TODO Use bulk insert to write all prices at once into the database.
+        for p in data:
+            self.set_price_db(platform, coin, reference_coin, p[0], p[1])

@@ -178,7 +178,11 @@ class Taxman:
         log.debug("Starting evaluation...")
         for coin, operations in misc.group_by(self.book.operations, "coin").items():
             operations = sorted(operations, key=lambda op: op.utc_time)
-            self.price_data.preload_price_data_path(operations, coin)
+
+            # Preload prices per exchange.
+            for platform, _operations in misc.group_by(operations, "platform").items():
+                self.price_data.preload_prices(_operations, coin, platform)
+
             self.__evaluate_taxation(coin, operations)
 
     def print_evaluation(self) -> None:
