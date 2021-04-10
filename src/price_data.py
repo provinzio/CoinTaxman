@@ -450,9 +450,8 @@ class PriceData:
         # `fetch_ohlcv` has no stop value but only a limit (amount of candles fetched).
         # Calculate the amount of candles in the 1 min timeframe,
         # so that we get enough candles.
-        # BUG Most exchange have an upper limit (e.g. binance 1000, coinbasepro 300).
-        #     We should throw a warning and make sure that `limit` is below their
-        #     supported maximum.
+        # Most exchange have an upper limit (e.g. binance 1000, coinbasepro 300).
+        # `ccxt` throws an error if we exceed this limit.
         limit = math.ceil((stop - start) / (1000 * 60)) + 2
 
         candles = exchange.fetch_ohlcv(symbol, "1m", since, limit)
