@@ -569,6 +569,8 @@ class PriceData:
             avg_candle_prices.append((timestamp_ms, avg_price))
         return avg_candle_prices
 
+    # TODO preferredexchange default is only for debug purposes and should be
+    #      removed later on.
     def _get_bulk_pair_data_path(
         self,
         operations: list,
