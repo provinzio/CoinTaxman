@@ -587,28 +587,16 @@ class PriceData:
 
             return prices
 
-        timestamps: list = []
-        timestamppairs: list = []
-        maxminutes = (
-            300  # coinbasepro only allows a max of 300 minutes need a better solution
+        # TODO Set `max_difference` to the platform specific ohlcv-limit.
+        max_difference = 300  # coinbasepro
+        # TODO Set `max_size` to the platform specific ohlcv-limit.
+        max_size = 300  # coinbasepro
+        time_batches = transaction.time_batches(
+            operations, max_difference=max_difference, max_size=max_size
         )
-        timestamps = [op.utc_time for op in operations]
-        if not preferredexchange:
-            preferredexchange = "binance"
 
-        current_first = None
-        for timestamp in timestamps:
-            if (
-                current_first
-                and current_first + datetime.timedelta(minutes=maxminutes - 4)
-                > timestamp
-            ):
-                timestamppairs[-1].append(timestamp)
-            else:
-                current_first = timestamp
-                timestamppairs.append([timestamp])
         datacomb = []
-        for batch in timestamppairs:
+        for batch in time_batches:
             # ccxt works with timestamps in milliseconds
             first = misc.to_ms_timestamp(batch[0])
             last = misc.to_ms_timestamp(batch[-1])
