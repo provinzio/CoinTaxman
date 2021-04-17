@@ -134,39 +134,49 @@ class PriceData:
         return average_price
 
     @misc.delayed
-    def _get_price_coinbase(self, base_asset: str, utc_time: datetime.datetime, quote_asset: str, swapped_symbols: bool = False) -> decimal.Decimal:
+    def _get_price_coinbase(
+        self,
+        base_asset: str,
+        utc_time: datetime.datetime,
+        quote_asset: str,
+        swapped_symbols: bool = False,
+    ) -> decimal.Decimal:
         # Use Coinbase Pro prices
-        return self._get_price_coinbase_pro(base_asset, utc_time, quote_asset, swapped_symbols)
+        return self._get_price_coinbase_pro(
+            base_asset, utc_time, quote_asset, swapped_symbols
+        )
 
     @misc.delayed
-    def _get_price_coinbase_pro(self, base_asset: str, utc_time: datetime.datetime, quote_asset: str, swapped_symbols: bool = False) -> decimal.Decimal:
+    def _get_price_coinbase_pro(
+        self,
+        base_asset: str,
+        utc_time: datetime.datetime,
+        quote_asset: str,
+        swapped_symbols: bool = False,
+    ) -> decimal.Decimal:
         """Retrieve price from Coinbase Pro official REST API.
-
-        The price is calculated as the average price of the opening and closing price
-        around 1 minute around `utc_time`.
-
-        None existing pairs like `TWTEUR` are calculated as
-        `TWTBTC * BTCEUR`.
 
         Documentation: https://docs.pro.coinbase.com
 
         Args:
-            start	        Start time in ISO 8601
-            end	            End time in ISO 8601
-            granularity	    Desired timeslice in seconds (60, 300, 900, 3600, 21600 or 86400)
-
-        Raises:
-            RuntimeError: Unable to retrieve price data.
+            base_asset (str): Base asset.
+            utc_time (datetime.datetime): Target time (time of the trade).
+            quote_asset (str): Quote asset.
+            swapped_symbols (bool, optional): The function is run with swapped
+                                              asset symbols. Defaults to False.
 
         Returns:
-            Decimal: Price of asset pair.
+            decimal.Decimal: Price of asset pair at target time
+                   (0 if price couldn't be determined)
         """
 
         root_url = "https://api.pro.coinbase.com"
         symbol = f"{base_asset}-{quote_asset}"
         startTime = misc.to_iso_timestamp(utc_time - datetime.timedelta(minutes=5))
         endTime = misc.to_iso_timestamp(utc_time + datetime.timedelta(minutes=5))
-        sub_url = f"/products/{symbol}/candles?start={startTime}&end={endTime}&granularity=60"
+        sub_url = (
+            f"/products/{symbol}/candles?start={startTime}&end={endTime}&granularity=60"
+        )
         url = root_url + sub_url
 
         log.debug("Calling %s", url)
@@ -183,12 +193,16 @@ class PriceData:
                 # order.
                 # If this does not help, we need to think of something else.
                 if swapped_symbols:
-                    raise RuntimeError(
-                        f"Can not retrieve {symbol=} from coinbase_pro")
+                    raise RuntimeError(f"Can not retrieve {symbol=} from coinbase_pro")
                 # Changing the order of the assets require to invert the price.
                 log.debug("Getting price with swapped symbols...")
                 price = self.get_price(
-                    "coinbase_pro", quote_asset, utc_time, base_asset, swapped_symbols=True)
+                    "coinbase_pro",
+                    quote_asset,
+                    utc_time,
+                    base_asset,
+                    swapped_symbols=True,
+                )
                 return misc.reciprocal(price)
 
             btc = self.get_price("coinbase_pro", base_asset, utc_time, "BTC")
@@ -210,7 +224,7 @@ class PriceData:
 
         # Use item in the middle if no closest match found
         if closest_match_index == -1:
-            closest_match_index = int(len(data) / 2)
+            closest_match_index = len(data) // 2
 
         closest_match = data[closest_match_index]
         open_price = misc.force_decimal(closest_match[3])

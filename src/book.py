@@ -128,7 +128,7 @@ class Book:
         operation_mapping = {
             "Receive": "Deposit",
             "Send": "Withdraw",
-            "Coinbase Earn": "Buy"
+            "Coinbase Earn": "Buy",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -197,16 +197,24 @@ class Book:
 
                 if operation == "Convert":
                     # parse change + coin from remark which is in format "0,123 ETH to 0,456 BTC"
-                    remark_target = remark.split(' to ')[-1]
-                    remark_target_parts = remark_target.split(' ')
-                    _convert_change = remark_target_parts[0].replace(',', '.')
+                    remark_target = remark.split(" to ")[-1]
+                    remark_target_parts = remark_target.split(" ")
+                    _convert_change = remark_target_parts[0].replace(",", ".")
                     convert_change = misc.xdecimal(_convert_change)
                     convert_coin = remark_target_parts[1]
 
-                    self.append_operation("Sell", utc_time, platform,
-                                          change, coin, row, file_path)
-                    self.append_operation("Buy", utc_time, platform,
-                                          convert_change, convert_coin, row, file_path)
+                    self.append_operation(
+                        "Sell", utc_time, platform, change, coin, row, file_path
+                    )
+                    self.append_operation(
+                        "Buy",
+                        utc_time,
+                        platform,
+                        convert_change,
+                        convert_coin,
+                        row,
+                        file_path,
+                    )
                 else:
                     self.append_operation(
                         operation, utc_time, platform, change, coin, row, file_path
@@ -215,12 +223,24 @@ class Book:
                     if operation == "Sell":
                         assert isinstance(eur_subtotal, decimal.Decimal)
                         self.append_operation(
-                            "Buy", utc_time, platform, eur_subtotal, "EUR", row, file_path
+                            "Buy",
+                            utc_time,
+                            platform,
+                            eur_subtotal,
+                            "EUR",
+                            row,
+                            file_path,
                         )
                     elif operation == "Buy":
                         assert isinstance(eur_subtotal, decimal.Decimal)
                         self.append_operation(
-                            "Sell", utc_time, platform, eur_subtotal, "EUR", row, file_path
+                            "Sell",
+                            utc_time,
+                            platform,
+                            eur_subtotal,
+                            "EUR",
+                            row,
+                            file_path,
                         )
 
                     if eur_fee:
@@ -241,12 +261,25 @@ class Book:
             # Skip header.
             next(reader)
 
-            for portfolio, trade_id, product, operation, _utc_time, _size, size_unit, _price, _fee, total, price_fee_total_unit in reader:
+            for (
+                portfolio,
+                trade_id,
+                product,
+                operation,
+                _utc_time,
+                _size,
+                size_unit,
+                _price,
+                _fee,
+                total,
+                price_fee_total_unit,
+            ) in reader:
                 row = reader.line_num
 
                 # Parse data.
                 utc_time = datetime.datetime.strptime(
-                    _utc_time, "%Y-%m-%dT%H:%M:%S.%fZ")
+                    _utc_time, "%Y-%m-%dT%H:%M:%S.%fZ"
+                )
                 utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
                 operation = operation_mapping.get(operation, operation)
                 size = misc.xdecimal(_size)
@@ -266,18 +299,40 @@ class Book:
                 assert size_unit
                 assert price_fee_total_unit
 
-                self.append_operation(operation, utc_time, platform,
-                                      size, size_unit, row, file_path)
+                self.append_operation(
+                    operation, utc_time, platform, size, size_unit, row, file_path
+                )
 
                 if operation == "Sell":
-                    self.append_operation("Buy", utc_time, platform,
-                                          total_price, price_fee_total_unit, row, file_path)
+                    self.append_operation(
+                        "Buy",
+                        utc_time,
+                        platform,
+                        total_price,
+                        price_fee_total_unit,
+                        row,
+                        file_path,
+                    )
                 elif operation == "Buy":
-                    self.append_operation("Sell", utc_time, platform,
-                                          total_price, price_fee_total_unit, row, file_path)
+                    self.append_operation(
+                        "Sell",
+                        utc_time,
+                        platform,
+                        total_price,
+                        price_fee_total_unit,
+                        row,
+                        file_path,
+                    )
                 if fee:
-                    self.append_operation("Fee", utc_time, platform,
-                                          fee, price_fee_total_unit, row, file_path)
+                    self.append_operation(
+                        "Fee",
+                        utc_time,
+                        platform,
+                        fee,
+                        price_fee_total_unit,
+                        row,
+                        file_path,
+                    )
 
     def _read_kraken_trades(self, file_path: Path) -> None:
         log.error(
