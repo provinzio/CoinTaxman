@@ -105,7 +105,7 @@ class PriceData:
                 # If this does not help, we need to think of something else.
                 if swapped_symbols:
                     raise RuntimeError(f"Can not retrieve {symbol=} from binance")
-                # Changeing the order of the assets require to
+                # Changing the order of the assets require to
                 # invert the price.
                 price = self.get_price(
                     "binance", quote_asset, utc_time, base_asset, swapped_symbols=True
