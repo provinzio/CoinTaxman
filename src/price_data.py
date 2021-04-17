@@ -134,19 +134,6 @@ class PriceData:
         return average_price
 
     @misc.delayed
-    def _get_price_coinbase(
-        self,
-        base_asset: str,
-        utc_time: datetime.datetime,
-        quote_asset: str,
-        swapped_symbols: bool = False,
-    ) -> decimal.Decimal:
-        # Use Coinbase Pro prices
-        return self._get_price_coinbase_pro(
-            base_asset, utc_time, quote_asset, swapped_symbols
-        )
-
-    @misc.delayed
     def _get_price_coinbase_pro(
         self,
         base_asset: str,

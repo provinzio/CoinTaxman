@@ -181,28 +181,31 @@ class Book:
                 utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
                 operation = operation_mapping.get(operation, operation)
                 change = misc.force_decimal(_change)
+                #  Current price from exchange.
+                eur_spot = misc.force_decimal(_eur_spot)
                 #  Cost without fees.
                 eur_subtotal = misc.xdecimal(_eur_subtotal)
-                #  Cost with fees.
-                eur_total = misc.xdecimal(_eur_total)
                 eur_fee = misc.xdecimal(_eur_fee)
-
-                # Unused variables.
-                del eur_total
 
                 # Validate data.
                 assert operation
                 assert coin
                 assert change
 
+                # Save price in our local database for later.
+                self.price_data.set_price_db(platform, coin, "EUR", utc_time, eur_spot)
+
                 if operation == "Convert":
-                    # parse change + coin from remark which is
-                    # in format "0,123 ETH to 0,456 BTC"
+                    # Parse change + coin from remark, which is
+                    # in format "0,123 ETH to 0,456 BTC".
                     remark_target = remark.split(" to ")[-1]
                     remark_target_parts = remark_target.split(" ")
                     _convert_change = remark_target_parts[0].replace(",", ".")
                     convert_change = misc.force_decimal(_convert_change)
                     convert_coin = remark_target_parts[1]
+
+                    eur_total = misc.force_decimal(_eur_total)
+                    convert_eur_spot = eur_total / convert_change
 
                     self.append_operation(
                         "Sell", utc_time, platform, change, coin, row, file_path
@@ -215,6 +218,11 @@ class Book:
                         convert_coin,
                         row,
                         file_path,
+                    )
+
+                    # Save convert price in local database, too.
+                    self.price_data.set_price_db(
+                        platform, convert_coin, "EUR", utc_time, convert_eur_spot
                     )
                 else:
                     self.append_operation(
