@@ -196,11 +196,12 @@ class Book:
                 assert change
 
                 if operation == "Convert":
-                    # parse change + coin from remark which is in format "0,123 ETH to 0,456 BTC"
+                    # parse change + coin from remark which is
+                    # in format "0,123 ETH to 0,456 BTC"
                     remark_target = remark.split(" to ")[-1]
                     remark_target_parts = remark_target.split(" ")
                     _convert_change = remark_target_parts[0].replace(",", ".")
-                    convert_change = misc.xdecimal(_convert_change)
+                    convert_change = misc.force_decimal(_convert_change)
                     convert_coin = remark_target_parts[1]
 
                     self.append_operation(
@@ -282,8 +283,8 @@ class Book:
                 )
                 utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
                 operation = operation_mapping.get(operation, operation)
-                size = misc.xdecimal(_size)
-                price = misc.xdecimal(_price)
+                size = misc.force_decimal(_size)
+                price = misc.force_decimal(_price)
                 fee = misc.xdecimal(_fee)
                 total_price = size * price
 

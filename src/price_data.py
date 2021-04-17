@@ -213,7 +213,7 @@ class PriceData:
 
         if len(data) == 0:
             log.warning("Coinbase Pro offers no price for `%s` at %s", symbol, utc_time)
-            return 0
+            return decimal.Decimal(0)
 
         # Find closest timestamp match
         target_timestamp = misc.to_ms_timestamp(utc_time)
