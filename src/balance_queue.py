@@ -18,7 +18,6 @@ import collections
 import dataclasses
 import decimal
 import logging
-import queue
 from typing import Deque, Optional, Union
 
 import transaction
@@ -139,11 +138,9 @@ class BalanceQueue:
         return sold_coins
 
 
-class BalanceLIFOQueue(queue.LifoQueue, BalanceQueue):
-    def _put(self, item: BalancedOperation) -> None:
-        self.queue.append(item)
-
-    def _get(self) -> BalancedOperation:
-        item = self.queue.pop()
-        assert isinstance(item, BalancedOperation)
-        return item
+class BalanceLIFOQueue(BalanceQueue):
+    def _get(self) -> Optional[BalancedOperation]:
+        try:
+            return self.queue.pop()
+        except IndexError:
+            return None
