@@ -124,7 +124,7 @@ class BalanceQueue:
                 return None
 
             not_sold = bop.op.change - bop.sold
-            assert not_sold >= 0
+            assert not_sold > 0
 
             if not_sold > change:
                 bop.sold += change
