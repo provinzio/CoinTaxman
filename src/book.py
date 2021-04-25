@@ -18,6 +18,7 @@ import csv
 import datetime
 import decimal
 import logging
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -198,12 +199,17 @@ class Book:
 
                 if operation == "Convert":
                     # Parse change + coin from remark, which is
-                    # in format "0,123 ETH to 0,456 BTC".
-                    remark_target = remark.split(" to ")[-1]
-                    remark_target_parts = remark_target.split(" ")
-                    _convert_change = remark_target_parts[0].replace(",", ".")
+                    # in format "Converted 0,123 ETH to 0,456 BTC".
+                    match = re.match(
+                        r"^Converted [0-9,\.]+ [A-Z]+ to "
+                        + r"(?P<change>[0-9,\.]+) (?P<coin>[A-Z]+)$",
+                        remark,
+                    )
+                    assert match
+
+                    _convert_change = match.group("change").replace(",", ".")
                     convert_change = misc.force_decimal(_convert_change)
-                    convert_coin = remark_target_parts[1]
+                    convert_coin = match.group("coin")
 
                     eur_total = misc.force_decimal(_eur_total)
                     convert_eur_spot = eur_total / convert_change
