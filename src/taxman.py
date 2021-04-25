@@ -19,6 +19,7 @@ import datetime
 import decimal
 import logging
 from pathlib import Path
+from typing import Type
 
 import balance_queue
 import config
@@ -47,7 +48,11 @@ class Taxman:
             raise NotImplementedError(f"Unable to evaluate taxation for {country=}.")
 
         if config.PRINCIPLE == core.Principle.FIFO:
-            self.BalanceType = balance_queue.BalanceQueue
+            # Explicity define type for BalanceType on first declaration
+            # to avoid mypy errors.
+            self.BalanceType: Type[
+                balance_queue.BalanceQueue
+            ] = balance_queue.BalanceFIFOQueue
         elif config.PRINCIPLE == core.Principle.LIFO:
             self.BalanceType = balance_queue.BalanceLIFOQueue
         else:
@@ -81,21 +86,23 @@ class Taxman:
             elif isinstance(op, transaction.Buy):
                 balance.put(op)
             elif isinstance(op, transaction.Sell):
-                sold_coins = balance.sell(op.change)
-                if sold_coins is None:
-                    # Queue ran out of items to sell...
+                sold_coins, unsold_coins = balance.sell(op.change)
+                if unsold_coins:
+                    # Queue ran out of items to sell and not all coins
+                    # could be sold.
                     if coin == config.FIAT:
-                        # ...this is OK for fiat currencies (not taxable)
+                        # This is OK for the own fiat currencies (not taxable).
                         continue
                     else:
-                        # ...but not for crypto coins (taxable)
                         log.error(
                             f"{op.file_path.name}: Line {op.line}: "
                             f"Not enough {coin} in queue to sell "
                             f"(transaction from {op.utc_time} "
                             f"on {op.platform})\n"
-                            "\tIs your account statement missing "
-                            "any transactions?\n"
+                            "\tThis error occurs if your account statements "
+                            "have unmatched buy/sell positions.\n"
+                            "\tHave you added all your account statements "
+                            "of the last years?\n"
                             "\tThis error may also occur after deposits "
                             "from unknown sources.\n"
                         )
@@ -166,9 +173,8 @@ class Taxman:
         # Check that all relevant positions were considered.
         if balance.buffer_fee:
             log.warning(
-                "Balance has outstanding fees which were not considered: " "%s %s",
-                ", ".join(str(fee) for fee in balance.buffer_fee),
-                coin,
+                "Balance has outstanding fees which were not considered: "
+                f"{balance.buffer_fee} {coin}"
             )
 
         self.balances[coin] = balance
