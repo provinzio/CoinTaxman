@@ -139,7 +139,7 @@ class PriceData:
         base_asset: str,
         utc_time: datetime.datetime,
         quote_asset: str,
-        swapped_symbols: bool = False,
+        minutes_step: int = 5,
     ) -> decimal.Decimal:
         """Retrieve price from Coinbase Pro official REST API.
 
@@ -149,8 +149,8 @@ class PriceData:
             base_asset (str): Base asset.
             utc_time (datetime.datetime): Target time (time of the trade).
             quote_asset (str): Quote asset.
-            swapped_symbols (bool, optional): The function is run with swapped
-                                              asset symbols. Defaults to False.
+            minutes_step (int): Initial time offset for consecutive
+                                Coinbase Pro API requests. Defaults to 5.
 
         Returns:
             decimal.Decimal: Price of asset pair at target time
@@ -158,66 +158,65 @@ class PriceData:
         """
 
         root_url = "https://api.pro.coinbase.com"
-        symbol = f"{base_asset}-{quote_asset}"
-        startTime = misc.to_iso_timestamp(utc_time - datetime.timedelta(minutes=5))
-        endTime = misc.to_iso_timestamp(utc_time + datetime.timedelta(minutes=5))
-        sub_url = (
-            f"/products/{symbol}/candles?start={startTime}&end={endTime}&granularity=60"
+        pair = f"{base_asset}-{quote_asset}"
+
+        minutes_offset = 0
+        while minutes_offset < 120:
+            minutes_offset += minutes_step
+
+            start = misc.to_iso_timestamp(
+                utc_time - datetime.timedelta(minutes=minutes_offset)
+            )
+            end = misc.to_iso_timestamp(
+                utc_time + datetime.timedelta(minutes=minutes_offset)
+            )
+            params = f"start={start}&end={end}&granularity=60"
+            url = f"{root_url}/products/{pair}/candles?{params}"
+
+            log.debug("Calling %s", url)
+            log.debug(
+                f"Querying Coinbase Pro candles for {pair} at {utc_time} "
+                f"(offset={minutes_offset}m): Calling %s",
+                url,
+            )
+
+            response = requests.get(url)
+            response.raise_for_status()
+            data = json.loads(response.text)
+
+            # No candles within the time window
+            if len(data) == 0:
+                continue
+
+            # Find closest timestamp match
+            target_timestamp = misc.to_ms_timestamp(utc_time)
+            data_timestamps_ms = [int(float(d[0]) * 1000) for d in data]
+            data_timestamps_ms.reverse()  # bisect requires ascending order
+
+            closest_match_index = (
+                bisect.bisect_left(data_timestamps_ms, target_timestamp) - 1
+            )
+
+            # The desired timestamp is in the past
+            if closest_match_index == -1:
+                continue
+
+            # The desired timestamp is in the future
+            if closest_match_index == len(data_timestamps_ms) - 1:
+                continue
+
+            closest_match = data[closest_match_index]
+            open_price = misc.force_decimal(closest_match[3])
+            close_price = misc.force_decimal(closest_match[4])
+
+            return (open_price + close_price) / 2
+
+        log.warning(
+            f"Querying Coinbase Pro candles for {pair} at {utc_time}: "
+            f"Failed to find matching exchange rate. "
+            "Please create an Issue or PR."
         )
-        url = root_url + sub_url
-
-        log.debug("Calling %s", url)
-        response = requests.get(url)
-        data = json.loads(response.text)
-
-        # Some combinations do not exist (e.g. `TWTEUR`), but almost anything
-        # is paired with BTC. Calculate `TWTEUR` as `TWTBTC * BTCEUR`.
-        if isinstance(data, dict) and data.get("message") == "NotFound":
-            if quote_asset == "BTC" or base_asset == "BTC":
-                # If we are already comparing with BTC, we might have to swap
-                # the assets to generate the correct symbol.
-                # Check a last time, if we find the pair by changing the symbol
-                # order.
-                # If this does not help, we need to think of something else.
-                if swapped_symbols:
-                    raise RuntimeError(f"Can not retrieve {symbol=} from coinbase_pro")
-                # Changing the order of the assets require to invert the price.
-                log.debug("Getting price with swapped symbols...")
-                price = self.get_price(
-                    "coinbase_pro",
-                    quote_asset,
-                    utc_time,
-                    base_asset,
-                    swapped_symbols=True,
-                )
-                return misc.reciprocal(price)
-
-            btc = self.get_price("coinbase_pro", base_asset, utc_time, "BTC")
-            quote = self.get_price("coinbase_pro", "BTC", utc_time, quote_asset)
-            return btc * quote
-
-        response.raise_for_status()
-
-        if len(data) == 0:
-            log.warning("Coinbase Pro offers no price for `%s` at %s", symbol, utc_time)
-            return decimal.Decimal(0)
-
-        # Find closest timestamp match
-        target_timestamp = misc.to_ms_timestamp(utc_time)
-        data_timestamps_ms = [int(float(d[2]) * 1000) for d in data]
-        closest_match_index = (
-            bisect.bisect_left(data_timestamps_ms, target_timestamp) - 1
-        )
-
-        # Use item in the middle if no closest match found
-        if closest_match_index == -1:
-            closest_match_index = len(data) // 2
-
-        closest_match = data[closest_match_index]
-        open_price = misc.force_decimal(closest_match[3])
-        close_price = misc.force_decimal(closest_match[4])
-
-        return (open_price + close_price) / 2
+        return decimal.Decimal()
 
     @misc.delayed
     def _get_price_kraken(
