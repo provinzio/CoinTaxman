@@ -14,11 +14,12 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import abc
 import collections
 import dataclasses
 import decimal
 import logging
-from typing import Deque, Optional, Union
+from typing import Union
 
 import transaction
 
@@ -31,48 +32,111 @@ class BalancedOperation:
     sold: decimal.Decimal = decimal.Decimal()
 
 
-class BalanceQueue:
+class BalanceQueue(abc.ABC):
     def __init__(self) -> None:
-        self.queue: Deque[BalancedOperation] = collections.deque()
-        self.buffer_fee: list[decimal.Decimal] = []
+        self.queue: collections.deque[BalancedOperation] = collections.deque()
+        # Buffer fees which could not be directly set off
+        # with the current coins in the queue.
+        # This can happen if the exchange takes the fees before
+        # the buy/sell process.
+        self.buffer_fee = decimal.Decimal()
 
     def put(self, item: Union[transaction.Operation, BalancedOperation]) -> None:
+        """Put a new item in the queue and set off buffered fees.
+
+        Args:
+            item (Union[Operation, BalancedOperation])
+        """
+        if isinstance(item, transaction.Operation):
+            item = BalancedOperation(item)
+
+        if not isinstance(item, BalancedOperation):
+            raise ValueError
+
+        self._put(item)
+
+        # Remove fees which could not be set off before now.
+        if self.buffer_fee:
+            # Clear the buffer and remove the buffered fee from the queue.
+            fee, self.buffer_fee = self.buffer_fee, decimal.Decimal()
+            self.remove_fee(fee)
+
+    @abc.abstractmethod
+    def _put(self, bop: BalancedOperation) -> None:
         """Put a new item in the queue.
 
         Args:
             item (Union[Operation, BalancedOperation])
         """
-        if not isinstance(item, (transaction.Operation, BalancedOperation)):
-            raise ValueError
-        if isinstance(item, transaction.Operation):
-            item = BalancedOperation(item)
+        raise NotImplementedError
 
-        self._put(item)
-
-        # Fees which could not be removed from the queue because it was empty
-        # before.
-        buffer_fee = self.buffer_fee.copy()
-        self.buffer_fee = []
-        for fee in buffer_fee:
-            self.remove_fee(fee)
-
-    def get(self) -> Optional[BalancedOperation]:
+    @abc.abstractmethod
+    def get(self) -> BalancedOperation:
         """Get an item from the queue.
 
         Returns:
             BalancedOperation
-            ...or None, if the queue ran out of items to sell.
         """
-        return self._get()
+        raise NotImplementedError
 
-    def _put(self, bop: BalancedOperation) -> None:
-        self.queue.append(bop)
+    @abc.abstractmethod
+    def peek(self) -> BalancedOperation:
+        """Peek at the next item in the queue.
 
-    def _get(self) -> Optional[BalancedOperation]:
-        try:
-            return self.queue.popleft()
-        except IndexError:
-            return None
+        Returns:
+            BalancedOperation
+        """
+        raise NotImplementedError
+
+    def sell(
+        self,
+        change: decimal.Decimal,
+    ) -> tuple[list[transaction.SoldCoin], decimal.Decimal]:
+        """Sell/remove as many coins as possible from the queue.
+
+        Depending on the QueueType, the coins will be removed FIFO or LIFO.
+
+        Args:
+            change (decimal.Decimal): Amount of sold coins which will be removed
+                from the queue.
+
+        Returns:
+          - list[transaction.SoldCoin]: List of specific coins which were
+                (depending on the tax regulation) sold in the transaction.
+          - decimal.Decimal: Amount of change which could not be removed
+                because the queue ran out of coins to sell.
+        """
+        sold_coins: list[transaction.SoldCoin] = []
+
+        while self.queue and change > 0:
+            # Look at the next coin in the queue.
+            bop = self.peek()
+
+            # Calculate the amount of coins, which are not sold yet.
+            not_sold = bop.op.change - bop.sold
+            assert not_sold > 0
+
+            if not_sold > change:
+                # There are more coins left than change.
+                # Update the sold value,
+                bop.sold += change
+                # keep track of the sold amount and
+                sold_coins.append(transaction.SoldCoin(bop.op, change))
+                # Set the change to 0.
+                change = decimal.Decimal()
+                break
+
+            else:  # change >= not_sold
+                # The change is higher than or equal to the (left over) coin.
+                # Update the left over change,
+                change -= not_sold
+                # remove the fully sold coin from the queue and
+                self.get()
+                # keep track of the sold amount.
+                sold_coins.append(transaction.SoldCoin(bop.op, not_sold))
+
+        assert change >= 0
+        return sold_coins, change
 
     def remove_fee(self, fee: decimal.Decimal) -> None:
         """Remove fee from the last added transaction.
@@ -80,67 +144,60 @@ class BalanceQueue:
         Args:
             fee: decimal.Decimal
         """
-        while True:
-            try:
-                bop: BalancedOperation = self.queue.pop()
-            except IndexError:
-                # Not enough coins in queue to remove fee.
-                # This can happen if the exchange takes the fees before
-                # the buy/sell process.
-                # Buffer the fees for the next put action.
-                self.buffer_fee.append(fee)
-                break
+        _, left_over_fee = self.sell(fee)
+        if left_over_fee:
+            # Not enough coins in queue to remove fee.
+            # Buffer the fee for next time.
+            self.buffer_fee += left_over_fee
 
-            not_sold = bop.op.change - bop.sold
-            assert not_sold > 0
 
-            if not_sold >= fee:
-                bop.sold += fee
-                self.queue.append(bop)
-                break
-            else:
-                fee -= not_sold
-
-    def sell(self, change: decimal.Decimal) -> Optional[list[transaction.SoldCoin]]:
-        """Sell/remove coins from the queue, returning the sold coins.
-
-        Depending on the QueueType, the coins will be removed FIFO or LIFO.
+class BalanceFIFOQueue(BalanceQueue):
+    def _put(self, bop: BalancedOperation) -> None:
+        """Put a new item in the queue.
 
         Args:
-            change (decimal.Decimal): Amount of sold coins which will be removed
-                            from the queue.
+            item (Union[Operation, BalancedOperation])
+        """
+        self.queue.append(bop)
+
+    def get(self) -> BalancedOperation:
+        """Get an item from the queue.
 
         Returns:
-            list[SoldCoin]: List of specific coins which were (depending on
-                            the tax regulation) sold in the transaction.
-            ...or None, if the queue ran out of items to sell.
+            BalancedOperation
         """
-        assert change > 0
-        sold_coins: list[transaction.SoldCoin] = []
-        while change > 0:
-            bop: Optional[BalancedOperation] = self.get()
+        return self.queue.popleft()
 
-            if bop is None:
-                return None
+    def peek(self) -> BalancedOperation:
+        """Peek at the next item in the queue.
 
-            not_sold = bop.op.change - bop.sold
-            assert not_sold > 0
-
-            if not_sold > change:
-                bop.sold += change
-                self.queue.append(bop)
-                sold_coins.append(transaction.SoldCoin(bop.op, change))
-                break
-            else:
-                change -= not_sold
-                sold_coins.append(transaction.SoldCoin(bop.op, not_sold))
-
-        return sold_coins
+        Returns:
+            BalancedOperation
+        """
+        return self.queue[0]
 
 
 class BalanceLIFOQueue(BalanceQueue):
-    def _get(self) -> Optional[BalancedOperation]:
-        try:
-            return self.queue.pop()
-        except IndexError:
-            return None
+    def _put(self, bop: BalancedOperation) -> None:
+        """Put a new item in the queue.
+
+        Args:
+            item (Union[Operation, BalancedOperation])
+        """
+        self.queue.append(bop)
+
+    def get(self) -> BalancedOperation:
+        """Get an item from the queue.
+
+        Returns:
+            BalancedOperation
+        """
+        return self.queue.pop()
+
+    def peek(self) -> BalancedOperation:
+        """Peek at the next item in the queue.
+
+        Returns:
+            BalancedOperation
+        """
+        return self.queue[-1]
