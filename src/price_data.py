@@ -97,7 +97,7 @@ class PriceData:
             and data.get("code") == -1121
             and data.get("msg") == "Invalid symbol."
         ):
-            if quote_asset == "BTC" or base_asset == "BTC":
+            if quote_asset == "BTC":
                 # If we are already comparing with BTC, we might have to swap
                 # the assets to generate the correct symbol.
                 # Check a last time, if we find the pair by changing the symbol
