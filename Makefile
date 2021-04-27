@@ -30,7 +30,7 @@ install:
 	python -m pip install --upgrade pip
 	pip install -r requirements.txt -r requirements-dev.txt
 
-# Setup virtuel environment
+# Setup virtual environment
 venv:
 	python -m venv .pyenv
 	.pyenv\Scripts\activate && make install	

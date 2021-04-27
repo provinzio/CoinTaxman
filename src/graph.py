@@ -55,21 +55,21 @@ class PricePath:
         allpairs.sort(key=lambda x: x[3])
 
         for base, quote, exchange, symbol in allpairs:
-            self.addVertex(base)
-            self.addVertex(quote)
-            self.addEdge(
+            self.add_Vertex(base)
+            self.add_Vertex(quote)
+            self.add_Edge(
                 base, quote, {"exchange": exchange, "symbol": symbol, "inverted": False}
             )
-            self.addEdge(
+            self.add_Edge(
                 quote, base, {"exchange": exchange, "symbol": symbol, "inverted": True}
             )
 
     def edges(self):
-        return self.findedges()
+        return self.find_edges()
 
     # Find the distinct list of edges
 
-    def findedges(self):
+    def find_edges(self):
         edgename = []
         for vrtx in self.gdict:
             for nxtvrtx in self.gdict[vrtx]:
@@ -77,21 +77,21 @@ class PricePath:
                     edgename.append({vrtx, nxtvrtx})
         return edgename
 
-    def getVertices(self):
+    def get_Vertices(self):
         return list(self.gdict.keys())
 
     # Add the vertex as a key
-    def addVertex(self, vrtx):
+    def add_Vertex(self, vrtx):
         if vrtx not in self.gdict:
             self.gdict[vrtx] = []
 
-    def addEdge(self, vrtx1, vrtx2, data):
+    def add_Edge(self, vrtx1, vrtx2, data):
         if vrtx1 in self.gdict:
             self.gdict[vrtx1].append((vrtx2, data))
         else:
             self.gdict[vrtx1] = [vrtx2]
 
-    def _getpath(self, start, stop, maxdepth, depth=0):
+    def _get_path(self, start, stop, maxdepth, depth=0):
         """
         a recursive function for finding all possible paths between to edges
         """
@@ -103,7 +103,7 @@ class PricePath:
                 elif edge[0] == stop:
                     paths.append(edge)
                 else:
-                    path = self._getpath(edge[0], stop, maxdepth, depth=depth + 1)
+                    path = self._get_path(edge[0], stop, maxdepth, depth=depth + 1)
                     if len(path) and path is not None:
                         for p in path:
                             if p[0] == stop:
@@ -116,7 +116,7 @@ class PricePath:
         ke = "-".join(key)
         self.priority[ke] += value
 
-    def getpath(
+    def get_path(
         self, start, stop, starttime=0, stoptime=0, preferredexchange=None, maxdepth=3
     ):
         def comb_sort_key(path):
@@ -129,27 +129,28 @@ class PricePath:
             - volume (if known) -> 1/sum(avg_vol per pair)
             - volume (if not known) -> 1 -> always smaller if volume is known
             """
-            if preferredexchange:
-                # prioritze pairs with the preferred exchange
-                volume = 1
-                volumenew = 0
-                priority = self.priority.get(
-                    "-".join([a[1]["symbol"] for a in path]), 0
-                )
-                xl = (a if (a := check_cache(pair)) else None for pair in path)
-                for c in xl:
-                    if c and c[0]:
-                        if c[1][1]["stoptime"] == 0:
-                            break
-                        elif c[1][1]["avg_vol"] != 0:
-                            # is very much off because volume is not in the same
-                            # currency something for later
-                            volumenew += c[1][1]["avg_vol"]
-
-                    else:
+            # prioritze pairs with the preferred exchange
+            volume = 1
+            volumenew = 0
+            priority = self.priority.get("-".join([a[1]["symbol"] for a in path]), 0)
+            pathlis = (a if (a := check_cache(pair)) else None for pair in path)
+            for possiblepath in pathlis:
+                if possiblepath and possiblepath[0]:
+                    if possiblepath[1][1]["stoptime"] == 0:
                         break
+                    elif possiblepath[1][1]["avg_vol"] != 0:
+                        # is very much off because volume is not in the same
+                        # currency something for later
+                        volumenew += possiblepath[1][1]["avg_vol"]
+
                 else:
-                    volume = 1 / volumenew
+                    break
+            else:
+                volume = 1 / volumenew
+            temppriority = volume + priority
+
+            if preferredexchange:
+
                 return (
                     len(path)
                     + sum(
@@ -158,11 +159,10 @@ class PricePath:
                             for pair in path
                         ]
                     )
-                    + volume
-                    + priority
+                    + temppriority
                 )
             else:
-                return len(path)
+                return len(path) + temppriority
 
         def check_cache(pair):
             """
@@ -251,7 +251,7 @@ class PricePath:
             return (globalstarttime, globalstoptime), path
 
         # get all possible paths which are no longer than 4 pairs long
-        paths = self._getpath(start, stop, maxdepth)
+        paths = self._get_path(start, stop, maxdepth)
         # sort by path length to get minimal conversion chain to reduce error
         paths = sorted(paths, key=comb_sort_key)
         # get timeframe in which a path is viable
@@ -279,7 +279,7 @@ if __name__ == "__main__":
     start = "IOTA"
     to = "EUR"
     preferredexchange = "binance"
-    path = g.getpath(start, to, maxdepth=2, preferredexchange=preferredexchange)
+    path = g.get_path(start, to, maxdepth=2, preferredexchange=preferredexchange)
     # debug only in actual use we would iterate over
     # the path object fetching new paths as needed
     path = list(path)
