@@ -516,7 +516,7 @@ class PriceData:
         assert exchange.has["fetchOHLCV"]
 
         # time.sleep wants seconds
-        time.sleep(exchange.rateLimit / 1000)
+        self.path.RateLimit.limit(exchange)
 
         # Get candles 2 min before and after start/stop.
         since = start - 2 * 60 * 1000
@@ -607,7 +607,7 @@ class PriceData:
             log.info(
                 f"getting data from {str(firststr)} to {str(laststr)} for {str(coin)}"
             )
-            path = self.path.getpath(
+            path = self.path.get_path(
                 coin, reference_coin, first, last, preferredexchange=preferredexchange
             )
             for p in path:

@@ -43,3 +43,4 @@ ACCOUNT_STATMENTS_PATH = Path(BASE_PATH, "account_statements")
 DATA_PATH = Path(BASE_PATH, "data")
 EXPORT_PATH = Path(BASE_PATH, "export")
 FIAT = FIAT_CLASS.name  # Convert to string.
+EXCHANGES = ["binance", "coinbasepro"]

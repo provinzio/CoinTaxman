@@ -1,11 +1,27 @@
 import collections
 import logging
 import time
+import config
 from typing import Optional
 
 import ccxt
 
 log = logging.getLogger(__name__)
+
+
+class RateLimit:
+    exchangedict = {}
+
+    def limit(self, exchange):
+        if lastcall := self.exchangedict.get(exchange.id):
+            now = time.time()
+            delay = exchange.rateLimit / 1000
+            timepassed = now - lastcall
+            if (waitfor := delay - timepassed) > 0:
+                time.sleep(waitfor)
+            self.exchangedict[exchange.id] = time.time()
+        else:
+            self.exchangedict[exchange.id] = time.time()
 
 
 class PricePath:
@@ -16,7 +32,7 @@ class PricePath:
         cache: Optional[dict] = None,
     ):
         if exchanges is None:
-            exchanges = []
+            exchanges = list(config.EXCHANGES)
         if gdict is None:
             gdict = {}
         if cache is None:
@@ -24,10 +40,11 @@ class PricePath:
 
         self.gdict = gdict
         self.cache = cache
+        self.RateLimit = RateLimit()
 
         # Saves the priority for a certain path so that bad paths can be skipped.
         self.priority: collections.defaultdict[str, int] = collections.defaultdict(int)
-        allpairs: list[tuple[str, str, str, str]] = []
+        allpairs: list(tuple[str, str, str, str]) = []
 
         for exchange_id in exchanges:
             exchange_class = getattr(ccxt, exchange_id)
@@ -89,15 +106,17 @@ class PricePath:
         if vrtx1 in self.gdict:
             self.gdict[vrtx1].append((vrtx2, data))
         else:
-            self.gdict[vrtx1] = [vrtx2]
+            self.gdict[vrtx1] = [
+                (vrtx2, data),
+            ]
 
     def _get_path(self, start, stop, maxdepth, depth=0):
         """
-        a recursive function for finding all possible paths between to edges
+        a recursive function for finding all possible paths between to vertices
         """
         paths = []
         if (edges := self.gdict.get(start)) and maxdepth > depth:
-            for edge in edges:
+            for edge in edges:  # list of edges starting from the start vertice
                 if depth == 0 and edge[0] == stop:
                     paths.append([edge])
                 elif edge[0] == stop:
@@ -203,9 +222,8 @@ class PricePath:
                 if not cached:
                     exchange_class = getattr(ccxt, path[i][1]["exchange"])
                     exchange = exchange_class()
-                    # TODO maybe a more elaborate ratelimit wich removes execution
-                    # time to from the ratelimit
-                    time.sleep(exchange.rateLimit / 1000)
+
+                    self.RateLimit.limit(exchange)
                     timeframeexchange = exchange.timeframes.get("1w")
                     if (
                         timeframeexchange
