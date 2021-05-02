@@ -363,6 +363,43 @@ class Book:
 
         self._read_kraken_ledgers(file_path)
 
+    def _read_bitpanda_pro_trades(self, file_path: Path) -> None:
+        """
+        Read trade statement from Bitpanda Pro
+        """
+
+        platform = "bitpanda_pro"
+        with open(file_path, encoding="utf8") as f:
+            reader = csv.reader(f)
+
+            try:
+                # should be true in any case, since this has been dispatched here
+                line = next(reader)
+                assert line[0] == "Disclaimer: All data is without guarantee, errors and changes are reserved."
+                line = next(reader)
+                # for transactions, it's currently written "id" (small)
+                assert line[0].startswith("Account ID:")
+            except AssertionError as e:
+                msg = (
+                    "Unable to read Bitpanda file: Unexpected contents. "
+                    f"Skipping {file_path}."
+                )
+                e.args += (msg,)
+                log.exception(e)
+                return
+            line = next(reader)
+            # empty line - still keep this check in case Bitpanda changes the transaction file to match the
+            # trade header (casing)
+            if not line:
+                log.warning(f"{file_path} looks like a Bitpanda transaction file. Skipping.")
+                return
+            elif line[0] != "Bitpanda Pro trade history":
+                log.warning(f"{file_path} doesn't look like a Bitpanda trade file. Skipping.")
+                return
+
+            # Order ID,Trade ID,Type,Market,Amount,Amount Currency,Price,Price Currency,Fee,Fee Currency,Time (UTC)
+            return
+
     def detect_exchange(self, file_path: Path) -> Optional[str]:
         if file_path.suffix == ".csv":
             with open(file_path, encoding="utf8") as f:
@@ -423,6 +460,9 @@ class Book:
                     "misc",
                     "ledgers",
                 ],
+                "bitpanda_pro_trades": [
+                    "Disclaimer: All data is without guarantee, errors and changes are reserved."
+                ]
             }
             for exchange, expected in expected_headers.items():
                 if header == expected:
