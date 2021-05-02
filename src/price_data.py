@@ -22,7 +22,7 @@ import logging
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Optional, Union
 
 import requests
 
@@ -155,7 +155,7 @@ class PriceData:
             decimal.Decimal: Price of the asset pair.
         """
 
-        # other combination should not occur, since I enter them within thetrade
+        # other combination should not occur, since I enter them within the trade
         # other pairs need to be tested. Also, they might need different behavior,
         # if there isn't a matching endpoint
         assert base_asset == "BEST" and quote_asset == "EUR"
@@ -172,7 +172,7 @@ class PriceData:
             begin = utc_time - datetime.timedelta(minutes=t)
 
             # https://github.com/python/mypy/issues/3176
-            params: Dict[str, Union[int, str]] = {
+            params: dict[str, Union[int, str]] = {
                 "unit": "MINUTES",
                 "period": t,
                 "from": begin.isoformat(),
