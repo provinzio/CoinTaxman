@@ -22,7 +22,7 @@ import logging
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Dict, Optional, Union
 
 import requests
 
@@ -163,7 +163,9 @@ class PriceData:
         for t in timeframes:
             end = utc_time
             begin = utc_time - datetime.timedelta(minutes=t)
-            params = {
+
+            # https://github.com/python/mypy/issues/3176
+            params: Dict[str, Union[int, str]] = {
                 "unit": "MINUTES",
                 "period": t,
                 "from": begin.isoformat(),
