@@ -435,21 +435,9 @@ class Book:
                     operation == "SELL" and fee_currency == price_currency) or (
                     operation == "BUY" and fee_currency == amount_currency)
 
-                # TODO: Need getpricedata for BEST
-                if fee_currency != "BEST":
-                    self.append_operation(
-                        "Fee", utc_time, platform,  misc.force_decimal(fee), fee_currency, row, file_path
-                    )
-                pass
-                # self.append_operation(
-                #     operation, utc_time, platform, change, coin, row, file_path
-                #
-
-                # if eur_fee:
-                #     self.append_operation(
-                #         "Fee", utc_time, platform, eur_fee, "EUR", row, file_path
-                #     )
-            return
+                self.append_operation(
+                    "Fee", utc_time, platform,  misc.force_decimal(fee), fee_currency, row, file_path
+                )
 
     def detect_exchange(self, file_path: Path) -> Optional[str]:
         if file_path.suffix == ".csv":
