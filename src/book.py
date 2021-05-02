@@ -404,7 +404,7 @@ class Book:
                 trade_pair,
                 amount,
                 amount_currency,
-                price,
+                _price,
                 price_currency,
                 fee,
                 fee_currency,
@@ -429,6 +429,7 @@ class Book:
                 # only this is supported for now
                 assert price_currency == "EUR"
                 # Save price in our local database for later.
+                price = misc.force_decimal(_price)
                 self.price_data.set_price_db(platform, coin, "EUR", utc_time, price)
                 assert fee_currency == "BEST" or (
                     operation == "SELL" and fee_currency == price_currency) or (
