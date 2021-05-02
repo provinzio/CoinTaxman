@@ -430,23 +430,19 @@ class Book:
                 assert price_currency == "EUR"
                 # Save price in our local database for later.
                 self.price_data.set_price_db(platform, coin, "EUR", utc_time, price)
+                assert fee_currency == "BEST" or (
+                    operation == "SELL" and fee_currency == price_currency) or (
+                    operation == "BUY" and fee_currency == amount_currency)
 
+                # TODO: Need getpricedata for BEST
+                if fee_currency != "BEST":
+                    self.append_operation(
+                        "Fee", utc_time, platform,  misc.force_decimal(fee), fee_currency, row, file_path
+                    )
                 pass
                 # self.append_operation(
                 #     operation, utc_time, platform, change, coin, row, file_path
-                # )
-
-
-                # if operation == "Sell":
-                #     assert isinstance(eur_subtotal, decimal.Decimal)
-                #     self.append_operation(
-                #         "Buy", utc_time, platform, eur_subtotal, "EUR", row, file_path
-                #     )
-                # elif operation == "Buy":
-                #     assert isinstance(eur_subtotal, decimal.Decimal)
-                #     self.append_operation(
-                #         "Sell", utc_time, platform, eur_subtotal, "EUR", row, file_path
-                #     )
+                #
 
                 # if eur_fee:
                 #     self.append_operation(
