@@ -382,8 +382,7 @@ class Book:
             line = next(reader)
             if line[0].startswith("Account id :"):
                 log.warning(
-                    f"{file_path} looks like a Bitpanda transaction file."
-                    " Skipping."
+                    f"{file_path} looks like a Bitpanda transaction file. Skipping."
                 )
                 return
 
@@ -404,8 +403,17 @@ class Book:
 
             line = next(reader)
             assert line == [
-                "Order ID", "Trade ID", "Type", "Market", "Amount", "Amount Currency",
-                "Price", "Price Currency", "Fee", "Fee Currency", "Time (UTC)"
+                "Order ID",
+                "Trade ID",
+                "Type",
+                "Market",
+                "Amount",
+                "Amount Currency",
+                "Price",
+                "Price Currency",
+                "Fee",
+                "Fee Currency",
+                "Time (UTC)",
             ]
 
             for (
@@ -419,7 +427,7 @@ class Book:
                 price_currency,
                 fee,
                 fee_currency,
-                _utc_time
+                _utc_time,
             ) in reader:
                 row = reader.line_num
                 # make RFC3339 timestamp ISO 8601 parseable
@@ -443,13 +451,7 @@ class Book:
 
                 # Add the BUY or SELL operation
                 self.append_operation(
-                    operation.title(),
-                    utc_time,
-                    platform,
-                    change,
-                    coin,
-                    row,
-                    file_path
+                    operation.title(), utc_time, platform, change, coin, row, file_path
                 )
 
                 # only this is supported for now
@@ -462,9 +464,11 @@ class Book:
                 self.price_data.set_price_db(platform, coin, "EUR", utc_time, price)
 
                 # sanity checks
-                assert fee_currency == "BEST" or (
-                    operation == "SELL" and fee_currency == price_currency) or (
-                    operation == "BUY" and fee_currency == amount_currency)
+                assert (
+                    fee_currency == "BEST"
+                    or (operation == "SELL" and fee_currency == price_currency)
+                    or (operation == "BUY" and fee_currency == amount_currency)
+                )
 
                 self.append_operation(
                     "Fee",
@@ -473,7 +477,7 @@ class Book:
                     misc.force_decimal(fee),
                     fee_currency,
                     row,
-                    file_path
+                    file_path,
                 )
 
     def detect_exchange(self, file_path: Path) -> Optional[str]:
@@ -539,7 +543,7 @@ class Book:
                 "bitpanda_pro_trades": [
                     "Disclaimer: All data is without guarantee,"
                     " errors and changes are reserved."
-                ]
+                ],
             }
             for exchange, expected in expected_headers.items():
                 if header == expected:

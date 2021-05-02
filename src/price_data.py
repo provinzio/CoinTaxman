@@ -135,10 +135,7 @@ class PriceData:
 
     @misc.delayed
     def _get_price_bitpanda_pro(
-        self,
-        base_asset: str,
-        utc_time: datetime.datetime,
-        quote_asset: str
+        self, base_asset: str, utc_time: datetime.datetime, quote_asset: str
     ) -> decimal.Decimal:
         """
         Retrieve the price from the Bitpanda Pro API.
@@ -170,7 +167,7 @@ class PriceData:
                 "unit": "MINUTES",
                 "period": t,
                 "from": begin.isoformat(),
-                "to": end.isoformat()
+                "to": end.isoformat(),
             }
             r = requests.get(baseurl, params=params)
 
