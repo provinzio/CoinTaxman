@@ -394,7 +394,64 @@ class Book:
                 log.warning(f"{file_path} doesn't look like a Bitpanda trade file. Skipping.")
                 return
 
-            # Order ID,Trade ID,Type,Market,Amount,Amount Currency,Price,Price Currency,Fee,Fee Currency,Time (UTC)
+            line = next(reader)
+            assert line == ["Order ID","Trade ID","Type","Market","Amount","Amount Currency","Price","Price Currency","Fee","Fee Currency","Time (UTC)"]
+
+            for (
+                order_id,
+                trace_id,
+                operation,
+                trade_pair,
+                amount,
+                amount_currency,
+                price,
+                price_currency,
+                fee,
+                fee_currency,
+                _utc_time
+            ) in reader:
+                row = reader.line_num
+                # make RFC3339 timestamp ISO 8601 parseable
+                if _utc_time[-1] == "Z":
+                    _utc_time = _utc_time[:-1] + "+00:00"
+
+                utc_time = datetime.datetime.fromisoformat(_utc_time)
+                # not needed, already taken care of
+                #utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
+
+                # trade pair is of form e.g. BTC_EUR
+                assert [amount_currency, price_currency] == trade_pair.split("_")
+
+                coin = amount_currency
+                change = misc.force_decimal(amount)
+                self.append_operation(operation.title(), utc_time, platform, change, coin, row, file_path)
+
+                # only this is supported for now
+                assert price_currency == "EUR"
+                # Save price in our local database for later.
+                self.price_data.set_price_db(platform, coin, "EUR", utc_time, price)
+
+                pass
+                # self.append_operation(
+                #     operation, utc_time, platform, change, coin, row, file_path
+                # )
+
+
+                # if operation == "Sell":
+                #     assert isinstance(eur_subtotal, decimal.Decimal)
+                #     self.append_operation(
+                #         "Buy", utc_time, platform, eur_subtotal, "EUR", row, file_path
+                #     )
+                # elif operation == "Buy":
+                #     assert isinstance(eur_subtotal, decimal.Decimal)
+                #     self.append_operation(
+                #         "Sell", utc_time, platform, eur_subtotal, "EUR", row, file_path
+                #     )
+
+                # if eur_fee:
+                #     self.append_operation(
+                #         "Fee", utc_time, platform, eur_fee, "EUR", row, file_path
+                #     )
             return
 
     def detect_exchange(self, file_path: Path) -> Optional[str]:
