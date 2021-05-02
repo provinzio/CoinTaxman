@@ -372,21 +372,18 @@ class Book:
         with open(file_path, encoding="utf8") as f:
             reader = csv.reader(f)
 
-            try:
-                # should be true in any case, since this has been dispatched here
-                line = next(reader)
-                assert line[0] == "Disclaimer: All data is without guarantee, errors and changes are reserved."
-                line = next(reader)
-                # for transactions, it's currently written "id" (small)
-                assert line[0].startswith("Account ID:")
-            except AssertionError as e:
-                msg = (
-                    "Unable to read Bitpanda file: Unexpected contents. "
-                    f"Skipping {file_path}."
-                )
-                e.args += (msg,)
-                log.exception(e)
+            # should be true in any case, since this has been dispatched here
+            # so simply skip
+            line = next(reader)
+            #assert line[0] == "Disclaimer: All data is without guarantee, errors and changes are reserved."
+
+            # for transactions, it's currently written "id" (small)
+            line = next(reader)
+            if line[0].startswith("Account id :"):
+                log.warning(f"{file_path} looks like a Bitpanda transaction file. Skipping.")
                 return
+
+            assert line[0].startswith("Account ID:")
             line = next(reader)
             # empty line - still keep this check in case Bitpanda changes the transaction file to match the
             # trade header (casing)
