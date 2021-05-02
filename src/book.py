@@ -375,31 +375,42 @@ class Book:
             # should be true in any case, since this has been dispatched here
             # so simply skip
             line = next(reader)
-            #assert line[0] == "Disclaimer: All data is without guarantee, errors and changes are reserved."
+            # assert line[0] == \
+            # "Disclaimer: ..."
 
             # for transactions, it's currently written "id" (small)
             line = next(reader)
             if line[0].startswith("Account id :"):
-                log.warning(f"{file_path} looks like a Bitpanda transaction file. Skipping.")
+                log.warning(
+                    f"{file_path} looks like a Bitpanda transaction file."
+                    " Skipping."
+                )
                 return
 
             assert line[0].startswith("Account ID:")
             line = next(reader)
-            # empty line - still keep this check in case Bitpanda changes the transaction file to match the
-            # trade header (casing)
+            # empty line - still keep this check in case Bitpanda changes the
+            # transaction file to match the trade header (casing)
             if not line:
-                log.warning(f"{file_path} looks like a Bitpanda transaction file. Skipping.")
+                log.warning(
+                    f"{file_path} looks like a Bitpanda transaction file. Skipping."
+                )
                 return
             elif line[0] != "Bitpanda Pro trade history":
-                log.warning(f"{file_path} doesn't look like a Bitpanda trade file. Skipping.")
+                log.warning(
+                    f"{file_path} doesn't look like a Bitpanda trade file. Skipping."
+                )
                 return
 
             line = next(reader)
-            assert line == ["Order ID","Trade ID","Type","Market","Amount","Amount Currency","Price","Price Currency","Fee","Fee Currency","Time (UTC)"]
+            assert line == [
+                "Order ID", "Trade ID", "Type", "Market", "Amount", "Amount Currency",
+                "Price", "Price Currency", "Fee", "Fee Currency", "Time (UTC)"
+            ]
 
             for (
-                order_id,
-                trace_id,
+                _order_id,
+                _trace_id,
                 operation,
                 trade_pair,
                 amount,
@@ -417,7 +428,7 @@ class Book:
 
                 utc_time = datetime.datetime.fromisoformat(_utc_time)
                 # not needed, already taken care of
-                #utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
+                # utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
 
                 # trade pair is of form e.g. BTC_EUR
                 assert [amount_currency, price_currency] == trade_pair.split("_")
@@ -431,7 +442,15 @@ class Book:
                 assert change > 0
 
                 # Add the BUY or SELL operation
-                self.append_operation(operation.title(), utc_time, platform, change, coin, row, file_path)
+                self.append_operation(
+                    operation.title(),
+                    utc_time,
+                    platform,
+                    change,
+                    coin,
+                    row,
+                    file_path
+                )
 
                 # only this is supported for now
                 # this is because _get_price_bitpanda_pro also needs to handle
@@ -448,7 +467,13 @@ class Book:
                     operation == "BUY" and fee_currency == amount_currency)
 
                 self.append_operation(
-                    "Fee", utc_time, platform,  misc.force_decimal(fee), fee_currency, row, file_path
+                    "Fee",
+                    utc_time,
+                    platform,
+                    misc.force_decimal(fee),
+                    fee_currency,
+                    row,
+                    file_path
                 )
 
     def detect_exchange(self, file_path: Path) -> Optional[str]:
@@ -512,7 +537,8 @@ class Book:
                     "ledgers",
                 ],
                 "bitpanda_pro_trades": [
-                    "Disclaimer: All data is without guarantee, errors and changes are reserved."
+                    "Disclaimer: All data is without guarantee,"
+                    " errors and changes are reserved."
                 ]
             }
             for exchange, expected in expected_headers.items():

@@ -151,9 +151,9 @@ class PriceData:
         Currently, only BEST_EUR is tested.
         """
 
-        # other combination should not occur, since I enter them within the trade
-        # other pairs need to be tested. Also, they might need different behavior, if there isn't a
-        # matching endpoint
+        # other combination should not occur, since I enter them within thetrade
+        # other pairs need to be tested. Also, they might need different behavior,
+        # if there isn't a matching endpoint
         assert base_asset == "BEST" and quote_asset == "EUR"
         baseurl = "https://api.exchange.bitpanda.com/public/v1/candlesticks/BEST_EUR"
 
@@ -166,7 +166,12 @@ class PriceData:
         for t in timeframes:
             end = utc_time
             begin = utc_time - datetime.timedelta(minutes=t)
-            params = {"unit": "MINUTES", "period": t, "from": begin.isoformat(), "to": end.isoformat()}
+            params = {
+                "unit": "MINUTES",
+                "period": t,
+                "from": begin.isoformat(),
+                "to": end.isoformat()
+            }
             r = requests.get(baseurl, params=params)
 
             assert r.status_code == 200
@@ -177,11 +182,14 @@ class PriceData:
 
         # if we didn't get data for the 30 minute frame, give up?
         assert data
-        # There actually shouldn't be more than one entry if period and granularity are the same?
+        # There actually shouldn't be more than one entry if period and granularity are
+        # the same?
         assert len(data) == 1
 
         # simply take the average
-        return (misc.force_decimal(data[0]["high"]) + misc.force_decimal(data[0]["low"])) / 2
+        high = misc.force_decimal(data[0]["high"])
+        low = misc.force_decimal(data[0]["low"])
+        return (high + low) / 2
 
     @misc.delayed
     def _get_price_kraken(
