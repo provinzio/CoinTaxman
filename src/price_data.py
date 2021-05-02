@@ -134,6 +134,48 @@ class PriceData:
         return average_price
 
     @misc.delayed
+    def _get_price_bitpanda_pro(
+        self,
+        base_asset: str,
+        utc_time: datetime.datetime,
+        quote_asset: str
+    ) -> decimal.Decimal:
+        """
+        Retrieve the price from the Bitpanda Pro API.
+
+        This uses the "candlestricks" API endpoint.
+        It returns the highest and lowest price for the COIN in a given time frame.
+
+        Currently, only BEST_EUR is supported.
+        """
+
+        # other combination should not occur, since I enter them within the trade
+        assert base_asset == "BEST" and quote_asset == "EUR"
+        baseurl = "https://api.exchange.bitpanda.com/public/v1/candlesticks/BEST_EUR"
+
+        timeframes = [1, 5, 15, 30]
+
+        for t in timeframes:
+            end = utc_time
+            begin = utc_time - datetime.timedelta(minutes=t)
+            params = {"unit": "MINUTES", "period": t, "from": begin.isoformat(), "to": end.isoformat()}
+            r = requests.get(baseurl, params=params)
+
+            assert r.status_code == 200
+
+            data = r.json()
+            if data:
+                break
+
+        # if we didn't get data for the 30 minute frame, give up?
+        assert data
+        # There actually shouldn't be more than one entry if period and granularity are the same?
+        assert len(data) == 1
+
+        # simply take the average
+        return (misc.force_decimal(data[0]["high"]) + misc.force_decimal(data[0]["low"])) / 2
+
+    @misc.delayed
     def _get_price_kraken(
         self,
         base_asset: str,
