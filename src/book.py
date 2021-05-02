@@ -364,8 +364,10 @@ class Book:
         self._read_kraken_ledgers(file_path)
 
     def _read_bitpanda_pro_trades(self, file_path: Path) -> None:
-        """
-        Read trade statement from Bitpanda Pro.
+        """Reads a trade statement from Bitpanda Pro.
+
+        Args:
+            file_path (Path): Path to Bitpanda trade history.
         """
 
         platform = "bitpanda_pro"

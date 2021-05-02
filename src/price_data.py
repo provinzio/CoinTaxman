@@ -137,8 +137,7 @@ class PriceData:
     def _get_price_bitpanda_pro(
         self, base_asset: str, utc_time: datetime.datetime, quote_asset: str
     ) -> decimal.Decimal:
-        """
-        Retrieve the price from the Bitpanda Pro API.
+        """Retrieve the price from the Bitpanda Pro API.
 
         This uses the "candlestricks" API endpoint.
         It returns the highest and lowest price for the COIN in a given time frame.
@@ -146,6 +145,14 @@ class PriceData:
         Timeframe ends at the requested time.
 
         Currently, only BEST_EUR is tested.
+
+        Args:
+            base_asset (str): The currency to get the price for.
+            utc_time (datetime.datetime): Time of the trade to fetch the price for.
+            quote_asset (str): The currency for the price.
+
+        Returns:
+            decimal.Decimal: Price of the asset pair.
         """
 
         # other combination should not occur, since I enter them within thetrade
