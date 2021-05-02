@@ -44,7 +44,7 @@ class PricePath:
 
         # Saves the priority for a certain path so that bad paths can be skipped.
         self.priority: collections.defaultdict[str, int] = collections.defaultdict(int)
-        allpairs: list(tuple[str, str, str, str]) = []
+        allpairs: set(tuple[str, str, str, str]) = set()
 
         for exchange_id in exchanges:
             exchange_class = getattr(ccxt, exchange_id)
@@ -53,9 +53,11 @@ class PricePath:
             assert isinstance(markets, list)
 
             if exchange.has["fetchOHLCV"]:
-                allpairs.extend(
-                    [(i["base"], i["quote"], exchange_id, i["symbol"]) for i in markets]
-                )
+                toadd = [
+                    (i["base"], i["quote"], exchange_id, i["symbol"]) for i in markets
+                ]
+                for pair in toadd:
+                    allpairs.add(pair)
             else:
                 logging.warning(
                     f"{exchange.name} does not support fetch ohlcv. "
@@ -65,7 +67,8 @@ class PricePath:
         # Remove duplicate pairs.
         # TODO It might be faster to create it directly as set.
         #      Is it even necessary to convert it to a list?
-        allpairs = list(set(allpairs))
+        # allpairs = list(set(allpairs))
+        allpairs = list(allpairs)
         # print("Total Pairs to check:", len(allpairs))
 
         # Sorting by `symbol` to have the same result on every run due to the set.
