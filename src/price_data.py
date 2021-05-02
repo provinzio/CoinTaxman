@@ -146,15 +146,23 @@ class PriceData:
         This uses the "candlestricks" API endpoint.
         It returns the highest and lowest price for the COIN in a given time frame.
 
-        Currently, only BEST_EUR is supported.
+        Timeframe ends at the requested time.
+
+        Currently, only BEST_EUR is tested.
         """
 
         # other combination should not occur, since I enter them within the trade
+        # other pairs need to be tested. Also, they might need different behavior, if there isn't a
+        # matching endpoint
         assert base_asset == "BEST" and quote_asset == "EUR"
         baseurl = "https://api.exchange.bitpanda.com/public/v1/candlesticks/BEST_EUR"
 
+        # Bitpanda Pro only supports distinctive arguments for this, *not arbitrary*
         timeframes = [1, 5, 15, 30]
 
+        # get the smallest timeframe possible
+        # if there were no trades in the requested time frame, the
+        # returned data will be empty
         for t in timeframes:
             end = utc_time
             begin = utc_time - datetime.timedelta(minutes=t)

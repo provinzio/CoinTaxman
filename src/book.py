@@ -365,7 +365,7 @@ class Book:
 
     def _read_bitpanda_pro_trades(self, file_path: Path) -> None:
         """
-        Read trade statement from Bitpanda Pro
+        Read trade statement from Bitpanda Pro.
         """
 
         platform = "bitpanda_pro"
@@ -421,16 +421,28 @@ class Book:
 
                 # trade pair is of form e.g. BTC_EUR
                 assert [amount_currency, price_currency] == trade_pair.split("_")
+                # there shouldn't be any other types
+                assert operation == "BUY" or operation == "SELL"
 
                 coin = amount_currency
+                # always positive, regardless whether BUY or SELL
                 change = misc.force_decimal(amount)
+                # just to make sure it doesn't get changed some day
+                assert change > 0
+
+                # Add the BUY or SELL operation
                 self.append_operation(operation.title(), utc_time, platform, change, coin, row, file_path)
 
                 # only this is supported for now
+                # this is because _get_price_bitpanda_pro also needs to handle
+                # the foreign pairs
                 assert price_currency == "EUR"
+
                 # Save price in our local database for later.
                 price = misc.force_decimal(_price)
                 self.price_data.set_price_db(platform, coin, "EUR", utc_time, price)
+
+                # sanity checks
                 assert fee_currency == "BEST" or (
                     operation == "SELL" and fee_currency == price_currency) or (
                     operation == "BUY" and fee_currency == amount_currency)
