@@ -19,6 +19,7 @@ Pull Requests und Anfragen über Issues sind gerne gesehen (siehe `Key notes for
 
 ### Currently supported exchanges
 - [Binance](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-Binance)
+- [Bitpanda Pro](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-Bitpanda-Pro)
 - [coinbase](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-coinbase)
 - [Kraken](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-Kraken)
 
