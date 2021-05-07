@@ -492,6 +492,126 @@ class Book:
 
         self._read_kraken_ledgers(file_path)
 
+    def _read_bitpanda_pro_trades(self, file_path: Path) -> None:
+        """Reads a trade statement from Bitpanda Pro.
+
+        Args:
+            file_path (Path): Path to Bitpanda trade history.
+        """
+
+        platform = "bitpanda_pro"
+        with open(file_path, encoding="utf8") as f:
+            reader = csv.reader(f)
+
+            # skip header
+            line = next(reader)
+
+            line = next(reader)
+
+            transaction_file_warn = (
+                f"{file_path} looks like a Bitpanda transaction file."
+                " Skipping. Please download the trade history instead."
+            )
+
+            # for transactions, it's currently written "id" (small)
+            if line[0].startswith("Account id :"):
+                log.warning(transaction_file_warn)
+                return
+
+            assert line[0].startswith("Account ID:")
+            line = next(reader)
+            # empty line - still keep this check in case Bitpanda changes the
+            # transaction file to match the trade header (casing)
+            if not line:
+                log.warning(transaction_file_warn)
+                return
+
+            elif line[0] != "Bitpanda Pro trade history":
+                log.warning(
+                    f"{file_path} doesn't look like a Bitpanda trade file. Skipping."
+                )
+                return
+
+            line = next(reader)
+            assert line == [
+                "Order ID",
+                "Trade ID",
+                "Type",
+                "Market",
+                "Amount",
+                "Amount Currency",
+                "Price",
+                "Price Currency",
+                "Fee",
+                "Fee Currency",
+                "Time (UTC)",
+            ]
+
+            for (
+                _order_id,
+                _trace_id,
+                operation,
+                trade_pair,
+                amount,
+                amount_currency,
+                _price,
+                price_currency,
+                fee,
+                fee_currency,
+                _utc_time,
+            ) in reader:
+                row = reader.line_num
+
+                # trade pair is of form e.g. BTC_EUR
+                assert [amount_currency, price_currency] == trade_pair.split("_")
+
+                # At the time of writing (2021-05-02),
+                # there were only these two operations
+                assert operation in ["BUY", "SELL"], "Unsupported operation"
+
+                change = misc.force_decimal(amount)
+                assert change > 0, "Unexpected value for 'Amount' column"
+
+                # see _get_price_bitpanda_pro in price_data.py
+                assert price_currency == "EUR", (
+                    "Only Euro is supported as 'price' currency, "
+                    "since price fetching is not fully implemented yet."
+                )
+
+                # sanity checks
+                assert (
+                    fee_currency == "BEST"
+                    or (operation == "SELL" and fee_currency == price_currency)
+                    or (operation == "BUY" and fee_currency == amount_currency)
+                )
+
+                # make RFC3339 timestamp ISO 8601 parseable
+                if _utc_time[-1] == "Z":
+                    _utc_time = _utc_time[:-1] + "+00:00"
+
+                # timezone information is already taken care of with this
+                utc_time = datetime.datetime.fromisoformat(_utc_time)
+
+                coin = amount_currency
+
+                self.append_operation(
+                    operation.title(), utc_time, platform, change, coin, row, file_path
+                )
+
+                # Save price in our local database for later.
+                price = misc.force_decimal(_price)
+                self.price_data.set_price_db(platform, coin, "EUR", utc_time, price)
+
+                self.append_operation(
+                    "Fee",
+                    utc_time,
+                    platform,
+                    misc.force_decimal(fee),
+                    fee_currency,
+                    row,
+                    file_path,
+                )
+
     def detect_exchange(self, file_path: Path) -> Optional[str]:
         if file_path.suffix == ".csv":
             with open(file_path, encoding="utf8") as f:
@@ -564,6 +684,10 @@ class Book:
                     "margin",
                     "misc",
                     "ledgers",
+                ],
+                "bitpanda_pro_trades": [
+                    "Disclaimer: All data is without guarantee,"
+                    " errors and changes are reserved."
                 ],
             }
             for exchange, expected in expected_headers.items():
