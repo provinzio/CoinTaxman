@@ -202,7 +202,7 @@ class Book:
                     # in format "Converted 0,123 ETH to 0,456 BTC".
                     match = re.match(
                         r"^Converted [0-9,\.]+ [A-Z]+ to "
-                        + r"(?P<change>[0-9,\.]+) (?P<coin>[A-Z]+)$",
+                        r"(?P<change>[0-9,\.]+) (?P<coin>[A-Z]+)$",
                         remark,
                     )
                     assert match
