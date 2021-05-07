@@ -600,12 +600,7 @@ class Book:
                     or (operation == "BUY" and fee_currency == amount_currency)
                 )
 
-                # make RFC3339 timestamp ISO 8601 parseable
-                if _utc_time[-1] == "Z":
-                    _utc_time = _utc_time[:-1] + "+00:00"
-
-                # timezone information is already taken care of with this
-                utc_time = datetime.datetime.fromisoformat(_utc_time)
+                utc_time = misc.parse_iso_timestamp(_utc_time)
 
                 coin = amount_currency
 

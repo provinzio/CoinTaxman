@@ -140,9 +140,26 @@ def to_iso_timestamp(d: datetime.datetime) -> str:
         d (datetime.datetime)
 
     Returns:
-        str: ISI8601 timestamp.
+        str: ISO8601 timestamp.
     """
     return d.isoformat().replace("+00:00", "Z")
+
+
+def parse_iso_timestamp(d: str) -> datetime.datetime:
+    """Parse a ISO8601 timestamp, return a datetime object.
+
+    Args:
+        d (str) A string in ISO8601 format
+
+    Returns:
+        datetime.datetime: The datetime object representing the string.
+    """
+    # make RFC3339 timestamp ISO 8601 parseable
+    if d[-1] == "Z":
+        d = d[:-1] + "+00:00"
+
+    # timezone information is already taken care of with this
+    return datetime.datetime.fromisoformat(d)
 
 
 def group_by(lst: L, key: str) -> dict[str, L]:
