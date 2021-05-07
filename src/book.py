@@ -18,6 +18,7 @@ import csv
 import datetime
 import decimal
 import logging
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -127,7 +128,9 @@ class Book:
     def _read_coinbase(self, file_path: Path) -> None:
         platform = "coinbase"
         operation_mapping = {
+            "Receive": "Deposit",
             "Send": "Withdraw",
+            "Coinbase Earn": "Buy",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -184,41 +187,167 @@ class Book:
                 eur_spot = misc.force_decimal(_eur_spot)
                 #  Cost without fees.
                 eur_subtotal = misc.xdecimal(_eur_subtotal)
-                #  Cost with fees.
-                eur_total = misc.xdecimal(_eur_total)
                 eur_fee = misc.xdecimal(_eur_fee)
-
-                # Unused variables.
-                del eur_total
-                del remark
 
                 # Validate data.
                 assert operation
                 assert coin
                 assert change
-                assert eur_spot
-
-                self.append_operation(
-                    operation, utc_time, platform, change, coin, row, file_path
-                )
 
                 # Save price in our local database for later.
                 self.price_data.set_price_db(platform, coin, "EUR", utc_time, eur_spot)
 
-                if operation == "Sell":
-                    assert isinstance(eur_subtotal, decimal.Decimal)
-                    self.append_operation(
-                        "Buy", utc_time, platform, eur_subtotal, "EUR", row, file_path
+                if operation == "Convert":
+                    # Parse change + coin from remark, which is
+                    # in format "Converted 0,123 ETH to 0,456 BTC".
+                    match = re.match(
+                        r"^Converted [0-9,\.]+ [A-Z]+ to "
+                        + r"(?P<change>[0-9,\.]+) (?P<coin>[A-Z]+)$",
+                        remark,
                     )
-                elif operation == "Buy":
-                    assert isinstance(eur_subtotal, decimal.Decimal)
+                    assert match
+
+                    _convert_change = match.group("change").replace(",", ".")
+                    convert_change = misc.force_decimal(_convert_change)
+                    convert_coin = match.group("coin")
+
+                    eur_total = misc.force_decimal(_eur_total)
+                    convert_eur_spot = eur_total / convert_change
+
                     self.append_operation(
-                        "Sell", utc_time, platform, eur_subtotal, "EUR", row, file_path
+                        "Sell", utc_time, platform, change, coin, row, file_path
+                    )
+                    self.append_operation(
+                        "Buy",
+                        utc_time,
+                        platform,
+                        convert_change,
+                        convert_coin,
+                        row,
+                        file_path,
                     )
 
-                if eur_fee:
+                    # Save convert price in local database, too.
+                    self.price_data.set_price_db(
+                        platform, convert_coin, "EUR", utc_time, convert_eur_spot
+                    )
+                else:
                     self.append_operation(
-                        "Fee", utc_time, platform, eur_fee, "EUR", row, file_path
+                        operation, utc_time, platform, change, coin, row, file_path
+                    )
+
+                    if operation == "Sell":
+                        assert isinstance(eur_subtotal, decimal.Decimal)
+                        self.append_operation(
+                            "Buy",
+                            utc_time,
+                            platform,
+                            eur_subtotal,
+                            "EUR",
+                            row,
+                            file_path,
+                        )
+                    elif operation == "Buy":
+                        assert isinstance(eur_subtotal, decimal.Decimal)
+                        self.append_operation(
+                            "Sell",
+                            utc_time,
+                            platform,
+                            eur_subtotal,
+                            "EUR",
+                            row,
+                            file_path,
+                        )
+
+                    if eur_fee:
+                        self.append_operation(
+                            "Fee", utc_time, platform, eur_fee, "EUR", row, file_path
+                        )
+
+    def _read_coinbase_pro(self, file_path: Path) -> None:
+        platform = "coinbase_pro"
+        operation_mapping = {
+            "BUY": "Buy",
+            "SELL": "Sell",
+        }
+
+        with open(file_path, encoding="utf8") as f:
+            reader = csv.reader(f)
+
+            # Skip header.
+            next(reader)
+
+            for (
+                portfolio,
+                trade_id,
+                product,
+                operation,
+                _utc_time,
+                _size,
+                size_unit,
+                _price,
+                _fee,
+                total,
+                price_fee_total_unit,
+            ) in reader:
+                row = reader.line_num
+
+                # Parse data.
+                utc_time = datetime.datetime.strptime(
+                    _utc_time, "%Y-%m-%dT%H:%M:%S.%fZ"
+                )
+                utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
+                operation = operation_mapping.get(operation, operation)
+                size = misc.force_decimal(_size)
+                price = misc.force_decimal(_price)
+                fee = misc.xdecimal(_fee)
+                total_price = size * price
+
+                # Unused variables.
+                del portfolio
+                del trade_id
+                del product
+                del total
+
+                # Validate data.
+                assert operation
+                assert size
+                assert size_unit
+                assert price_fee_total_unit
+
+                self.append_operation(
+                    operation, utc_time, platform, size, size_unit, row, file_path
+                )
+
+                if operation == "Sell":
+                    self.append_operation(
+                        "Buy",
+                        utc_time,
+                        platform,
+                        total_price,
+                        price_fee_total_unit,
+                        row,
+                        file_path,
+                    )
+                elif operation == "Buy":
+                    self.append_operation(
+                        "Sell",
+                        utc_time,
+                        platform,
+                        total_price,
+                        price_fee_total_unit,
+                        row,
+                        file_path,
+                    )
+                if fee:
+                    self.append_operation(
+                        "Fee",
+                        utc_time,
+                        platform,
+                        fee,
+                        price_fee_total_unit,
+                        row,
+                        file_path,
                     )
 
     def _read_kraken_trades(self, file_path: Path) -> None:
@@ -504,6 +633,19 @@ class Book:
                     "Converts, and Rewards Income, and Coinbase Earn "
                     "transactions are taxable events. For final tax "
                     "obligations, please consult your tax advisor."
+                ],
+                "coinbase_pro": [
+                    "portfolio",
+                    "trade id",
+                    "product",
+                    "side",
+                    "created at",
+                    "size",
+                    "size unit",
+                    "price",
+                    "fee",
+                    "total",
+                    "price/fee/total unit",
                 ],
                 "kraken_ledgers_old": [
                     "txid",
