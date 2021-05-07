@@ -120,7 +120,12 @@ class PriceData:
 
         if len(data) == 0:
             log.warning("Binance offers no price for `%s` at %s", symbol, utc_time)
-            return decimal.Decimal()
+            if quote_asset == "USDT":
+                return decimal.Decimal()
+            log.warning(f"Trying {base_asset}USDT and {quote_asset}USDT")
+            usdt = self.get_price("binance", base_asset, utc_time, "USDT")
+            quote = self.get_price("binance", quote_asset, utc_time, "USDT")
+            return usdt / quote
 
         # Calculate average price.
         total_cost = decimal.Decimal()
@@ -563,3 +568,45 @@ class PriceData:
         if isinstance(tr, transaction.SoldCoin):
             return price * tr.sold
         raise NotImplementedError
+
+    def check_database(
+        self,
+    ):
+        for db_path in Path(config.DATA_PATH).glob("*.db"):
+            if db_path.is_file():
+                platform = db_path.stem
+
+                try:
+                    get_price = getattr(self, f"_get_price_{platform}")
+                except AttributeError:
+                    if platform == "coinbase":
+                        get_price = self._get_price_coinbase_pro
+                    else:
+                        raise NotImplementedError(
+                            "Unable to read data from %s", platform
+                        )
+
+                with sqlite3.connect(db_path) as conn:
+                    query = "SELECT name FROM sqlite_master where type='table'"
+                    cur = conn.execute(query)
+
+                    for table in cur.fetchall():
+                        tablename = table[0]
+                        pair = tablename.split("/")
+                        query = f"SELECT utc_time FROM `{tablename}` WHERE price<=0.0;"
+                        cur = conn.execute(query)
+
+                        for row in cur.fetchall():
+                            utc_time = datetime.datetime.strptime(
+                                row[0], "%Y-%m-%d %H:%M:%S%z"
+                            )
+                            price = get_price(pair[0], utc_time, pair[1])
+                            log.warning(
+                                f"Updating {tablename} at {utc_time} to {price}"
+                            )
+                            query = (
+                                f"UPDATE `{tablename}` SET price=? WHERE utc_time=?;"
+                            )
+
+                            conn.execute(query, (str(price), utc_time))
+                            conn.commit()
