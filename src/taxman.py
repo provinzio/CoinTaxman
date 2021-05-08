@@ -137,7 +137,14 @@ class Taxman:
                         f"({sc.op.__class__.__name__})"
                         for sc in sold_coins
                     )
-                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op, remark)
+                    tx = transaction.TaxEvent(
+                        taxation_type,
+                        taxed_gain,
+                        op,
+                        total_win,
+                        total_win - taxed_gain,
+                        remark,
+                    )
                     self.tax_events.append(tx)
             elif isinstance(
                 op, (transaction.CoinLendInterest, transaction.StakingInterest)
@@ -235,6 +242,8 @@ class Taxman:
                 "Action",
                 "Amount",
                 "Asset",
+                f"Buy Price in {config.FIAT}",
+                f"Sell Price in {config.FIAT}",
                 "Remark",
             ]
             writer.writerow(header)
@@ -247,6 +256,8 @@ class Taxman:
                     tx.op.__class__.__name__,
                     tx.op.change,
                     tx.op.coin,
+                    tx.buy_price,
+                    tx.sell_price,
                     tx.remark,
                 ]
                 writer.writerow(line)
