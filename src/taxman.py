@@ -110,7 +110,7 @@ class Taxman:
                 if self.in_tax_year(op) and coin != config.FIAT:
                     taxation_type = "Sonstige Einkünfte"
                     # Price of the sell.
-                    total_win = self.price_data.get_cost(op)
+                    sell_price = self.price_data.get_cost(op)
                     taxed_gain = decimal.Decimal()
                     # Coins which are older than (in this case) one year or
                     # which come from an Airdrop, CoinLend or Commission (in an
@@ -130,14 +130,21 @@ class Taxman:
                             )
                             and not sc.op.coin == config.FIAT
                         ):
-                            partial_win = (sc.sold / op.change) * total_win
-                            taxed_gain += partial_win - self.price_data.get_cost(sc)
+                            partial_sell_price = (sc.sold / op.change) * sell_price
+                            sold_coin_cost = self.price_data.get_cost(sc)
+                            taxed_gain += partial_sell_price - sold_coin_cost
                     remark = ", ".join(
                         f"{sc.sold} from {sc.op.utc_time} "
                         f"({sc.op.__class__.__name__})"
                         for sc in sold_coins
                     )
-                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op, remark)
+                    tx = transaction.TaxEvent(
+                        taxation_type,
+                        taxed_gain,
+                        op,
+                        sell_price,
+                        remark,
+                    )
                     self.tax_events.append(tx)
             elif isinstance(
                 op, (transaction.CoinLendInterest, transaction.StakingInterest)
@@ -235,6 +242,7 @@ class Taxman:
                 "Action",
                 "Amount",
                 "Asset",
+                f"Sell Price in {config.FIAT}",
                 "Remark",
             ]
             writer.writerow(header)
@@ -247,6 +255,7 @@ class Taxman:
                     tx.op.__class__.__name__,
                     tx.op.change,
                     tx.op.coin,
+                    tx.sell_price,
                     tx.remark,
                 ]
                 writer.writerow(line)
