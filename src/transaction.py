@@ -189,3 +189,4 @@ def time_batches(
 
             if max_difference:
                 max_time = timestamp + datetime.timedelta(minutes=max_difference)
+    yield batch  # fixes bug where last batch ist not yielded

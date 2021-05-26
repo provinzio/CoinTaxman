@@ -536,7 +536,7 @@ class PriceData:
     ) -> list[tuple[int, decimal.Decimal]]:
         """Return average price from ohlcv candles.
 
-        The average price of the candle is calculated as the avergae from the
+        The average price of the candle is calculated as the average from the
         open and close price.
 
         Further information about candle-function can be found in `get_candles`.
@@ -598,6 +598,7 @@ class PriceData:
         )
 
         datacomb = []
+
         for batch in time_batches:
             # ccxt works with timestamps in milliseconds
             first = misc.to_ms_timestamp(batch[0])
@@ -612,7 +613,7 @@ class PriceData:
             )
             for p in path:
                 tempdatalis: list = []
-                printstr = [a[1]["symbol"] for a in p[1]]
+                printstr = [f"{a[1]['symbol']} ({a[1]['exchange']})" for a in p[1]]
                 log.debug(f"found path over {' -> '.join(printstr)}")
                 for i in range(len(p[1])):
                     tempdatalis.append([])
@@ -692,13 +693,14 @@ class PriceData:
         )
 
         # Preload the prices.
-        data = self._get_bulk_pair_data_path(
-            missing_prices_operations,
-            coin,
-            reference_coin,
-            preferredexchange=platform,
-        )
+        if missing_prices_operations:
+            data = self._get_bulk_pair_data_path(
+                missing_prices_operations,
+                coin,
+                reference_coin,
+                preferredexchange=platform,
+            )
 
-        # TODO Use bulk insert to write all prices at once into the database.
-        for p in data:
-            self.set_price_db(platform, coin, reference_coin, p[0], p[1])
+            # TODO Use bulk insert to write all prices at once into the database.
+            for p in data:
+                self.set_price_db(platform, coin, reference_coin, p[0], p[1])
