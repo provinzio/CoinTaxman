@@ -526,8 +526,15 @@ class PriceData:
         # Most exchange have an upper limit (e.g. binance 1000, coinbasepro 300).
         # `ccxt` throws an error if we exceed this limit.
         limit = math.ceil((stop - start) / (1000 * 60)) + 2
+        try:
+            candles = exchange.fetch_ohlcv(symbol, "1m", since, limit)
+        except ccxt.RateLimitExceeded:
+            # sometimes the ratelimit gets exceeded for kraken dunno why
+            logging.warning("Ratelimit exceeded sleeping 10 seconds and retrying")
+            time.sleep(10)
+            self.path.RateLimit.limit(exchange)
+            candles = exchange.fetch_ohlcv(symbol, "1m", since, limit)
 
-        candles = exchange.fetch_ohlcv(symbol, "1m", since, limit)
         assert isinstance(candles, list)
         return candles
 
@@ -611,6 +618,7 @@ class PriceData:
             path = self.path.get_path(
                 coin, reference_coin, first, last, preferredexchange=preferredexchange
             )
+            # Todo Move the path calculation out of the for loop and only filter after time
             for p in path:
                 tempdatalis: list = []
                 printstr = [f"{a[1]['symbol']} ({a[1]['exchange']})" for a in p[1]]

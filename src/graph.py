@@ -16,9 +16,11 @@ class RateLimit:
         if lastcall := self.exchangedict.get(exchange.id):
             now = time.time()
             delay = exchange.rateLimit / 1000
+            if exchange.name == "Kraken":
+                delay += 2  # the reported ratelimit gets exceeded sometimes
             timepassed = now - lastcall
             if (waitfor := delay - timepassed) > 0:
-                time.sleep(waitfor)
+                time.sleep(waitfor + 0.5)
             self.exchangedict[exchange.id] = time.time()
         else:
             self.exchangedict[exchange.id] = time.time()
@@ -153,7 +155,7 @@ class PricePath:
             """
             # prioritze pairs with the preferred exchange
             volume = 1
-            volumenew = 0
+            volumenew = 1
             priority = self.priority.get("-".join([a[1]["symbol"] for a in path]), 0)
             pathlis = (a if (a := check_cache(pair)) else None for pair in path)
             for possiblepath in pathlis:
@@ -163,7 +165,8 @@ class PricePath:
                     elif possiblepath[1][1]["avg_vol"] != 0:
                         # is very much off because volume is not in the same
                         # currency something for later
-                        volumenew += possiblepath[1][1]["avg_vol"]
+                        # volumenew*= volume of next thing in path (needs to be fixed for inverted paths)
+                        volumenew *= possiblepath[1][1]["avg_vol"]
 
                 else:
                     break
