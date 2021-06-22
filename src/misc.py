@@ -236,5 +236,5 @@ def get_current_commit_hash() -> Optional[str]:
         commit = commit.decode()
         commit = commit.strip()
         return commit
-    except subprocess.CalledProcessError:
+    except (FileNotFoundError, subprocess.CalledProcessError):
         return None
