@@ -80,6 +80,9 @@ class Book:
             "Super BNB Mining": "StakingInterest",
             "Liquid Swap add": "CoinLend",
             "Liquid Swap remove": "CoinLendEnd",
+            "POS savings interest": "StakingInterest",
+            "POS savings purchase": "Staking",
+            "POS savings redemption": "StakingEnd",
         }
 
         with open(file_path, encoding="utf8") as f:
