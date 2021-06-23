@@ -232,8 +232,8 @@ def get_next_file_path(path: Path, base_filename: str, extension: str) -> Path:
 
 def get_current_commit_hash() -> Optional[str]:
     try:
-        commit = subprocess.check_output(["git", "rev-parse", "HEAD"])
-        commit = commit.decode()
+        output = subprocess.check_output(["git", "rev-parse", "HEAD"])
+        commit = output.decode()
         commit = commit.strip()
         return commit
     except (FileNotFoundError, subprocess.CalledProcessError):
