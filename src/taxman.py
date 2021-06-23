@@ -83,6 +83,10 @@ class Taxman:
                 pass
             elif isinstance(op, transaction.CoinLendEnd):
                 pass
+            elif isinstance(op, transaction.Staking):
+                pass
+            elif isinstance(op, transaction.StakingEnd):
+                pass
             elif isinstance(op, transaction.Buy):
                 balance.put(op)
             elif isinstance(op, transaction.Sell):

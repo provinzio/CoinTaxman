@@ -78,7 +78,14 @@ class CoinLendEnd(Operation):
     pass
 
 
-@dataclasses.dataclass
+class Staking(Operation):
+    pass
+
+
+class StakingEnd(Operation):
+    pass
+
+
 class Transaction(Operation):
     pass
 
