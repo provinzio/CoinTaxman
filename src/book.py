@@ -18,6 +18,7 @@ import csv
 import datetime
 import decimal
 import logging
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -76,6 +77,7 @@ class Book:
             "Commission Fee Shared With You": "Commission",
             "Launchpool Interest": "StakingInterest",
             "Cash Voucher distribution": "Airdrop",
+            "Super BNB Mining": "StakingInterest",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -126,7 +128,9 @@ class Book:
     def _read_coinbase(self, file_path: Path) -> None:
         platform = "coinbase"
         operation_mapping = {
+            "Receive": "Deposit",
             "Send": "Withdraw",
+            "Coinbase Earn": "Buy",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -183,41 +187,167 @@ class Book:
                 eur_spot = misc.force_decimal(_eur_spot)
                 #  Cost without fees.
                 eur_subtotal = misc.xdecimal(_eur_subtotal)
-                #  Cost with fees.
-                eur_total = misc.xdecimal(_eur_total)
                 eur_fee = misc.xdecimal(_eur_fee)
-
-                # Unused variables.
-                del eur_total
-                del remark
 
                 # Validate data.
                 assert operation
                 assert coin
                 assert change
-                assert eur_spot
-
-                self.append_operation(
-                    operation, utc_time, platform, change, coin, row, file_path
-                )
 
                 # Save price in our local database for later.
                 self.price_data.set_price_db(platform, coin, "EUR", utc_time, eur_spot)
 
-                if operation == "Sell":
-                    assert isinstance(eur_subtotal, decimal.Decimal)
-                    self.append_operation(
-                        "Buy", utc_time, platform, eur_subtotal, "EUR", row, file_path
+                if operation == "Convert":
+                    # Parse change + coin from remark, which is
+                    # in format "Converted 0,123 ETH to 0,456 BTC".
+                    match = re.match(
+                        r"^Converted [0-9,\.]+ [A-Z]+ to "
+                        r"(?P<change>[0-9,\.]+) (?P<coin>[A-Z]+)$",
+                        remark,
                     )
-                elif operation == "Buy":
-                    assert isinstance(eur_subtotal, decimal.Decimal)
+                    assert match
+
+                    _convert_change = match.group("change").replace(",", ".")
+                    convert_change = misc.force_decimal(_convert_change)
+                    convert_coin = match.group("coin")
+
+                    eur_total = misc.force_decimal(_eur_total)
+                    convert_eur_spot = eur_total / convert_change
+
                     self.append_operation(
-                        "Sell", utc_time, platform, eur_subtotal, "EUR", row, file_path
+                        "Sell", utc_time, platform, change, coin, row, file_path
+                    )
+                    self.append_operation(
+                        "Buy",
+                        utc_time,
+                        platform,
+                        convert_change,
+                        convert_coin,
+                        row,
+                        file_path,
                     )
 
-                if eur_fee:
+                    # Save convert price in local database, too.
+                    self.price_data.set_price_db(
+                        platform, convert_coin, "EUR", utc_time, convert_eur_spot
+                    )
+                else:
                     self.append_operation(
-                        "Fee", utc_time, platform, eur_fee, "EUR", row, file_path
+                        operation, utc_time, platform, change, coin, row, file_path
+                    )
+
+                    if operation == "Sell":
+                        assert isinstance(eur_subtotal, decimal.Decimal)
+                        self.append_operation(
+                            "Buy",
+                            utc_time,
+                            platform,
+                            eur_subtotal,
+                            "EUR",
+                            row,
+                            file_path,
+                        )
+                    elif operation == "Buy":
+                        assert isinstance(eur_subtotal, decimal.Decimal)
+                        self.append_operation(
+                            "Sell",
+                            utc_time,
+                            platform,
+                            eur_subtotal,
+                            "EUR",
+                            row,
+                            file_path,
+                        )
+
+                    if eur_fee:
+                        self.append_operation(
+                            "Fee", utc_time, platform, eur_fee, "EUR", row, file_path
+                        )
+
+    def _read_coinbase_pro(self, file_path: Path) -> None:
+        platform = "coinbase_pro"
+        operation_mapping = {
+            "BUY": "Buy",
+            "SELL": "Sell",
+        }
+
+        with open(file_path, encoding="utf8") as f:
+            reader = csv.reader(f)
+
+            # Skip header.
+            next(reader)
+
+            for (
+                portfolio,
+                trade_id,
+                product,
+                operation,
+                _utc_time,
+                _size,
+                size_unit,
+                _price,
+                _fee,
+                total,
+                price_fee_total_unit,
+            ) in reader:
+                row = reader.line_num
+
+                # Parse data.
+                utc_time = datetime.datetime.strptime(
+                    _utc_time, "%Y-%m-%dT%H:%M:%S.%fZ"
+                )
+                utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
+                operation = operation_mapping.get(operation, operation)
+                size = misc.force_decimal(_size)
+                price = misc.force_decimal(_price)
+                fee = misc.xdecimal(_fee)
+                total_price = size * price
+
+                # Unused variables.
+                del portfolio
+                del trade_id
+                del product
+                del total
+
+                # Validate data.
+                assert operation
+                assert size
+                assert size_unit
+                assert price_fee_total_unit
+
+                self.append_operation(
+                    operation, utc_time, platform, size, size_unit, row, file_path
+                )
+
+                if operation == "Sell":
+                    self.append_operation(
+                        "Buy",
+                        utc_time,
+                        platform,
+                        total_price,
+                        price_fee_total_unit,
+                        row,
+                        file_path,
+                    )
+                elif operation == "Buy":
+                    self.append_operation(
+                        "Sell",
+                        utc_time,
+                        platform,
+                        total_price,
+                        price_fee_total_unit,
+                        row,
+                        file_path,
+                    )
+                if fee:
+                    self.append_operation(
+                        "Fee",
+                        utc_time,
+                        platform,
+                        fee,
+                        price_fee_total_unit,
+                        row,
+                        file_path,
                     )
 
     def _read_kraken_trades(self, file_path: Path) -> None:
@@ -362,6 +492,126 @@ class Book:
 
         self._read_kraken_ledgers(file_path)
 
+    def _read_bitpanda_pro_trades(self, file_path: Path) -> None:
+        """Reads a trade statement from Bitpanda Pro.
+
+        Args:
+            file_path (Path): Path to Bitpanda trade history.
+        """
+
+        platform = "bitpanda_pro"
+        with open(file_path, encoding="utf8") as f:
+            reader = csv.reader(f)
+
+            # skip header
+            line = next(reader)
+
+            line = next(reader)
+
+            transaction_file_warn = (
+                f"{file_path} looks like a Bitpanda transaction file."
+                " Skipping. Please download the trade history instead."
+            )
+
+            # for transactions, it's currently written "id" (small)
+            if line[0].startswith("Account id :"):
+                log.warning(transaction_file_warn)
+                return
+
+            assert line[0].startswith("Account ID:")
+            line = next(reader)
+            # empty line - still keep this check in case Bitpanda changes the
+            # transaction file to match the trade header (casing)
+            if not line:
+                log.warning(transaction_file_warn)
+                return
+
+            elif line[0] != "Bitpanda Pro trade history":
+                log.warning(
+                    f"{file_path} doesn't look like a Bitpanda trade file. Skipping."
+                )
+                return
+
+            line = next(reader)
+            assert line == [
+                "Order ID",
+                "Trade ID",
+                "Type",
+                "Market",
+                "Amount",
+                "Amount Currency",
+                "Price",
+                "Price Currency",
+                "Fee",
+                "Fee Currency",
+                "Time (UTC)",
+            ]
+
+            for (
+                _order_id,
+                _trace_id,
+                operation,
+                trade_pair,
+                amount,
+                amount_currency,
+                _price,
+                price_currency,
+                fee,
+                fee_currency,
+                _utc_time,
+            ) in reader:
+                row = reader.line_num
+
+                # trade pair is of form e.g. BTC_EUR
+                assert [amount_currency, price_currency] == trade_pair.split("_")
+
+                # At the time of writing (2021-05-02),
+                # there were only these two operations
+                assert operation in ["BUY", "SELL"], "Unsupported operation"
+
+                change = misc.force_decimal(amount)
+                assert change > 0, "Unexpected value for 'Amount' column"
+
+                # see _get_price_bitpanda_pro in price_data.py
+                assert price_currency == "EUR", (
+                    "Only Euro is supported as 'price' currency, "
+                    "since price fetching is not fully implemented yet."
+                )
+
+                # sanity checks
+                assert (
+                    fee_currency == "BEST"
+                    or (operation == "SELL" and fee_currency == price_currency)
+                    or (operation == "BUY" and fee_currency == amount_currency)
+                )
+
+                # make RFC3339 timestamp ISO 8601 parseable
+                if _utc_time[-1] == "Z":
+                    _utc_time = _utc_time[:-1] + "+00:00"
+
+                # timezone information is already taken care of with this
+                utc_time = datetime.datetime.fromisoformat(_utc_time)
+
+                coin = amount_currency
+
+                self.append_operation(
+                    operation.title(), utc_time, platform, change, coin, row, file_path
+                )
+
+                # Save price in our local database for later.
+                price = misc.force_decimal(_price)
+                self.price_data.set_price_db(platform, coin, "EUR", utc_time, price)
+
+                self.append_operation(
+                    "Fee",
+                    utc_time,
+                    platform,
+                    misc.force_decimal(fee),
+                    fee_currency,
+                    row,
+                    file_path,
+                )
+
     def detect_exchange(self, file_path: Path) -> Optional[str]:
         if file_path.suffix == ".csv":
             with open(file_path, encoding="utf8") as f:
@@ -383,6 +633,19 @@ class Book:
                     "Converts, and Rewards Income, and Coinbase Earn "
                     "transactions are taxable events. For final tax "
                     "obligations, please consult your tax advisor."
+                ],
+                "coinbase_pro": [
+                    "portfolio",
+                    "trade id",
+                    "product",
+                    "side",
+                    "created at",
+                    "size",
+                    "size unit",
+                    "price",
+                    "fee",
+                    "total",
+                    "price/fee/total unit",
                 ],
                 "kraken_ledgers_old": [
                     "txid",
@@ -421,6 +684,10 @@ class Book:
                     "margin",
                     "misc",
                     "ledgers",
+                ],
+                "bitpanda_pro_trades": [
+                    "Disclaimer: All data is without guarantee,"
+                    " errors and changes are reserved."
                 ],
             }
             for exchange, expected in expected_headers.items():

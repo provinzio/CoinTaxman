@@ -140,6 +140,155 @@ class PriceData:
         return average_price
 
     @misc.delayed
+    def _get_price_coinbase_pro(
+        self,
+        base_asset: str,
+        utc_time: datetime.datetime,
+        quote_asset: str,
+        minutes_step: int = 5,
+    ) -> decimal.Decimal:
+        """Retrieve price from Coinbase Pro official REST API.
+
+        Documentation: https://docs.pro.coinbase.com
+
+        Args:
+            base_asset (str): Base asset.
+            utc_time (datetime.datetime): Target time (time of the trade).
+            quote_asset (str): Quote asset.
+            minutes_step (int): Initial time offset for consecutive
+                                Coinbase Pro API requests. Defaults to 5.
+
+        Returns:
+            decimal.Decimal: Price of asset pair at target time
+                   (0 if price couldn't be determined)
+        """
+
+        root_url = "https://api.pro.coinbase.com"
+        pair = f"{base_asset}-{quote_asset}"
+
+        minutes_offset = 0
+        while minutes_offset < 120:
+            minutes_offset += minutes_step
+
+            start = misc.to_iso_timestamp(
+                utc_time - datetime.timedelta(minutes=minutes_offset)
+            )
+            end = misc.to_iso_timestamp(
+                utc_time + datetime.timedelta(minutes=minutes_offset)
+            )
+            params = f"start={start}&end={end}&granularity=60"
+            url = f"{root_url}/products/{pair}/candles?{params}"
+
+            log.debug("Calling %s", url)
+            log.debug(
+                f"Querying Coinbase Pro candles for {pair} at {utc_time} "
+                f"(offset={minutes_offset}m): Calling %s",
+                url,
+            )
+
+            response = requests.get(url)
+            response.raise_for_status()
+            data = json.loads(response.text)
+
+            # No candles within the time window
+            if len(data) == 0:
+                continue
+
+            # Find closest timestamp match
+            target_timestamp = misc.to_ms_timestamp(utc_time)
+            data_timestamps_ms = [int(float(d[0]) * 1000) for d in data]
+            data_timestamps_ms.reverse()  # bisect requires ascending order
+
+            closest_match_index = (
+                bisect.bisect_left(data_timestamps_ms, target_timestamp) - 1
+            )
+
+            # The desired timestamp is in the past
+            if closest_match_index == -1:
+                continue
+
+            # The desired timestamp is in the future
+            if closest_match_index == len(data_timestamps_ms) - 1:
+                continue
+
+            closest_match = data[closest_match_index]
+            open_price = misc.force_decimal(closest_match[3])
+            close_price = misc.force_decimal(closest_match[4])
+
+            return (open_price + close_price) / 2
+
+        log.warning(
+            f"Querying Coinbase Pro candles for {pair} at {utc_time}: "
+            f"Failed to find matching exchange rate. "
+            "Please create an Issue or PR."
+        )
+        return decimal.Decimal()
+
+    @misc.delayed
+    def _get_price_bitpanda_pro(
+        self, base_asset: str, utc_time: datetime.datetime, quote_asset: str
+    ) -> decimal.Decimal:
+        """Retrieve the price from the Bitpanda Pro API.
+
+        This uses the "candlestricks" API endpoint.
+        It returns the highest and lowest price for the COIN in a given time frame.
+
+        Timeframe ends at the requested time.
+
+        Currently, only BEST_EUR is tested.
+
+        Args:
+            base_asset (str): The currency to get the price for.
+            utc_time (datetime.datetime): Time of the trade to fetch the price for.
+            quote_asset (str): The currency for the price.
+
+        Returns:
+            decimal.Decimal: Price of the asset pair.
+        """
+
+        # other combination should not occur, since I enter them within the trade
+        # other pairs need to be tested. Also, they might need different behavior,
+        # if there isn't a matching endpoint
+        assert base_asset == "BEST" and quote_asset == "EUR"
+        baseurl = "https://api.exchange.bitpanda.com/public/v1/candlesticks/BEST_EUR"
+
+        # Bitpanda Pro only supports distinctive arguments for this, *not arbitrary*
+        timeframes = [1, 5, 15, 30]
+
+        # get the smallest timeframe possible
+        # if there were no trades in the requested time frame, the
+        # returned data will be empty
+        for t in timeframes:
+            end = utc_time
+            begin = utc_time - datetime.timedelta(minutes=t)
+
+            # https://github.com/python/mypy/issues/3176
+            params: dict[str, Union[int, str]] = {
+                "unit": "MINUTES",
+                "period": t,
+                "from": begin.isoformat(),
+                "to": end.isoformat(),
+            }
+            r = requests.get(baseurl, params=params)
+
+            assert r.status_code == 200
+
+            data = r.json()
+            if data:
+                break
+
+        # if we didn't get data for the 30 minute frame, give up?
+        assert data
+        # There actually shouldn't be more than one entry if period and granularity are
+        # the same?
+        assert len(data) == 1
+
+        # simply take the average
+        high = misc.force_decimal(data[0]["high"])
+        low = misc.force_decimal(data[0]["low"])
+        return (high + low) / 2
+
+    @misc.delayed
     def _get_price_kraken(
         self,
         base_asset: str,

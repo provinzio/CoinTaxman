@@ -25,14 +25,21 @@ format: black isort
 run:
 	python src/main.py
 
+clean:
+	del /S data\*.db
+
+cleanrun: clean run
+
+
 # Install requirements
 install:
 	python -m pip install --upgrade pip
 	pip install -r requirements.txt -r requirements-dev.txt
 
-# Setup virtual environment
+
+# Setup virtuel environment
 venv:
 	python -m venv .pyenv
 	.pyenv\Scripts\activate && make install	
 
-.PHONY: flake8 mypy check-isort lint isort black format run install venv
+.PHONY: flake8 mypy check-isort lint isort black format run clean cleanrun install venv

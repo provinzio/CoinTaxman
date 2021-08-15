@@ -133,6 +133,18 @@ def get_offset_timestamps(
     return to_ms_timestamp(start), to_ms_timestamp(end)
 
 
+def to_iso_timestamp(d: datetime.datetime) -> str:
+    """Return timestamp as ISO8601 timestamp.
+
+    Args:
+        d (datetime.datetime)
+
+    Returns:
+        str: ISI8601 timestamp.
+    """
+    return d.isoformat().replace("+00:00", "Z")
+
+
 def group_by(lst: L, key: str) -> dict[str, L]:
     """Group a list of objects by `key`.
 
@@ -220,10 +232,9 @@ def get_next_file_path(path: Path, base_filename: str, extension: str) -> Path:
 
 def get_current_commit_hash() -> Optional[str]:
     try:
-        return (
-            subprocess.check_output(["git", "rev-parse", "HEAD"])
-            .decode("UTF-8")
-            .strip()
-        )
-    except subprocess.CalledProcessError:
+        output = subprocess.check_output(["git", "rev-parse", "HEAD"])
+        commit = output.decode()
+        commit = commit.strip()
+        return commit
+    except (FileNotFoundError, subprocess.CalledProcessError):
         return None
