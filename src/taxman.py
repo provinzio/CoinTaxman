@@ -196,6 +196,10 @@ class Taxman:
                             partial_sell_price = (sc.sold / op.change) * sell_price
                             sold_coin_cost = self.price_data.get_cost(sc)
                             taxed_gain += partial_sell_price - sold_coin_cost
+
+                    if taxed_gain < 0:
+                        taxation_type = "Sonstige Versluste aus Margin Trading"
+
                     remark = ", ".join(
                         f"{sc.sold} from {sc.op.utc_time} "
                         f"({sc.op.__class__.__name__})"
