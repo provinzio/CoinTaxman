@@ -146,6 +146,69 @@ class Taxman:
                         remark,
                     )
                     self.tax_events.append(tx)
+            elif isinstance(op, transaction.MarginBuy):
+                balance.put(op)
+            elif isinstance(op, transaction.MarginSell):
+                sold_coins, unsold_coins = balance.sell(op.change)
+                if unsold_coins:
+                    # Queue ran out of items to sell and not all coins
+                    # could be sold.
+                    if coin == config.FIAT:
+                        # This is OK for the own fiat currencies (not taxable).
+                        continue
+                    else:
+                        log.error(
+                            f"{op.file_path.name}: Line {op.line}: "
+                            f"Not enough {coin} in queue to sell "
+                            f"(transaction from {op.utc_time} "
+                            f"on {op.platform})\n"
+                            "\tThis error occurs if your account statements "
+                            "have unmatched buy/sell positions.\n"
+                            "\tHave you added all your account statements "
+                            "of the last years?\n"
+                            "\tThis error may also occur after deposits "
+                            "from unknown sources.\n"
+                        )
+                        raise RuntimeError
+                if self.in_tax_year(op) and coin != config.FIAT:
+                    taxation_type = "Sonstige Einkünfte aus Margin Trading"
+                    # Price of the sell.
+                    sell_price = self.price_data.get_cost(op)
+                    taxed_gain = decimal.Decimal()
+                    # Coins which are older than (in this case) one year or
+                    # which come from an Airdrop, CoinLend or Commission (in an
+                    # foreign currency) will not be taxed.
+                    for sc in sold_coins:
+                        if not config.IS_LONG_TERM(
+                            sc.op.utc_time, op.utc_time
+                        ) and not (
+                            isinstance(
+                                sc.op,
+                                (
+                                    transaction.Airdrop,
+                                    transaction.CoinLendInterest,
+                                    transaction.StakingInterest,
+                                    transaction.Commission,
+                                ),
+                            )
+                            and not sc.op.coin == config.FIAT
+                        ):
+                            partial_sell_price = (sc.sold / op.change) * sell_price
+                            sold_coin_cost = self.price_data.get_cost(sc)
+                            taxed_gain += partial_sell_price - sold_coin_cost
+                    remark = ", ".join(
+                        f"{sc.sold} from {sc.op.utc_time} "
+                        f"({sc.op.__class__.__name__})"
+                        for sc in sold_coins
+                    )
+                    tx = transaction.TaxEvent(
+                        taxation_type,
+                        taxed_gain,
+                        op,
+                        sell_price,
+                        remark,
+                    )
+                    self.tax_events.append(tx)
             elif isinstance(
                 op, (transaction.CoinLendInterest, transaction.StakingInterest)
             ):

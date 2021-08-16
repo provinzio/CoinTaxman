@@ -91,6 +91,14 @@ class Sell(Transaction):
     pass
 
 
+class MarginBuy(Transaction):
+    pass
+
+
+class MarginSell(Transaction):
+    pass
+
+
 class CoinLendInterest(Transaction):
     pass
 

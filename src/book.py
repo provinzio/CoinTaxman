@@ -78,8 +78,8 @@ class Book:
             "Launchpool Interest": "StakingInterest",
             "Cash Voucher distribution": "Airdrop",
             "Super BNB Mining": "StakingInterest",
-            "Margin loan": "Buy",
-            "Margin Repayment": "Sell",
+            "Margin loan": "MarginBuy",
+            "Margin Repayment": "MarginSell",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -106,7 +106,7 @@ class Book:
                 change = abs(change)
 
                 # Validate data.
-                assert account == "Spot", (
+                assert account in ("Spot", "CrossMargin"), (
                     "Other types than Spot are currently not supported. "
                     "Please create an Issue or PR."
                 )
