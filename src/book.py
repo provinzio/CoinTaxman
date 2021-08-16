@@ -78,6 +78,8 @@ class Book:
             "Launchpool Interest": "StakingInterest",
             "Cash Voucher distribution": "Airdrop",
             "Super BNB Mining": "StakingInterest",
+            "Margin loan": "Buy",
+            "Margin Repayment": "Sell",
         }
 
         with open(file_path, encoding="utf8") as f:
