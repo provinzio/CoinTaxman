@@ -101,8 +101,11 @@ class Book:
                     "Small assets exchange BNB",
                     "Transaction Related",
                     "Large OTC trading",
+                    "Sell",
+                    "Buy",
                 ):
                     operation = "Sell" if change < 0 else "Buy"
+
                 change = abs(change)
 
                 # Validate data.
