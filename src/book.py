@@ -80,6 +80,8 @@ class Book:
             "Super BNB Mining": "StakingInterest",
             "Margin loan": "MarginBuy",
             "Margin Repayment": "MarginSell",
+            "Liquid Swap add": "CoinLend",
+            "Liquid Swap remove": "CoinLendEnd",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -101,8 +103,11 @@ class Book:
                     "Small assets exchange BNB",
                     "Transaction Related",
                     "Large OTC trading",
+                    "Sell",
+                    "Buy",
                 ):
                     operation = "Sell" if change < 0 else "Buy"
+
                 change = abs(change)
 
                 # Validate data.
