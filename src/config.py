@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from datetime import datetime
+from os import environ
 from pathlib import Path
 
 from dateutil.relativedelta import relativedelta
@@ -22,8 +23,8 @@ from dateutil.relativedelta import relativedelta
 import core
 
 # User specific constants.
-COUNTRY = core.Country.GERMANY
-TAX_YEAR = 2020
+COUNTRY = core.Country[environ.get("COUNTRY", core.Country.GERMANY.name)]
+TAX_YEAR = environ.get("TAX_YEAR", 2020)
 
 # Country specific constants.
 if COUNTRY == core.Country.GERMANY:
