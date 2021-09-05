@@ -75,9 +75,15 @@ class Book:
             "Savings Principal redemption": "CoinLendEnd",
             "Commission History": "Commission",
             "Commission Fee Shared With You": "Commission",
+            "Referrer rebates": "Commission",
             "Launchpool Interest": "StakingInterest",
             "Cash Voucher distribution": "Airdrop",
             "Super BNB Mining": "StakingInterest",
+            "Liquid Swap add": "CoinLend",
+            "Liquid Swap remove": "CoinLendEnd",
+            "POS savings interest": "StakingInterest",
+            "POS savings purchase": "Staking",
+            "POS savings redemption": "StakingEnd",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -99,8 +105,17 @@ class Book:
                     "Small assets exchange BNB",
                     "Transaction Related",
                     "Large OTC trading",
+                    "Sell",
+                    "Buy",
                 ):
                     operation = "Sell" if change < 0 else "Buy"
+
+                if operation in ("Commission") and account != "Spot":
+                    # All comissions will be handled the same way.
+                    # As of now, only Spot Binance Operations are supported,
+                    # so we have to change the account type to Spot.
+                    account = "Spot"
+
                 change = abs(change)
 
                 # Validate data.
