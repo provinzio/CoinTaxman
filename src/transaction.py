@@ -147,6 +147,7 @@ gain_operations = [
     CoinLendInterest,
     StakingInterest,
     Airdrop,
+    Commission,
     Deposit,
 ]
 loss_operations = [
@@ -154,7 +155,6 @@ loss_operations = [
     CoinLend,
     Staking,
     Sell,
-    Commission,
     Withdraw,
 ]
 operations_order = gain_operations + loss_operations
