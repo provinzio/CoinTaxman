@@ -140,7 +140,6 @@ class TaxEvent:
     remark: str = ""
 
 
-
 # Functions
 
 
@@ -200,6 +199,7 @@ def time_batches(
                 max_time = timestamp + datetime.timedelta(minutes=max_difference)
     yield batch  # fixes bug where last batch ist not yielded
 
+
 gain_operations = [
     CoinLendEnd,
     StakingEnd,
@@ -246,4 +246,3 @@ def sort_operations(
         return tuple([idx] + [getattr(op, key) for key in keys] if keys else [])
 
     return sorted(operations, key=key)
-

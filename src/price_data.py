@@ -767,7 +767,8 @@ class PriceData:
             path = self.path.get_path(
                 coin, reference_coin, first, last, preferredexchange=preferredexchange
             )
-            # Todo Move the path calculation out of the for loop and only filter after time
+            # Todo Move the path calculation out of the for loop
+            # and only filter after time
             for p in path:
                 tempdatalis: list = []
                 printstr = [f"{a[1]['symbol']} ({a[1]['exchange']})" for a in p[1]]

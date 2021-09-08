@@ -1,16 +1,17 @@
 import collections
 import logging
 import time
-import config
-from typing import Optional
+from typing import Dict, Optional
 
 import ccxt
+
+import config
 
 log = logging.getLogger(__name__)
 
 
 class RateLimit:
-    exchangedict = {}
+    exchangedict: Dict[str, int] = {}
 
     def limit(self, exchange):
         if lastcall := self.exchangedict.get(exchange.id):
@@ -46,7 +47,7 @@ class PricePath:
 
         # Saves the priority for a certain path so that bad paths can be skipped.
         self.priority: collections.defaultdict[str, int] = collections.defaultdict(int)
-        allpairs: set(tuple[str, str, str, str]) = set()
+        allpairs: set[tuple[str, str, str, str]] = set()
 
         for exchange_id in exchanges:
             exchange_class = getattr(ccxt, exchange_id)
@@ -165,7 +166,8 @@ class PricePath:
                     elif possiblepath[1][1]["avg_vol"] != 0:
                         # is very much off because volume is not in the same
                         # currency something for later
-                        # volumenew*= volume of next thing in path (needs to be fixed for inverted paths)
+                        # volumenew*= volume of next thing in path
+                        # (needs to be fixed for inverted paths)
                         volumenew *= possiblepath[1][1]["avg_vol"]
 
                 else:
