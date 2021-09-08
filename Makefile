@@ -52,7 +52,11 @@ install-dev: install
 
 # Setup virtual environment
 venv:
-	python -m venv .pyenv
+	python3 -m venv .pyenv
+ifdef OS # Windows
+	.pyenv\Scripts\activate && make install
+else # Linux
 	source .pyenv/bin/activate && make install
+endif
 
 .PHONY: flake8 mypy check-isort lint isort black format build run run-container clean cleanrun install install-dev venv
