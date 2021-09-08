@@ -1,7 +1,7 @@
 import collections
 import logging
 import time
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Tuple
 
 import ccxt
 
@@ -47,7 +47,7 @@ class PricePath:
 
         # Saves the priority for a certain path so that bad paths can be skipped.
         self.priority: collections.defaultdict[str, int] = collections.defaultdict(int)
-        allpairs: set[tuple[str, str, str, str]] = set()
+        allpairs: set[Tuple[str, str, str, str]] = set()
 
         for exchange_id in exchanges:
             exchange_class = getattr(ccxt, exchange_id)
@@ -71,13 +71,14 @@ class PricePath:
         # TODO It might be faster to create it directly as set.
         #      Is it even necessary to convert it to a list?
         # allpairs = list(set(allpairs))
-        allpairs = list(allpairs)
+        allpairslist: List[Tuple[str, str, str, str]] = list(allpairs)
+        del allpairs
         # print("Total Pairs to check:", len(allpairs))
 
         # Sorting by `symbol` to have the same result on every run due to the set.
-        allpairs.sort(key=lambda x: x[3])
+        allpairslist.sort(key=lambda x: x[3])
 
-        for base, quote, exchange, symbol in allpairs:
+        for base, quote, exchange, symbol in allpairslist:
             self.add_Vertex(base)
             self.add_Vertex(quote)
             self.add_Edge(
