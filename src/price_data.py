@@ -596,11 +596,7 @@ class PriceData:
                         )
 
                 with sqlite3.connect(db_path) as conn:
-                    query = f"""
-                    SELECT name FROM sqlite_master
-                    WHERE type='table'
-                    AND name LIKE '%{config.FIAT_CLASS.name}'
-                    """
+                    query = "SELECT name FROM sqlite_master WHERE type='table'"
                     cur = conn.execute(query)
                     tablenames = (result[0] for result in cur.fetchall())
                     for tablename in tablenames:
