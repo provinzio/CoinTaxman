@@ -120,13 +120,11 @@ class PriceData:
 
         if len(data) == 0:
             log.warning(
-                f"""
-            Binance offers no price
-            for {symbol} at {utc_time}
-            Retrying with {base_asset}USDT and {quote_asset}USDT
-            """,
+                "Binance offers no price for %s at %s. Trying %s/USDT and %s/USDT",
                 symbol,
                 utc_time,
+                base_asset,
+                quote_asset,
             )
             if quote_asset == "USDT":
                 return decimal.Decimal()
@@ -634,4 +632,4 @@ class PriceData:
         log.info("Check Database Result:")
         for platform, result in stats.items():
             fixed, remaining = result.values()
-            log.info(f"{platform}:\nFixed: {fixed}, Remaining: {remaining}")
+            log.info(f"{platform}: {fixed} fixed, {remaining} remaining")
