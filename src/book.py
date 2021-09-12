@@ -678,7 +678,7 @@ class Book:
 
             for (
                 _tx_id,
-                utc_time,
+                csv_utc_time,
                 operation,
                 _inout,
                 amount_fiat,
@@ -697,23 +697,27 @@ class Book:
                 row = reader.line_num
 
                 # make RFC3339 timestamp ISO 8601 parseable
-                if utc_time[-1] == "Z":
-                    utc_time = utc_time[:-1] + "+00:00"
+                if csv_utc_time[-1] == "Z":
+                    csv_utc_time = csv_utc_time[:-1] + "+00:00"
 
                 # timezone information is already taken care of with this
-                utc_time = datetime.datetime.fromisoformat(utc_time)
+                utc_time = datetime.datetime.fromisoformat(csv_utc_time)
 
                 # transfer ops seem to be akin to airdrops. In my case I got a
                 # CocaCola transfer, which I don't want to track. Would need to
                 # be implemented if need be.
-                if operation in ["transfer"]:
+                if operation == "transfer":
                     log.warning(
                         f"'Transfer' operations are not "
                         f"implemented, skipping: {file_path} line {row}."
                     )
                     continue
 
-                operation = operation_mapping.get(operation)
+                # fail for unknown ops
+                try:
+                    operation = operation_mapping[operation]
+                except KeyError:
+                    raise RuntimeError(f"Unsupported operation '{operation}'")
 
                 if operation == "Deposit":
                     # This identifies a fiat deposit. Error on yet unknown deposits,
@@ -740,8 +744,6 @@ class Book:
                     self.price_data.set_price_db(
                         platform, asset, "EUR", utc_time, price
                     )
-                else:
-                    raise RuntimeError(f"Unsupported operation '{operation}'")
 
                 if change < 0:
                     raise RuntimeError(

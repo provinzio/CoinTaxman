@@ -246,7 +246,10 @@ class PriceData:
             decimal.Decimal: Price of the asset pair.
         """
 
-        baseurl = f"https://api.exchange.bitpanda.com/public/v1/candlesticks/{base_asset}_{quote_asset}"
+        baseurl = (
+            f"https://api.exchange.bitpanda.com/public/v1/"
+            f"candlesticks/{base_asset}_{quote_asset}"
+        )
 
         # Bitpanda Pro only supports distinctive arguments for this, *not arbitrary*
         timeframes = [1, 5, 15, 30]
