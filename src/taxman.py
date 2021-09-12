@@ -83,6 +83,10 @@ class Taxman:
                 pass
             elif isinstance(op, transaction.CoinLendEnd):
                 pass
+            elif isinstance(op, transaction.Staking):
+                pass
+            elif isinstance(op, transaction.StakingEnd):
+                pass
             elif isinstance(op, transaction.Buy):
                 balance.put(op)
             elif isinstance(op, transaction.Sell):
@@ -190,7 +194,7 @@ class Taxman:
         """Evaluate the taxation per coin using country specific function."""
         log.debug("Starting evaluation...")
         for coin, operations in misc.group_by(self.book.operations, "coin").items():
-            operations = sorted(operations, key=lambda op: op.utc_time)
+            operations = transaction.sort_operations(operations, ["utc_time"])
             self.__evaluate_taxation(coin, operations)
 
     def print_evaluation(self) -> None:
