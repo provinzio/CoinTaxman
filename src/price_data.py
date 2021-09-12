@@ -219,6 +219,12 @@ class PriceData:
         return decimal.Decimal()
 
     @misc.delayed
+    def _get_price_bitpanda(
+        self, base_asset: str, utc_time: datetime.datetime, quote_asset: str
+    ) -> decimal.Decimal:
+        return self._get_price_bitpanda_pro(base_asset, utc_time, quote_asset)
+
+    @misc.delayed
     def _get_price_bitpanda_pro(
         self, base_asset: str, utc_time: datetime.datetime, quote_asset: str
     ) -> decimal.Decimal:
@@ -240,11 +246,7 @@ class PriceData:
             decimal.Decimal: Price of the asset pair.
         """
 
-        # other combination should not occur, since I enter them within the trade
-        # other pairs need to be tested. Also, they might need different behavior,
-        # if there isn't a matching endpoint
-        assert base_asset == "BEST" and quote_asset == "EUR"
-        baseurl = "https://api.exchange.bitpanda.com/public/v1/candlesticks/BEST_EUR"
+        baseurl = f"https://api.exchange.bitpanda.com/public/v1/candlesticks/{base_asset}_{quote_asset}"
 
         # Bitpanda Pro only supports distinctive arguments for this, *not arbitrary*
         timeframes = [1, 5, 15, 30]
