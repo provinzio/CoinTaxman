@@ -66,7 +66,7 @@ class Book:
         o = Op(utc_time, platform, change, coin, row, file_path)
         self.operations.append(o)
 
-    def _read_binance(self, file_path: Path, version=1) -> None:
+    def _read_binance(self, file_path: Path, version: int = 1) -> None:
         platform = "binance"
         operation_mapping = {
             "Distribution": "Airdrop",
@@ -88,7 +88,7 @@ class Book:
 
             for rowlist in reader:
                 if version == 1:
-                    _utc_time, account, operation, coin, _change, remark = reader
+                    _utc_time, account, operation, coin, _change, remark = rowlist
                 if version == 2:
                     (
                         user_ID,
@@ -98,9 +98,9 @@ class Book:
                         coin,
                         _change,
                         remark,
-                    ) = reader
+                    ) = rowlist
                 else:
-                    log.warning("File version not Supported " + file_path)
+                    log.warning("File version not Supported " + str(file_path))
                     break
 
                 row = reader.line_num
