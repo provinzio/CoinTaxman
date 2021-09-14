@@ -66,7 +66,7 @@ class Book:
         o = Op(utc_time, platform, change, coin, row, file_path)
         self.operations.append(o)
 
-    def _read_binance(self, file_path: Path) -> None:
+    def _read_binance(self, file_path: Path, version=1) -> None:
         platform = "binance"
         operation_mapping = {
             "Distribution": "Airdrop",
@@ -86,7 +86,23 @@ class Book:
             # Skip header.
             next(reader)
 
-            for _utc_time, account, operation, coin, _change, remark in reader:
+            for rowlist in reader:
+                if version == 1:
+                    _utc_time, account, operation, coin, _change, remark = reader
+                if version == 2:
+                    (
+                        user_ID,
+                        _utc_time,
+                        account,
+                        operation,
+                        coin,
+                        _change,
+                        remark,
+                    ) = reader
+                else:
+                    log.warning("File version not Supported " + file_path)
+                    break
+
                 row = reader.line_num
 
                 # Parse data.
@@ -124,6 +140,9 @@ class Book:
                 self.append_operation(
                     operation, utc_time, platform, change, coin, row, file_path
                 )
+
+    def _read_binance_new(self, file_path: Path) -> None:
+        self._read_binance(file_path=file_path, version=2)
 
     def _read_coinbase(self, file_path: Path) -> None:
         platform = "coinbase"
@@ -620,6 +639,15 @@ class Book:
 
             expected_headers = {
                 "binance": [
+                    "UTC_Time",
+                    "Account",
+                    "Operation",
+                    "Coin",
+                    "Change",
+                    "Remark",
+                ],
+                "binance_new": [
+                    "User_ID",
                     "UTC_Time",
                     "Account",
                     "Operation",
