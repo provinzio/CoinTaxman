@@ -91,7 +91,7 @@ class Book:
                     _utc_time, account, operation, coin, _change, remark = rowlist
                 if version == 2:
                     (
-                        user_ID,
+                        _,
                         _utc_time,
                         account,
                         operation,
@@ -141,7 +141,7 @@ class Book:
                     operation, utc_time, platform, change, coin, row, file_path
                 )
 
-    def _read_binance_new(self, file_path: Path) -> None:
+    def _read_binance_v2(self, file_path: Path) -> None:
         self._read_binance(file_path=file_path, version=2)
 
     def _read_coinbase(self, file_path: Path) -> None:
@@ -646,7 +646,7 @@ class Book:
                     "Change",
                     "Remark",
                 ],
-                "binance_new": [
+                "binance_v2": [
                     "User_ID",
                     "UTC_Time",
                     "Account",
