@@ -100,8 +100,8 @@ class Book:
                         remark,
                     ) = rowlist
                 else:
-                    log.warning("File version not Supported " + str(file_path))
-                    break
+                    log.error("File version not Supported " + str(file_path))
+                    raise NotImplementedError
 
                 row = reader.line_num
 
