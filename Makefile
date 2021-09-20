@@ -30,6 +30,9 @@ clean:
 
 cleanrun: clean run
 
+check-db:
+	cd src && python -c 'from price_data import PriceData; PriceData().check_database()'
+
 # Install requirements
 install:
 	python -m pip install --upgrade pip
@@ -40,4 +43,4 @@ venv:
 	python -m venv .pyenv
 	.pyenv\Scripts\activate && make install	
 
-.PHONY: flake8 mypy check-isort lint isort black format run clean cleanrun install venv
+.PHONY: flake8 mypy check-isort lint isort black format run clean cleanrun check-db install venv
