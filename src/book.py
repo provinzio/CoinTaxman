@@ -732,11 +732,11 @@ class Book:
                 elif operation == "Withdraw":
                     change = misc.force_decimal(amount_asset)
                 elif operation in ["Buy", "Sell"]:
-                    if asset_price_currency != "EUR":
+                    if asset_price_currency != config.FIAT:
                         raise RuntimeError(
                             "Only Euro is supported as 'Asset market price currency' "
-                            "currency, since price fetching is not fully implemented "
-                            "yet."
+                            "currency, since price fetching for fiat currencies is not "
+                            "fully implemented yet."
                         )
                     change = misc.force_decimal(amount_asset)
                     # Save price in our local database for later.
@@ -744,10 +744,13 @@ class Book:
                     self.price_data.set_price_db(
                         platform, asset, "EUR", utc_time, price
                     )
+                else:
+                    change = misc.force_decimal(-1)
 
                 if change < 0:
                     raise RuntimeError(
-                        f"Unexpected value for 'Amount Asset' column {change}"
+                        f"Unexpected value for the amount '{change}' "
+                        f"of this {operation}."
                     )
 
                 self.append_operation(
@@ -767,9 +770,6 @@ class Book:
 
     def detect_exchange(self, file_path: Path) -> Optional[str]:
         if file_path.suffix == ".csv":
-            with open(file_path, encoding="utf8") as f:
-                reader = csv.reader(f)
-                csv_content = list(reader)
 
             expected_header_row = {
                 "binance": 0,
@@ -881,10 +881,17 @@ class Book:
                     "Spread Currency",
                 ],
             }
-            for exchange, expected in expected_headers.items():
-                header = csv_content[expected_header_row[exchange]]
-                if header == expected:
-                    return exchange
+            with open(file_path, encoding="utf8") as f:
+                reader = csv.reader(f)
+                # check all potential headers at their exprected header row,
+                # rewind the file after each expected header checked
+                for exchange, expected in expected_headers.items():
+                    header_row_num = expected_header_row[exchange]
+                    for _ in range(header_row_num + 1):
+                        header = next(reader)
+                        if header == expected:
+                            return exchange
+                    f.seek(0)
 
         return None
 
