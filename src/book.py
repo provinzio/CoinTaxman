@@ -549,17 +549,9 @@ class Book:
 
             line = next(reader)
             assert line == [
-                "Order ID",
-                "Trade ID",
-                "Type",
-                "Market",
-                "Amount",
-                "Amount Currency",
-                "Price",
-                "Price Currency",
-                "Fee",
-                "Fee Currency",
-                "Time (UTC)",
+                "Order ID","Trade ID","Type","Market","Amount","Amount Currency","Price","Price Currency","Fee","Fee Currency","Time (UTC)",
+            ] or line == [
+                "Order ID","Trade ID","Type","Market","Amount","Amount Currency","Price","Price Currency","Fee","Fee Currency","Time (UTC)","BEST_EUR Rate"
             ]
 
             for (
@@ -573,8 +565,14 @@ class Book:
                 price_currency,
                 fee,
                 fee_currency,
-                _utc_time,
+                *rest_col,
             ) in reader:
+                assert len(rest_col) in [1,2], "Something is wrong with the CSV"
+                _utc_time = rest_col[0]
+                if len(rest_col) == 1:
+                    best_price = None
+                elif len(rest_col) == 2:
+                    best_price = rest_col[1]
                 row = reader.line_num
 
                 # trade pair is of form e.g. BTC_EUR
@@ -611,6 +609,8 @@ class Book:
                 # Save price in our local database for later.
                 price = misc.force_decimal(_price)
                 self.price_data.set_price_db(platform, coin, "EUR", utc_time, price)
+                if best_price:
+                    self.price_data.set_price_db(platform, "BEST", "EUR", utc_time, misc.force_decimal(best_price))
 
                 self.append_operation(
                     "Fee",
