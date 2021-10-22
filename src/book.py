@@ -575,25 +575,40 @@ class Book:
                 "BEST_EUR Rate",
             ]
 
-            for (
-                _order_id,
-                _trace_id,
-                operation,
-                trade_pair,
-                amount,
-                amount_currency,
-                _price,
-                price_currency,
-                fee,
-                fee_currency,
-                *rest_col,
-            ) in reader:
-                assert len(rest_col) in [1, 2], "Something is wrong with the CSV"
-                _utc_time = rest_col[0]
-                if len(rest_col) == 1:
+            for current_line in reader:
+                if len(current_line) == 11:
+                    (
+                        _order_id,
+                        _trace_id,
+                        operation,
+                        trade_pair,
+                        amount,
+                        amount_currency,
+                        _price,
+                        price_currency,
+                        fee,
+                        fee_currency,
+                        _utc_time,
+                    ) = current_line
                     best_price = None
-                elif len(rest_col) == 2:
-                    best_price = rest_col[1]
+                elif len(current_line) == 12:
+                    (
+                        _order_id,
+                        _trace_id,
+                        operation,
+                        trade_pair,
+                        amount,
+                        amount_currency,
+                        _price,
+                        price_currency,
+                        fee,
+                        fee_currency,
+                        _utc_time,
+                        best_price,
+                    ) = current_line
+                else:
+                    raise NotImplementedError
+
                 row = reader.line_num
 
                 # trade pair is of form e.g. BTC_EUR
