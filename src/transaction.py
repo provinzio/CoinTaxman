@@ -183,6 +183,6 @@ def sort_operations(
             idx = operations_order.index(type(op))
         except ValueError:
             idx = 0
-        return tuple([idx] + [getattr(op, key) for key in keys] if keys else [])
+        return tuple(([getattr(op, key) for key in keys] if keys else []) + [idx])
 
     return sorted(operations, key=key)
