@@ -548,31 +548,34 @@ class Book:
                 return
 
             line = next(reader)
-            assert line == [
-                "Order ID",
-                "Trade ID",
-                "Type",
-                "Market",
-                "Amount",
-                "Amount Currency",
-                "Price",
-                "Price Currency",
-                "Fee",
-                "Fee Currency",
-                "Time (UTC)",
-            ] or line == [
-                "Order ID",
-                "Trade ID",
-                "Type",
-                "Market",
-                "Amount",
-                "Amount Currency",
-                "Price",
-                "Price Currency",
-                "Fee",
-                "Fee Currency",
-                "Time (UTC)",
-                "BEST_EUR Rate",
+            assert line in [
+                [
+                    "Order ID",
+                    "Trade ID",
+                    "Type",
+                    "Market",
+                    "Amount",
+                    "Amount Currency",
+                    "Price",
+                    "Price Currency",
+                    "Fee",
+                    "Fee Currency",
+                    "Time (UTC)",
+                ],
+                [
+                    "Order ID",
+                    "Trade ID",
+                    "Type",
+                    "Market",
+                    "Amount",
+                    "Amount Currency",
+                    "Price",
+                    "Price Currency",
+                    "Fee",
+                    "Fee Currency",
+                    "Time (UTC)",
+                    "BEST_EUR Rate",
+                ],
             ]
 
             for current_line in reader:
