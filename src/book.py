@@ -548,33 +548,70 @@ class Book:
                 return
 
             line = next(reader)
-            assert line == [
-                "Order ID",
-                "Trade ID",
-                "Type",
-                "Market",
-                "Amount",
-                "Amount Currency",
-                "Price",
-                "Price Currency",
-                "Fee",
-                "Fee Currency",
-                "Time (UTC)",
+            assert line in [
+                [
+                    "Order ID",
+                    "Trade ID",
+                    "Type",
+                    "Market",
+                    "Amount",
+                    "Amount Currency",
+                    "Price",
+                    "Price Currency",
+                    "Fee",
+                    "Fee Currency",
+                    "Time (UTC)",
+                ],
+                [
+                    "Order ID",
+                    "Trade ID",
+                    "Type",
+                    "Market",
+                    "Amount",
+                    "Amount Currency",
+                    "Price",
+                    "Price Currency",
+                    "Fee",
+                    "Fee Currency",
+                    "Time (UTC)",
+                    "BEST_EUR Rate",
+                ],
             ]
 
-            for (
-                _order_id,
-                _trace_id,
-                operation,
-                trade_pair,
-                amount,
-                amount_currency,
-                _price,
-                price_currency,
-                fee,
-                fee_currency,
-                _utc_time,
-            ) in reader:
+            for current_line in reader:
+                if len(current_line) == 11:
+                    (
+                        _order_id,
+                        _trace_id,
+                        operation,
+                        trade_pair,
+                        amount,
+                        amount_currency,
+                        _price,
+                        price_currency,
+                        fee,
+                        fee_currency,
+                        _utc_time,
+                    ) = current_line
+                    best_price = None
+                elif len(current_line) == 12:
+                    (
+                        _order_id,
+                        _trace_id,
+                        operation,
+                        trade_pair,
+                        amount,
+                        amount_currency,
+                        _price,
+                        price_currency,
+                        fee,
+                        fee_currency,
+                        _utc_time,
+                        best_price,
+                    ) = current_line
+                else:
+                    raise NotImplementedError
+
                 row = reader.line_num
 
                 # trade pair is of form e.g. BTC_EUR
@@ -598,14 +635,9 @@ class Book:
                     fee_currency == "BEST"
                     or (operation == "SELL" and fee_currency == price_currency)
                     or (operation == "BUY" and fee_currency == amount_currency)
-                )
+                ), "Invalid fee currency"
 
-                # make RFC3339 timestamp ISO 8601 parseable
-                if _utc_time[-1] == "Z":
-                    _utc_time = _utc_time[:-1] + "+00:00"
-
-                # timezone information is already taken care of with this
-                utc_time = datetime.datetime.fromisoformat(_utc_time)
+                utc_time = misc.parse_iso_timestamp(_utc_time)
 
                 coin = amount_currency
 
@@ -616,6 +648,14 @@ class Book:
                 # Save price in our local database for later.
                 price = misc.force_decimal(_price)
                 self.price_data.set_price_db(platform, coin, "EUR", utc_time, price)
+                if best_price:
+                    self.price_data.set_price_db(
+                        platform,
+                        "BEST",
+                        "EUR",
+                        utc_time,
+                        misc.force_decimal(best_price),
+                    )
 
                 self.append_operation(
                     "Fee",

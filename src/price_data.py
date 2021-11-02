@@ -292,6 +292,10 @@ class PriceData:
         # simply take the average
         high = misc.force_decimal(data[0]["high"])
         low = misc.force_decimal(data[0]["low"])
+
+        # if spread is greater than 3%
+        if (high - low) / high > 0.03:
+            log.warning(f"Price spread is greater than 3%! High: {high}, Low: {low}")
         return (high + low) / 2
 
     @misc.delayed
