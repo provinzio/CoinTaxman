@@ -165,10 +165,11 @@ class Book:
                     "Transaction Type",
                     "Asset",
                     "Quantity Transacted",
-                    "EUR Spot Price at Transaction",
-                    "EUR Subtotal",
-                    "EUR Total (inclusive of fees)",
-                    "EUR Fees",
+                    "Spot Price Currency",
+                    "Spot Price at Transaction",
+                    "Subtotal",
+                    "Total (inclusive of fees)",
+                    "Fees",
                     "Notes",
                 ]
             except AssertionError as e:
@@ -185,6 +186,7 @@ class Book:
                 operation,
                 coin,
                 _change,
+                _currency_spot,
                 _eur_spot,
                 _eur_subtotal,
                 _eur_total,
@@ -208,6 +210,7 @@ class Book:
                 assert operation
                 assert coin
                 assert change
+                assert _currency_spot == "EUR"
 
                 # Save price in our local database for later.
                 self.price_data.set_price_db(platform, coin, "EUR", utc_time, eur_spot)
