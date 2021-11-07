@@ -160,18 +160,42 @@ class Book:
                 assert next(reader) == ["Transactions"]
                 assert next(reader)  # user row
                 assert next(reader) == []
-                assert next(reader) == [
-                    "Timestamp",
-                    "Transaction Type",
-                    "Asset",
-                    "Quantity Transacted",
-                    "Spot Price Currency",
-                    "Spot Price at Transaction",
-                    "Subtotal",
-                    "Total (inclusive of fees)",
-                    "Fees",
-                    "Notes",
-                ]
+
+                fields = next(reader)
+                num_columns = len(fields)
+                # Coinbase export format from late 2021 and ongoing
+                if num_columns == 10:
+                    assert fields == [
+                        "Timestamp",
+                        "Transaction Type",
+                        "Asset",
+                        "Quantity Transacted",
+                        "Spot Price Currency",
+                        "Spot Price at Transaction",
+                        "Subtotal",
+                        "Total (inclusive of fees)",
+                        "Fees",
+                        "Notes",
+                    ]
+                # Coinbase export format from mid 2021 and before
+                elif num_columns == 9:
+                    assert fields == [
+                        "Timestamp",
+                        "Transaction Type",
+                        "Asset",
+                        "Quantity Transacted",
+                        "EUR Spot Price at Transaction",
+                        "EUR Subtotal",
+                        "EUR Total (inclusive of fees)",
+                        "EUR Fees",
+                        "Notes",
+                    ]
+                else:
+                    raise RuntimeError(
+                        "Unknown Coinbase format: "
+                        "Number of rows do not match known versions: "
+                        f"{file_path}."
+                    )
             except AssertionError as e:
                 msg = (
                     "Unable to read coinbase file: Malformed header. "
@@ -181,18 +205,38 @@ class Book:
                 log.exception(e)
                 return
 
-            for (
-                _utc_time,
-                operation,
-                coin,
-                _change,
-                _currency_spot,
-                _eur_spot,
-                _eur_subtotal,
-                _eur_total,
-                _eur_fee,
-                remark,
-            ) in reader:
+            for columns in reader:
+
+                # Coinbase export format from late 2021 and ongoing
+                if num_columns == 10:
+                    (
+                        _utc_time,
+                        operation,
+                        coin,
+                        _change,
+                        _currency_spot,
+                        _eur_spot,
+                        _eur_subtotal,
+                        _eur_total,
+                        _eur_fee,
+                        remark,
+                    ) = columns
+
+                # Coinbase export format from mid 2021 and before
+                elif num_columns == 9:
+                    (
+                        _utc_time,
+                        operation,
+                        coin,
+                        _change,
+                        _eur_spot,
+                        _eur_subtotal,
+                        _eur_total,
+                        _eur_fee,
+                        remark,
+                    ) = columns
+                    _currency_spot = "EUR"
+
                 row = reader.line_num
 
                 # Parse data.
