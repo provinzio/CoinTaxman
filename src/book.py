@@ -66,7 +66,7 @@ class Book:
         o = Op(utc_time, platform, change, coin, row, file_path)
         self.operations.append(o)
 
-    def _read_binance(self, file_path: Path) -> None:
+    def _read_binance(self, file_path: Path, version: int = 1) -> None:
         platform = "binance"
         operation_mapping = {
             "Distribution": "Airdrop",
@@ -92,7 +92,23 @@ class Book:
             # Skip header.
             next(reader)
 
-            for _utc_time, account, operation, coin, _change, remark in reader:
+            for rowlist in reader:
+                if version == 1:
+                    _utc_time, account, operation, coin, _change, remark = rowlist
+                elif version == 2:
+                    (
+                        _,
+                        _utc_time,
+                        account,
+                        operation,
+                        coin,
+                        _change,
+                        remark,
+                    ) = rowlist
+                else:
+                    log.error("File version not Supported " + str(file_path))
+                    raise NotImplementedError
+
                 row = reader.line_num
 
                 # Parse data.
@@ -139,6 +155,9 @@ class Book:
                 self.append_operation(
                     operation, utc_time, platform, change, coin, row, file_path
                 )
+
+    def _read_binance_v2(self, file_path: Path) -> None:
+        self._read_binance(file_path=file_path, version=2)
 
     def _read_coinbase(self, file_path: Path) -> None:
         platform = "coinbase"
@@ -722,6 +741,15 @@ class Book:
 
             expected_headers = {
                 "binance": [
+                    "UTC_Time",
+                    "Account",
+                    "Operation",
+                    "Coin",
+                    "Change",
+                    "Remark",
+                ],
+                "binance_v2": [
+                    "User_ID",
                     "UTC_Time",
                     "Account",
                     "Operation",
