@@ -132,7 +132,10 @@ class Book:
                     # so we have to change the account type to Spot.
                     account = "Spot"
 
-                if account == "P2P" and operation in ("transfer_in", "transfer_out"):
+                if account in ("Spot", "P2P") and operation in (
+                    "transfer_in",
+                    "transfer_out",
+                ):
                     # Ignore transfer from and to P2P market.
                     continue
 
