@@ -126,7 +126,7 @@ class Book:
                 ):
                     operation = "Sell" if change < 0 else "Buy"
 
-                if operation in ("Commission") and account != "Spot":
+                if operation == "Commission" and account != "Spot":
                     # All comissions will be handled the same way.
                     # As of now, only Spot Binance Operations are supported,
                     # so we have to change the account type to Spot.
