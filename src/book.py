@@ -89,7 +89,7 @@ class Book:
             for rowlist in reader:
                 if version == 1:
                     _utc_time, account, operation, coin, _change, remark = rowlist
-                if version == 2:
+                elif version == 2:
                     (
                         _,
                         _utc_time,
