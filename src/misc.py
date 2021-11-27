@@ -115,6 +115,10 @@ def to_ns_timestamp(d: datetime.datetime) -> int:
     return int(d.timestamp() * 1000000000)
 
 
+def to_decimal_timestamp(d: datetime.datetime) -> decimal.Decimal:
+    return decimal.Decimal(d.timestamp())
+
+
 def get_offset_timestamps(
     utc_time: datetime.datetime,
     offset: datetime.timedelta,
@@ -160,6 +164,10 @@ def parse_iso_timestamp(d: str) -> datetime.datetime:
 
     # timezone information is already taken care of with this
     return datetime.datetime.fromisoformat(d)
+
+
+def parse_iso_timestamp_to_decimal_timestamp(d: str) -> decimal.Decimal:
+    return to_decimal_timestamp(datetime.datetime.fromisoformat(d))
 
 
 def group_by(lst: L, key: str) -> dict[str, L]:
