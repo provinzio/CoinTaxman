@@ -31,7 +31,7 @@ clean:
 cleanrun: clean run
 
 check-db:
-	cd src && python -c 'from price_data import PriceData; PriceData().check_database()'
+	cd src && python -c "from price_data import PriceData; PriceData().check_database()"
 
 # Install requirements
 install:
