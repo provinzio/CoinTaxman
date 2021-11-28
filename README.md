@@ -47,7 +47,7 @@ Please have a look in the [Makefile](https://github.com/provinzio/CoinTaxman/blo
 
 #### Run as docker container
 
-Thanks to @jhoogstraat, you can also run CoinTaxman as a docker container.
+Thanks to [jhoogstraat](https://github.com/jhoogstraat), you can also run CoinTaxman as a docker container.
 The image is hosted on dockerhub: [jeppy/cointaxman:latest](https://hub.docker.com/r/jeppy/cointaxman).
 
 ### Supporting the development
