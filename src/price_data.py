@@ -119,8 +119,20 @@ class PriceData:
         response.raise_for_status()
 
         if len(data) == 0:
-            log.warning("Binance offers no price for `%s` at %s", symbol, utc_time)
-            return decimal.Decimal()
+            log.warning(
+                "Binance offers no price for %s at %s. Trying %s/USDT and %s/USDT",
+                symbol,
+                utc_time,
+                base_asset,
+                quote_asset,
+            )
+            if quote_asset == "USDT":
+                return decimal.Decimal()
+            quote = self.get_price("binance", quote_asset, utc_time, "USDT")
+            if quote == 0.0:
+                return quote
+            usdt = self.get_price("binance", base_asset, utc_time, "USDT")
+            return usdt / quote
 
         # Calculate average price.
         total_cost = decimal.Decimal()
@@ -280,6 +292,10 @@ class PriceData:
         # simply take the average
         high = misc.force_decimal(data[0]["high"])
         low = misc.force_decimal(data[0]["low"])
+
+        # if spread is greater than 3%
+        if (high - low) / high > 0.03:
+            log.warning(f"Price spread is greater than 3%! High: {high}, Low: {low}")
         return (high + low) / 2
 
     @misc.delayed
@@ -432,6 +448,79 @@ class PriceData:
 
         return None
 
+    def __mean_price_db(
+        self,
+        db_path: Path,
+        tablename: str,
+        utc_time: datetime.datetime,
+    ) -> decimal.Decimal:
+        """Try to retrieve the price right before and after `utc_time`
+        from our local database.
+
+        Return 0 if the price could not be estimated.
+        The function does not check, if a price for `utc_time` exists.
+
+        Args:
+            db_path (Path)
+            tablename (str)
+            utc_time (datetime.datetime)
+
+        Returns:
+            decimal.Decimal: Price.
+        """
+        if db_path.is_file():
+            with sqlite3.connect(db_path) as conn:
+                cur = conn.cursor()
+
+                before_query = (
+                    f"SELECT utc_time, price FROM `{tablename}` "
+                    f"WHERE utc_time<? AND price > 0 "
+                    "ORDER BY utc_time DESC "
+                    "LIMIT 1"
+                )
+                try:
+                    cur.execute(before_query, (utc_time,))
+                except sqlite3.OperationalError as e:
+                    if str(e) == f"no such table: {tablename}":
+                        return decimal.Decimal()
+                    raise e
+                if result := cur.fetchone():
+                    before_time = misc.parse_iso_timestamp_to_decimal_timestamp(
+                        result[0]
+                    )
+                    before_price = misc.force_decimal(result[1])
+                else:
+                    return decimal.Decimal()
+
+                after_query = (
+                    f"SELECT utc_time, price FROM `{tablename}` "
+                    f"WHERE utc_time>? AND price > 0 "
+                    "ORDER BY utc_time ASC "
+                    "LIMIT 1"
+                )
+                try:
+                    cur.execute(after_query, (utc_time,))
+                except sqlite3.OperationalError as e:
+                    if str(e) == f"no such table: {tablename}":
+                        return decimal.Decimal()
+                    raise e
+                if result := cur.fetchone():
+                    after_time = misc.parse_iso_timestamp_to_decimal_timestamp(
+                        result[0]
+                    )
+                    after_price = misc.force_decimal(result[1])
+                else:
+                    return decimal.Decimal()
+
+                if before_price and after_price:
+                    d_utc_time = misc.to_decimal_timestamp(utc_time)
+                    # Linear gradiant between the neighbored transactions.
+                    m = (after_price - before_price) / (after_time - before_time)
+                    price = before_price + (d_utc_time - before_time) * m
+                    return price
+
+        return decimal.Decimal()
+
     def __set_price_db(
         self,
         db_path: Path,
@@ -539,16 +628,22 @@ class PriceData:
         tablename = self.get_tablename(coin, reference_coin)
 
         # Check if price exists already in our database.
-        if (price := self.__get_price_db(db_path, tablename, utc_time)) is not None:
-            return price
+        if (price := self.__get_price_db(db_path, tablename, utc_time)) is None:
+            try:
+                get_price = getattr(self, f"_get_price_{platform}")
+            except AttributeError:
+                raise NotImplementedError("Unable to read data from %s", platform)
 
-        try:
-            get_price = getattr(self, f"_get_price_{platform}")
-        except AttributeError:
-            raise NotImplementedError("Unable to read data from %s", platform)
+            price = get_price(coin, utc_time, reference_coin, **kwargs)
+            assert isinstance(price, decimal.Decimal)
+            self.__set_price_db(db_path, tablename, utc_time, price)
 
-        price = get_price(coin, utc_time, reference_coin, **kwargs)
-        self.__set_price_db(db_path, tablename, utc_time, price)
+        if config.MEAN_MISSING_PRICES and price <= 0.0:
+            # The price is missing. Check for prices before and after the
+            # transaction and estimate the price.
+            # Do not save price in database.
+            price = self.__mean_price_db(db_path, tablename, utc_time)
+
         return price
 
     def get_cost(
@@ -563,3 +658,61 @@ class PriceData:
         if isinstance(tr, transaction.SoldCoin):
             return price * tr.sold
         raise NotImplementedError
+
+    def check_database(self):
+        stats = {}
+
+        for db_path in Path(config.DATA_PATH).glob("*.db"):
+            if db_path.is_file():
+                platform = db_path.stem
+                stats[platform] = {"fix": 0, "rem": 0}
+                try:
+                    get_price = getattr(self, f"_get_price_{platform}")
+                except AttributeError:
+                    if platform == "coinbase":
+                        get_price = self._get_price_coinbase_pro
+                    else:
+                        raise NotImplementedError(
+                            "Unable to read data from %s", platform
+                        )
+
+                with sqlite3.connect(db_path) as conn:
+                    query = "SELECT name FROM sqlite_master WHERE type='table'"
+                    cur = conn.execute(query)
+                    tablenames = (result[0] for result in cur.fetchall())
+                    for tablename in tablenames:
+                        base_asset, quote_asset = tablename.split("/")
+                        query = f"SELECT utc_time FROM `{tablename}` WHERE price<=0.0;"
+                        cur = conn.execute(query)
+
+                        for row in cur.fetchall():
+                            utc_time = datetime.datetime.strptime(
+                                row[0], "%Y-%m-%d %H:%M:%S%z"
+                            )
+                            price = get_price(base_asset, utc_time, quote_asset)
+
+                            if price == 0.0:
+                                log.warning(
+                                    f"""
+                                    Could not fetch price for
+                                    pair {tablename} on {platform} at {utc_time}
+                                    """
+                                )
+                                stats[platform]["rem"] += 1
+                            else:
+                                log.info(
+                                    f"Updating {tablename} at {utc_time} to {price}"
+                                )
+                                query = f"""
+                                UPDATE `{tablename}`
+                                SET price=?
+                                WHERE utc_time=?;"""
+                                conn.execute(query, (str(price), utc_time))
+                                stats[platform]["fix"] += 1
+
+                    conn.commit()
+
+        log.info("Check Database Result:")
+        for platform, result in stats.items():
+            fixed, remaining = result.values()
+            log.info(f"{platform}: {fixed} fixed, {remaining} remaining")

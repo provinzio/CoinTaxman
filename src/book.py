@@ -66,7 +66,7 @@ class Book:
         o = Op(utc_time, platform, change, coin, row, file_path)
         self.operations.append(o)
 
-    def _read_binance(self, file_path: Path) -> None:
+    def _read_binance(self, file_path: Path, version: int = 1) -> None:
         platform = "binance"
         operation_mapping = {
             "Distribution": "Airdrop",
@@ -92,7 +92,23 @@ class Book:
             # Skip header.
             next(reader)
 
-            for _utc_time, account, operation, coin, _change, remark in reader:
+            for rowlist in reader:
+                if version == 1:
+                    _utc_time, account, operation, coin, _change, remark = rowlist
+                elif version == 2:
+                    (
+                        _,
+                        _utc_time,
+                        account,
+                        operation,
+                        coin,
+                        _change,
+                        remark,
+                    ) = rowlist
+                else:
+                    log.error("File version not Supported " + str(file_path))
+                    raise NotImplementedError
+
                 row = reader.line_num
 
                 # Parse data.
@@ -110,11 +126,18 @@ class Book:
                 ):
                     operation = "Sell" if change < 0 else "Buy"
 
-                if operation in ("Commission") and account != "Spot":
+                if operation == "Commission" and account != "Spot":
                     # All comissions will be handled the same way.
                     # As of now, only Spot Binance Operations are supported,
                     # so we have to change the account type to Spot.
                     account = "Spot"
+
+                if account in ("Spot", "P2P") and operation in (
+                    "transfer_in",
+                    "transfer_out",
+                ):
+                    # Ignore transfer from and to P2P market.
+                    continue
 
                 change = abs(change)
 
@@ -140,6 +163,9 @@ class Book:
                     operation, utc_time, platform, change, coin, row, file_path
                 )
 
+    def _read_binance_v2(self, file_path: Path) -> None:
+        self._read_binance(file_path=file_path, version=2)
+
     def _read_coinbase(self, file_path: Path) -> None:
         platform = "coinbase"
         operation_mapping = {
@@ -160,17 +186,42 @@ class Book:
                 assert next(reader) == ["Transactions"]
                 assert next(reader)  # user row
                 assert next(reader) == []
-                assert next(reader) == [
-                    "Timestamp",
-                    "Transaction Type",
-                    "Asset",
-                    "Quantity Transacted",
-                    "EUR Spot Price at Transaction",
-                    "EUR Subtotal",
-                    "EUR Total (inclusive of fees)",
-                    "EUR Fees",
-                    "Notes",
-                ]
+
+                fields = next(reader)
+                num_columns = len(fields)
+                # Coinbase export format from late 2021 and ongoing
+                if num_columns == 10:
+                    assert fields == [
+                        "Timestamp",
+                        "Transaction Type",
+                        "Asset",
+                        "Quantity Transacted",
+                        "Spot Price Currency",
+                        "Spot Price at Transaction",
+                        "Subtotal",
+                        "Total (inclusive of fees)",
+                        "Fees",
+                        "Notes",
+                    ]
+                # Coinbase export format from mid 2021 and before
+                elif num_columns == 9:
+                    assert fields == [
+                        "Timestamp",
+                        "Transaction Type",
+                        "Asset",
+                        "Quantity Transacted",
+                        "EUR Spot Price at Transaction",
+                        "EUR Subtotal",
+                        "EUR Total (inclusive of fees)",
+                        "EUR Fees",
+                        "Notes",
+                    ]
+                else:
+                    raise RuntimeError(
+                        "Unknown Coinbase format: "
+                        "Number of rows do not match known versions: "
+                        f"{file_path}."
+                    )
             except AssertionError as e:
                 msg = (
                     "Unable to read coinbase file: Malformed header. "
@@ -180,17 +231,38 @@ class Book:
                 log.exception(e)
                 return
 
-            for (
-                _utc_time,
-                operation,
-                coin,
-                _change,
-                _eur_spot,
-                _eur_subtotal,
-                _eur_total,
-                _eur_fee,
-                remark,
-            ) in reader:
+            for columns in reader:
+
+                # Coinbase export format from late 2021 and ongoing
+                if num_columns == 10:
+                    (
+                        _utc_time,
+                        operation,
+                        coin,
+                        _change,
+                        _currency_spot,
+                        _eur_spot,
+                        _eur_subtotal,
+                        _eur_total,
+                        _eur_fee,
+                        remark,
+                    ) = columns
+
+                # Coinbase export format from mid 2021 and before
+                elif num_columns == 9:
+                    (
+                        _utc_time,
+                        operation,
+                        coin,
+                        _change,
+                        _eur_spot,
+                        _eur_subtotal,
+                        _eur_total,
+                        _eur_fee,
+                        remark,
+                    ) = columns
+                    _currency_spot = "EUR"
+
                 row = reader.line_num
 
                 # Parse data.
@@ -208,6 +280,7 @@ class Book:
                 assert operation
                 assert coin
                 assert change
+                assert _currency_spot == "EUR"
 
                 # Save price in our local database for later.
                 self.price_data.set_price_db(platform, coin, "EUR", utc_time, eur_spot)
@@ -548,33 +621,70 @@ class Book:
                 return
 
             line = next(reader)
-            assert line == [
-                "Order ID",
-                "Trade ID",
-                "Type",
-                "Market",
-                "Amount",
-                "Amount Currency",
-                "Price",
-                "Price Currency",
-                "Fee",
-                "Fee Currency",
-                "Time (UTC)",
+            assert line in [
+                [
+                    "Order ID",
+                    "Trade ID",
+                    "Type",
+                    "Market",
+                    "Amount",
+                    "Amount Currency",
+                    "Price",
+                    "Price Currency",
+                    "Fee",
+                    "Fee Currency",
+                    "Time (UTC)",
+                ],
+                [
+                    "Order ID",
+                    "Trade ID",
+                    "Type",
+                    "Market",
+                    "Amount",
+                    "Amount Currency",
+                    "Price",
+                    "Price Currency",
+                    "Fee",
+                    "Fee Currency",
+                    "Time (UTC)",
+                    "BEST_EUR Rate",
+                ],
             ]
 
-            for (
-                _order_id,
-                _trace_id,
-                operation,
-                trade_pair,
-                amount,
-                amount_currency,
-                _price,
-                price_currency,
-                fee,
-                fee_currency,
-                _utc_time,
-            ) in reader:
+            for current_line in reader:
+                if len(current_line) == 11:
+                    (
+                        _order_id,
+                        _trace_id,
+                        operation,
+                        trade_pair,
+                        amount,
+                        amount_currency,
+                        _price,
+                        price_currency,
+                        fee,
+                        fee_currency,
+                        _utc_time,
+                    ) = current_line
+                    best_price = None
+                elif len(current_line) == 12:
+                    (
+                        _order_id,
+                        _trace_id,
+                        operation,
+                        trade_pair,
+                        amount,
+                        amount_currency,
+                        _price,
+                        price_currency,
+                        fee,
+                        fee_currency,
+                        _utc_time,
+                        best_price,
+                    ) = current_line
+                else:
+                    raise NotImplementedError
+
                 row = reader.line_num
 
                 # trade pair is of form e.g. BTC_EUR
@@ -598,14 +708,9 @@ class Book:
                     fee_currency == "BEST"
                     or (operation == "SELL" and fee_currency == price_currency)
                     or (operation == "BUY" and fee_currency == amount_currency)
-                )
+                ), "Invalid fee currency"
 
-                # make RFC3339 timestamp ISO 8601 parseable
-                if _utc_time[-1] == "Z":
-                    _utc_time = _utc_time[:-1] + "+00:00"
-
-                # timezone information is already taken care of with this
-                utc_time = datetime.datetime.fromisoformat(_utc_time)
+                utc_time = misc.parse_iso_timestamp(_utc_time)
 
                 coin = amount_currency
 
@@ -616,6 +721,14 @@ class Book:
                 # Save price in our local database for later.
                 price = misc.force_decimal(_price)
                 self.price_data.set_price_db(platform, coin, "EUR", utc_time, price)
+                if best_price:
+                    self.price_data.set_price_db(
+                        platform,
+                        "BEST",
+                        "EUR",
+                        utc_time,
+                        misc.force_decimal(best_price),
+                    )
 
                 self.append_operation(
                     "Fee",
@@ -635,6 +748,15 @@ class Book:
 
             expected_headers = {
                 "binance": [
+                    "UTC_Time",
+                    "Account",
+                    "Operation",
+                    "Coin",
+                    "Change",
+                    "Remark",
+                ],
+                "binance_v2": [
+                    "User_ID",
                     "UTC_Time",
                     "Account",
                     "Operation",
