@@ -15,13 +15,14 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from datetime import datetime
+from os import environ
 from pathlib import Path
 
 from dateutil.relativedelta import relativedelta
 
 import core
 
-# User specific constants.
+# User specific constants (might be overwritten by environmental variables).
 COUNTRY = core.Country.GERMANY
 TAX_YEAR = 2021
 # If the price for a coin is missing, check if there are known prices before
@@ -29,6 +30,17 @@ TAX_YEAR = 2021
 # the price inbetween.
 # Important: The code must be run twice for this option to take effect.
 MEAN_MISSING_PRICES = False
+
+# Read in environmental variables.
+if _env_country := environ.get("COUNTRY"):
+    COUNTRY = core.Country[_env_country]
+if _env_tax_year := environ.get("TAX_YEAR"):
+    try:
+        TAX_YEAR = int(_env_tax_year)
+    except ValueError as e:
+        raise ValueError(
+            "Unable to convert environment variable `TAX_YEAR` to int"
+        ) from e
 
 # Country specific constants.
 if COUNTRY == core.Country.GERMANY:
