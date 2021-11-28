@@ -34,7 +34,7 @@ run-container:
 		-v `pwd`/account_statements:/CoinTaxman/account_statements:Z \
 		-v `pwd`/data:/CoinTaxman/data:Z \
 		-v `pwd`/export:/CoinTaxman/export:Z \
-		-e TAX_YEAR=2020 -e COUNTRY=GERMANY \
+		-e TAX_YEAR=2021 -e COUNTRY=GERMANY \
 		cointaxman
 
 clean:
