@@ -268,7 +268,7 @@ class Taxman:
             taxed_gains = sum(tx.taxed_gain for tx in self.virtual_tax_events)
             print()
             print(
-                f"You are currently invested with {invsted:.2f} {config.FIAT}. "
+                f"You are currently invested with {invsted:.2f} {config.FIAT}.\n"
                 f"If you would sell everything right now, "
                 f"you would realize {real_gains:.2f} {config.FIAT} gains "
                 f"({real_gains:.2f} {config.FIAT} taxed gain)."
