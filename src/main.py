@@ -35,6 +35,13 @@ def main() -> None:
         log.warning("Stopping CoinTaxman.")
         return
 
+    # TODO Resolve withdrawals and deposits between exchanges (#4)
+    # 1) Find matching withdrawal and deposit or raise a warning
+    # 2) Withdraw deposits from one exchange with FIFO/LIFO principle
+    #    to the other exchange
+    # log.debug("Resolve withdrawals and deposits between exchanges...")
+    # book.resolve_deposits()
+
     taxman.evaluate_taxation()
     taxman.export_evaluation_as_csv()
     taxman.print_evaluation()
