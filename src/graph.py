@@ -1,7 +1,7 @@
 import collections
 import logging
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import ccxt
 
@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 
 
 class RateLimit:
-    exchangedict: Dict[str, int] = {}
+    exchangedict: dict[str, int] = {}
 
     def limit(self, exchange):
         if lastcall := self.exchangedict.get(exchange.id):
@@ -47,7 +47,7 @@ class PricePath:
 
         # Saves the priority for a certain path so that bad paths can be skipped.
         self.priority: collections.defaultdict[str, int] = collections.defaultdict(int)
-        allpairs: set[Tuple[str, str, str, str]] = set()
+        allpairs: set[tuple[str, str, str, str]] = set()
 
         for exchange_id in exchanges:
             exchange_class = getattr(ccxt, exchange_id)
@@ -71,7 +71,7 @@ class PricePath:
         # TODO It might be faster to create it directly as set.
         #      Is it even necessary to convert it to a list?
         # allpairs = list(set(allpairs))
-        allpairslist: List[Tuple[str, str, str, str]] = list(allpairs)
+        allpairslist: list[tuple[str, str, str, str]] = list(allpairs)
         del allpairs
         # print("Total Pairs to check:", len(allpairs))
 
