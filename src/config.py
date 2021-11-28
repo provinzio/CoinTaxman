@@ -22,14 +22,25 @@ from dateutil.relativedelta import relativedelta
 
 import core
 
-# User specific constants.
-COUNTRY = core.Country[environ.get("COUNTRY", core.Country.GERMANY.name)]
-TAX_YEAR = environ.get("TAX_YEAR", 2021)
+# User specific constants (might be overwritten by environmental variables).
+COUNTRY = core.Country.GERMANY
+TAX_YEAR = 2021
 # If the price for a coin is missing, check if there are known prices before
 # and after the specific transaction and use linear regression to estimate
 # the price inbetween.
 # Important: The code must be run twice for this option to take effect.
 MEAN_MISSING_PRICES = False
+
+# Read in environmental variables.
+if _env_country := environ.get("COUNTRY"):
+    COUNTRY = core.Country[_env_country]
+if _env_tax_year := environ.get("TAX_YEAR"):
+    try:
+        TAX_YEAR = int(_env_tax_year)
+    except ValueError as e:
+        raise ValueError(
+            "Unable to convert environment variable `TAX_YEAR` to int"
+        ) from e
 
 # Country specific constants.
 if COUNTRY == core.Country.GERMANY:
