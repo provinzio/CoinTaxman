@@ -66,7 +66,7 @@ class BalanceQueue(abc.ABC):
         """Put a new item in the queue.
 
         Args:
-            item (Union[Operation, BalancedOperation])
+            item (BalancedOperation)
         """
         raise NotImplementedError
 
@@ -156,7 +156,7 @@ class BalanceFIFOQueue(BalanceQueue):
         """Put a new item in the queue.
 
         Args:
-            item (Union[Operation, BalancedOperation])
+            item (BalancedOperation)
         """
         self.queue.append(bop)
 
@@ -182,7 +182,7 @@ class BalanceLIFOQueue(BalanceQueue):
         """Put a new item in the queue.
 
         Args:
-            item (Union[Operation, BalancedOperation])
+            item (BalancedOperation)
         """
         self.queue.append(bop)
 
