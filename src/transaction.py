@@ -207,6 +207,7 @@ gain_operations = [
     CoinLendInterest,
     StakingInterest,
     Airdrop,
+    Commission,
     Deposit,
 ]
 loss_operations = [
@@ -214,7 +215,6 @@ loss_operations = [
     CoinLend,
     Staking,
     Sell,
-    Commission,
     Withdraw,
 ]
 operations_order = gain_operations + loss_operations
@@ -243,6 +243,6 @@ def sort_operations(
             idx = operations_order.index(type(op))
         except ValueError:
             idx = 0
-        return tuple([idx] + [getattr(op, key) for key in keys] if keys else [])
+        return tuple(([getattr(op, key) for key in keys] if keys else []) + [idx])
 
     return sorted(operations, key=key)

@@ -211,7 +211,7 @@ class Taxman:
                 self.tax_events, "taxation_type"
             ).items():
                 taxed_gains = sum(tx.taxed_gain for tx in tax_events)
-                print(f"{taxation_type}: {taxed_gains} {config.FIAT}")
+                print(f"{taxation_type}: {taxed_gains:.2f} {config.FIAT}")
         else:
             print(
                 "Either the evaluation has not run or there are no tax events "

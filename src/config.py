@@ -23,7 +23,12 @@ import core
 
 # User specific constants.
 COUNTRY = core.Country.GERMANY
-TAX_YEAR = 2020
+TAX_YEAR = 2021
+# If the price for a coin is missing, check if there are known prices before
+# and after the specific transaction and use linear regression to estimate
+# the price inbetween.
+# Important: The code must be run twice for this option to take effect.
+MEAN_MISSING_PRICES = False
 
 # Country specific constants.
 if COUNTRY == core.Country.GERMANY:
