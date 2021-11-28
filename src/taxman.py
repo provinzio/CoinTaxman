@@ -275,7 +275,11 @@ class Taxman:
             )
             print()
             print("Your current portfolio should be:")
-            for tx in self.virtual_tax_events:
+            for tx in sorted(
+                self.virtual_tax_events,
+                key=lambda tx: tx.sell_price,
+                reverse=True,
+            ):
                 print(
                     f"{tx.op.platform}: "
                     f"{tx.op.change:.6f} {tx.op.coin} > "
