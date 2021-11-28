@@ -271,7 +271,7 @@ class Taxman:
                 f"You are currently invested with {invsted:.2f} {config.FIAT}.\n"
                 f"If you would sell everything right now, "
                 f"you would realize {real_gains:.2f} {config.FIAT} gains "
-                f"({real_gains:.2f} {config.FIAT} taxed gain)."
+                f"({taxed_gains:.2f} {config.FIAT} taxed gain)."
             )
             print()
             print("Your current portfolio should be:")
