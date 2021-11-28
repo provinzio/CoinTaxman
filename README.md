@@ -149,6 +149,9 @@ Zusammenfassung in meinen Worten:
 - Gebühren zum Handel sind steuerlich abzugsfähig.
 - Es kann einmalig entschieden werden, ob nach FIFO oder LIFO versteuert werden soll.
 
+Weitere Grundsätze, die oben nicht angesprochen wurden:
+- Versteuerung erfolgt separat getrennt nach Depots (Wallets, Exchanges, etc.) [cryptotax](https://cryptotax.io/fifo-oder-lifo-bitcoin-gewinnermittlung/).
+
 ### Airdrops
 
 > Im Rahmen eines Airdrops erhält der Nutzer Kryptowährungen, ohne diese angeschafft oder eine sonstige Leistung hierfür erbracht zu haben. Die Kryptowährungen werden nicht aus dem Rechtskreis eines Dritten auf den Nutzer übertragen. Vielmehr beginnen sie ihre „Existenz“ überhaupt erst in dessen Vermögen. Die Kryptowährung entsteht direkt in den Wallets der Nutzer, wobei die Wallets bestimmte Kriterien erfüllen müssen. Airdrops ähneln insofern einem Lottogewinn oder einem Zufallsfund (sog. Windfall Profits).

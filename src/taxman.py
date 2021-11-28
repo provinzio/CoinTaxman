@@ -175,9 +175,19 @@ class Taxman:
                     tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
                     self.tax_events.append(tx)
             elif isinstance(op, transaction.Deposit):
-                pass
+                if coin != config.FIAT:
+                    log.warning(
+                        f"Unresolved deposit of {op.change} {coin} "
+                        f"on {op.platform} at {op.utc_time}. "
+                        "The evaluation might be wrong."
+                    )
             elif isinstance(op, transaction.Withdrawal):
-                pass
+                if coin != config.FIAT:
+                    log.warning(
+                        f"Unresolved withdrawal of {op.change} {coin} "
+                        f"from {op.platform} at {op.utc_time}. "
+                        "The evaluation might be wrong."
+                    )
             else:
                 raise NotImplementedError
 
@@ -192,10 +202,12 @@ class Taxman:
 
     def evaluate_taxation(self) -> None:
         """Evaluate the taxation per coin using country specific function."""
+        # Evaluate taxation separated by platforms and coins.
         log.debug("Starting evaluation...")
-        for coin, operations in misc.group_by(self.book.operations, "coin").items():
-            operations = transaction.sort_operations(operations, ["utc_time"])
-            self.__evaluate_taxation(coin, operations)
+        for _, operations in misc.group_by(self.book.operations, "platform").items():
+            for coin, operations_ in misc.group_by(operations, "coin").items():
+                operations_ = transaction.sort_operations(operations_, ["utc_time"])
+                self.__evaluate_taxation(coin, operations_)
 
     def print_evaluation(self) -> None:
         """Print short summary of evaluation to stdout."""
