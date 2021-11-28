@@ -176,7 +176,7 @@ class Taxman:
                     self.tax_events.append(tx)
             elif isinstance(op, transaction.Deposit):
                 pass
-            elif isinstance(op, transaction.Withdraw):
+            elif isinstance(op, transaction.Withdrawal):
                 pass
             else:
                 raise NotImplementedError

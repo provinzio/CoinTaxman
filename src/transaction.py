@@ -118,7 +118,7 @@ class Deposit(Transaction):
     pass
 
 
-class Withdraw(Transaction):
+class Withdrawal(Transaction):
     pass
 
 
@@ -155,7 +155,7 @@ loss_operations = [
     CoinLend,
     Staking,
     Sell,
-    Withdraw,
+    Withdrawal,
 ]
 operations_order = gain_operations + loss_operations
 
