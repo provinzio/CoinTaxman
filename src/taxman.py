@@ -19,7 +19,7 @@ import datetime
 import decimal
 import logging
 from pathlib import Path
-from typing import Type
+from typing import Optional, Type
 
 import balance_queue
 import config
@@ -38,7 +38,8 @@ class Taxman:
         self.price_data = price_data
 
         self.tax_events: list[transaction.TaxEvent] = []
-        self.balances: dict[str, balance_queue.BalanceQueue] = {}
+        # Tax Events which would occur if all left over coins were sold now.
+        self.virtual_tax_events: list[transaction.TaxEvent] = []
 
         # Determine used functions/classes depending on the config.
         country = config.COUNTRY.name
@@ -70,6 +71,81 @@ class Taxman:
     ) -> None:
         balance = self.BalanceType()
 
+        def evaluate_sell(op: transaction.Operation) -> Optional[transaction.TaxEvent]:
+            # Remove coins from queue.
+            sold_coins, unsold_coins = balance.sell(op.change)
+
+            if coin == config.FIAT:
+                # Not taxable.
+                return None
+
+            if unsold_coins:
+                # Queue ran out of items to sell and not all coins
+                # could be sold.
+                log.error(
+                    f"{op.file_path.name}: Line {op.line}: "
+                    f"Not enough {coin} in queue to sell: "
+                    f"missing {unsold_coins} {coin} "
+                    f"(transaction from {op.utc_time} "
+                    f"on {op.platform})\n"
+                    "\tThis error occurs if your account statements "
+                    "have unmatched buy/sell positions.\n"
+                    "\tHave you added all your account statements "
+                    "of the last years?\n"
+                    "\tThis error may also occur after deposits "
+                    "from unknown sources.\n"
+                )
+                raise RuntimeError
+
+            if not self.in_tax_year(op):
+                # Sell is only taxable in the respective year.
+                return None
+
+            taxation_type = "Sonstige Einkünfte"
+            # Price of the sell.
+            sell_price = self.price_data.get_cost(op)
+            taxed_gain = decimal.Decimal()
+            real_gain = decimal.Decimal()
+            # Coins which are older than (in this case) one year or
+            # which come from an Airdrop, CoinLend or Commission (in an
+            # foreign currency) will not be taxed.
+            for sc in sold_coins:
+                is_taxable = not config.IS_LONG_TERM(
+                    sc.op.utc_time, op.utc_time
+                ) and not (
+                    isinstance(
+                        sc.op,
+                        (
+                            transaction.Airdrop,
+                            transaction.CoinLendInterest,
+                            transaction.StakingInterest,
+                            transaction.Commission,
+                        ),
+                    )
+                    and not sc.op.coin == config.FIAT
+                )
+                # Only calculate the gains if necessary.
+                if is_taxable or config.CALCULATE_VIRTUAL_SELL:
+                    partial_sell_price = (sc.sold / op.change) * sell_price
+                    sold_coin_cost = self.price_data.get_cost(sc)
+                    gain = partial_sell_price - sold_coin_cost
+                    if is_taxable:
+                        taxed_gain += gain
+                    if config.CALCULATE_VIRTUAL_SELL:
+                        real_gain += gain
+            remark = ", ".join(
+                f"{sc.sold} from {sc.op.utc_time} " f"({sc.op.__class__.__name__})"
+                for sc in sold_coins
+            )
+            return transaction.TaxEvent(
+                taxation_type,
+                taxed_gain,
+                op,
+                sell_price,
+                real_gain,
+                remark,
+            )
+
         for op in operations:
             if isinstance(op, transaction.Fee):
                 balance.remove_fee(op.change)
@@ -90,66 +166,8 @@ class Taxman:
             elif isinstance(op, transaction.Buy):
                 balance.put(op)
             elif isinstance(op, transaction.Sell):
-                sold_coins, unsold_coins = balance.sell(op.change)
-                if unsold_coins:
-                    # Queue ran out of items to sell and not all coins
-                    # could be sold.
-                    if coin == config.FIAT:
-                        # This is OK for the own fiat currencies (not taxable).
-                        continue
-                    else:
-                        log.error(
-                            f"{op.file_path.name}: Line {op.line}: "
-                            f"Not enough {coin} in queue to sell "
-                            f"(transaction from {op.utc_time} "
-                            f"on {op.platform})\n"
-                            "\tThis error occurs if your account statements "
-                            "have unmatched buy/sell positions.\n"
-                            "\tHave you added all your account statements "
-                            "of the last years?\n"
-                            "\tThis error may also occur after deposits "
-                            "from unknown sources.\n"
-                        )
-                        raise RuntimeError
-                if self.in_tax_year(op) and coin != config.FIAT:
-                    taxation_type = "Sonstige Einkünfte"
-                    # Price of the sell.
-                    sell_price = self.price_data.get_cost(op)
-                    taxed_gain = decimal.Decimal()
-                    # Coins which are older than (in this case) one year or
-                    # which come from an Airdrop, CoinLend or Commission (in an
-                    # foreign currency) will not be taxed.
-                    for sc in sold_coins:
-                        if not config.IS_LONG_TERM(
-                            sc.op.utc_time, op.utc_time
-                        ) and not (
-                            isinstance(
-                                sc.op,
-                                (
-                                    transaction.Airdrop,
-                                    transaction.CoinLendInterest,
-                                    transaction.StakingInterest,
-                                    transaction.Commission,
-                                ),
-                            )
-                            and not sc.op.coin == config.FIAT
-                        ):
-                            partial_sell_price = (sc.sold / op.change) * sell_price
-                            sold_coin_cost = self.price_data.get_cost(sc)
-                            taxed_gain += partial_sell_price - sold_coin_cost
-                    remark = ", ".join(
-                        f"{sc.sold} from {sc.op.utc_time} "
-                        f"({sc.op.__class__.__name__})"
-                        for sc in sold_coins
-                    )
-                    tx = transaction.TaxEvent(
-                        taxation_type,
-                        taxed_gain,
-                        op,
-                        sell_price,
-                        remark,
-                    )
-                    self.tax_events.append(tx)
+                if tx_ := evaluate_sell(op):
+                    self.tax_events.append(tx_)
             elif isinstance(
                 op, (transaction.CoinLendInterest, transaction.StakingInterest)
             ):
@@ -198,7 +216,23 @@ class Taxman:
                 f"{balance.buffer_fee} {coin}"
             )
 
-        self.balances[coin] = balance
+        # Calculate the amount of coins which should be left on the platform
+        # and evaluate the (taxed) gain, if the coin would be sold right now.
+        if config.CALCULATE_VIRTUAL_SELL and (
+            (left_coin := sum(((bop.op.change - bop.sold) for bop in balance.queue)))
+            and self.price_data.get_cost(op)
+        ):
+            assert isinstance(left_coin, decimal.Decimal)
+            virtual_sell = transaction.Sell(
+                datetime.datetime.now().astimezone(),
+                op.platform,
+                left_coin,
+                coin,
+                -1,
+                Path(""),
+            )
+            if tx_ := evaluate_sell(virtual_sell):
+                self.virtual_tax_events.append(tx_)
 
     def evaluate_taxation(self) -> None:
         """Evaluate the taxation per coin using country specific function."""
@@ -211,6 +245,7 @@ class Taxman:
 
     def print_evaluation(self) -> None:
         """Print short summary of evaluation to stdout."""
+        # Summarize the tax evaluation.
         if self.tax_events:
             print()
             print(f"Your tax evaluation for {config.TAX_YEAR}:")
@@ -224,6 +259,29 @@ class Taxman:
                 "Either the evaluation has not run or there are no tax events "
                 f"for {config.TAX_YEAR}."
             )
+
+        # Summarize the virtual sell, if all left over coins would be sold right now.
+        if self.virtual_tax_events:
+            assert config.CALCULATE_VIRTUAL_SELL
+            invsted = sum(tx.sell_price for tx in self.virtual_tax_events)
+            real_gains = sum(tx.real_gain for tx in self.virtual_tax_events)
+            taxed_gains = sum(tx.taxed_gain for tx in self.virtual_tax_events)
+            print()
+            print(
+                f"You are currently invested with {invsted:.2f} {config.FIAT}. "
+                f"If you would sell everything right now, "
+                f"you would realize {real_gains:.2f} {config.FIAT} gains "
+                f"({real_gains:.2f} {config.FIAT} taxed gain)."
+            )
+            print()
+            print("Your current portfolio should be:")
+            for tx in self.virtual_tax_events:
+                print(
+                    f"{tx.op.platform}: "
+                    f"{tx.op.change:.6f} {tx.op.coin} > "
+                    f"{tx.sell_price:.2f} {config.FIAT} "
+                    f"({tx.real_gain:.2f} gain, {tx.taxed_gain:.2f} taxed gain)"
+                )
 
     def export_evaluation_as_csv(self) -> Path:
         """Export detailed summary of all tax events to CSV.

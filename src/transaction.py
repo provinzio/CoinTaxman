@@ -137,6 +137,7 @@ class TaxEvent:
     taxed_gain: decimal.Decimal
     op: Operation
     sell_price: decimal.Decimal = decimal.Decimal()
+    real_gain: decimal.Decimal = decimal.Decimal()
     remark: str = ""
 
 

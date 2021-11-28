@@ -30,6 +30,9 @@ TAX_YEAR = 2021
 # the price inbetween.
 # Important: The code must be run twice for this option to take effect.
 MEAN_MISSING_PRICES = False
+# Calculate the (taxed) gains, if the left over coins would be sold right now.
+# This will fetch the current prices and therefore slow down repetitive runs.
+CALCULATE_VIRTUAL_SELL = True
 
 # Read in environmental variables.
 if _env_country := environ.get("COUNTRY"):
