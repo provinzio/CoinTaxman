@@ -645,18 +645,10 @@ class Book:
 
         with open(file_path, encoding="utf8") as f:
             reader = csv.reader(f)
+            line = next(reader)
 
             # skip header, there are multiple lines
-            # the last one is the actual header
-            line = next(reader)
-            line = next(reader)
-            line = next(reader)
-            line = next(reader)
-            line = next(reader)
-            line = next(reader)
-            line = next(reader)
-
-            if line != [
+            while line != [
                 "Transaction ID",
                 "Timestamp",
                 "Transaction Type",
@@ -674,7 +666,10 @@ class Book:
                 "Spread",
                 "Spread Currency",
             ]:
-                raise RuntimeError(f"Expected header did not match {line}")
+                try:
+                    line = next(reader)
+                except StopIteration:
+                    raise RuntimeError(f"Expected header not found in file {file_path}")
 
             for (
                 _tx_id,
