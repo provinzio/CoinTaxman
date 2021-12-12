@@ -677,12 +677,12 @@ class Book:
                 operation,
                 _inout,
                 amount_fiat,
-                _fiat,
+                fiat,
                 amount_asset,
                 asset,
                 asset_price,
                 asset_price_currency,
-                _asset_class,
+                asset_class,
                 _product_id,
                 fee,
                 fee_currency,
@@ -715,13 +715,19 @@ class Book:
                     raise RuntimeError(f"Unsupported operation '{operation}'")
 
                 if operation in ["Deposit", "Withdraw"]:
-                    if _asset_class == "Fiat":
+                    if asset_class == "Fiat":
                         change = misc.force_decimal(amount_fiat)
-                    elif _asset_class == "Cryptocurrency":
+                        if fiat != asset:
+                            raise RuntimeError(
+                                f"Asset {asset} should be {fiat} in "
+                                f"row {row} of file {file_path}"
+                            )
+                    elif asset_class == "Cryptocurrency":
                         change = misc.force_decimal(amount_asset)
                     else:
                         raise RuntimeError(
-                            "Unknown asset class: Should be Fiat or Cryptocurrency"
+                            f"Unknown asset class {asset_class}: Should be Fiat or "
+                            f"Cryptocurrency in row {row} of file {file_path}"
                         )
                 elif operation in ["Buy", "Sell"]:
                     if asset_price_currency != config.FIAT:
