@@ -715,15 +715,7 @@ class Book:
                     raise RuntimeError(f"Unsupported operation '{operation}'")
 
                 if operation == "Deposit":
-                    # This identifies a fiat deposit. Error on yet unknown deposits,
-                    # they will need to be implemented separately
-                    if fiat != "EUR" and asset != "EUR" and asset_class != "fiat":
-                        raise RuntimeError(
-                            "A deposit is expected to be of fiat and 'EUR' currency. "
-                            "Others are not implemented yet."
-                        )
-                    else:
-                        change = misc.force_decimal(amount_fiat)
+                    change = misc.force_decimal(amount_fiat)
                 elif operation == "Withdraw":
                     change = misc.force_decimal(amount_asset)
                 elif operation in ["Buy", "Sell"]:
