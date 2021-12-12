@@ -714,10 +714,15 @@ class Book:
                 except KeyError:
                     raise RuntimeError(f"Unsupported operation '{operation}'")
 
-                if operation == "Deposit":
-                    change = misc.force_decimal(amount_fiat)
-                elif operation == "Withdraw":
-                    change = misc.force_decimal(amount_asset)
+                if operation in ["Deposit", "Withdraw"]:
+                    if _asset_class == "Fiat":
+                        change = misc.force_decimal(amount_fiat)
+                    elif _asset_class == "Cryptocurrency":
+                        change = misc.force_decimal(amount_asset)
+                    else:
+                        raise RuntimeError(
+                            "Unknown asset class: Should be Fiat or Cryptocurrency"
+                        )
                 elif operation in ["Buy", "Sell"]:
                     if asset_price_currency != config.FIAT:
                         raise RuntimeError(
