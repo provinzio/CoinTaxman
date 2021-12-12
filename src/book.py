@@ -731,8 +731,6 @@ class Book:
                     self.price_data.set_price_db(
                         platform, asset, "EUR", utc_time, price
                     )
-                else:
-                    change = misc.force_decimal(-1)
 
                 if change < 0:
                     raise RuntimeError(
