@@ -34,7 +34,7 @@ def main() -> None:
     if not status:
         log.warning("Stopping CoinTaxman.")
         return
-
+    book.get_price_from_csv()
     taxman.evaluate_taxation()
     taxman.export_evaluation_as_csv()
     taxman.print_evaluation()

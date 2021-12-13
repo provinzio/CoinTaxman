@@ -696,6 +696,37 @@ class Book:
 
         return None
 
+    def get_price_from_csv(self):
+        print("hi")
+        for platform, operations_a in misc.group_by(
+            self.operations, "platform"
+        ).items():
+            for timestamp, operations_b in misc.group_by(
+                operations_a, "utc_time"
+            ).items():
+                if len(operations_b) > 1:
+                    buytransaction = selltransaction = None
+                    for operation in operations_b:
+                        if isinstance(operation, tr.Buy):
+                            buytransaction = operation
+                        elif isinstance(operation, tr.Sell):
+                            selltransaction = operation
+                        if buytransaction is not None and selltransaction is not None:
+                            price = decimal.Decimal(
+                                selltransaction.change / buytransaction.change
+                            )
+                            logging.debug(
+                                f"Added price from csv: {selltransaction.coin}/{buytransaction.coin} price: {price}"
+                            )
+                            self.price_data.set_price_db(
+                                platform,
+                                selltransaction.coin,
+                                buytransaction.coin,
+                                timestamp,
+                                price,
+                            )
+                            break
+
     def read_file(self, file_path: Path) -> None:
         """Import transactions form an account statement.
 

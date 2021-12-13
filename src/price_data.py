@@ -459,7 +459,7 @@ class PriceData:
                     create_query = (
                         f"CREATE TABLE `{tablename}`"
                         "(utc_time DATETIME PRIMARY KEY, "
-                        "price FLOAT NOT NULL);"
+                        "price STR NOT NULL);"
                     )
                     cur.execute(create_query)
                     cur.execute(query, (utc_time, str(price)))
@@ -489,13 +489,19 @@ class PriceData:
             price (decimal.Decimal): [description]
         """
         assert coin != reference_coin
+        if coin < reference_coin:
+            coin_a = coin
+            coin_b = reference_coin
+        else:
+            coin_a = reference_coin
+            coin_b = coin
         db_path = self.get_db_path(platform)
-        tablename = self.get_tablename(coin, reference_coin)
+        tablename = self.get_tablename(coin_a, coin_b)
         try:
             self.__set_price_db(db_path, tablename, utc_time, price)
         except sqlite3.IntegrityError as e:
             if str(e) == f"UNIQUE constraint failed: {tablename}.utc_time":
-                price_db = self.get_price(platform, coin, utc_time, reference_coin)
+                price_db = self.get_price(platform, coin_a, utc_time, coin_b)
                 if price != price_db:
                     log.warning(
                         "Tried to write price to database, "
@@ -536,11 +542,22 @@ class PriceData:
             return decimal.Decimal("1")
 
         db_path = self.get_db_path(platform)
-        tablename = self.get_tablename(coin, reference_coin)
+        if coin < reference_coin:
+            coin_a = coin
+            coin_b = reference_coin
+            inverted = False
+        else:
+            coin_a = reference_coin
+            coin_b = coin
+            inverted = True
+        tablename = self.get_tablename(coin_a, coin_b)
 
         # Check if price exists already in our database.
         if (price := self.__get_price_db(db_path, tablename, utc_time)) is not None:
-            return price
+            if inverted:
+                return decimal.Decimal(1 / price)
+            else:
+                return price
 
         try:
             get_price = getattr(self, f"_get_price_{platform}")
@@ -549,7 +566,10 @@ class PriceData:
 
         price = get_price(coin, utc_time, reference_coin, **kwargs)
         self.__set_price_db(db_path, tablename, utc_time, price)
-        return price
+        if inverted:
+            return decimal.Decimal(1 / price)
+        else:
+            return price
 
     def get_cost(
         self,
