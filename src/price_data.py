@@ -658,11 +658,11 @@ class PriceData:
             # transaction and estimate the price.
             # Do not save price in database.
             price = self.__mean_price_db(db_path, tablename, utc_time)
-            
+
         if inverted:
-                return decimal.Decimal(1 / price)
-            else:
-                return price
+            return decimal.Decimal(1 / price)
+        else:
+            return price
 
     def get_cost(
         self,

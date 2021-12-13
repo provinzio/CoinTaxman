@@ -843,23 +843,21 @@ class Book:
                 operations_a, "utc_time"
             ).items():
                 if len(operations_b) > 1:
-                    buytransaction = selltransaction = None
+                    buytr = selltr = None
                     for operation in operations_b:
                         if isinstance(operation, tr.Buy):
-                            buytransaction = operation
+                            buytr = operation
                         elif isinstance(operation, tr.Sell):
-                            selltransaction = operation
-                        if buytransaction is not None and selltransaction is not None:
-                            price = decimal.Decimal(
-                                selltransaction.change / buytransaction.change
-                            )
+                            selltr = operation
+                        if buytr is not None and selltr is not None:
+                            price = decimal.Decimal(selltr.change / buytr.change)
                             logging.debug(
-                                f"Added price from csv: {selltransaction.coin}/{buytransaction.coin} price: {price}"
+                                f"Added price from csv: {selltr.coin}/{buytr.coin} price: {price}"
                             )
                             self.price_data.set_price_db(
                                 platform,
-                                selltransaction.coin,
-                                buytransaction.coin,
+                                selltr.coin,
+                                buytr.coin,
                                 timestamp,
                                 price,
                             )
