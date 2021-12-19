@@ -835,7 +835,6 @@ class Book:
         return None
 
     def get_price_from_csv(self):
-        print("hi")
         for platform, operations_a in misc.group_by(
             self.operations, "platform"
         ).items():
@@ -844,24 +843,27 @@ class Book:
             ).items():
                 if len(operations_b) > 1:
                     buytr = selltr = None
+                    buycount=sellcount=0
                     for operation in operations_b:
                         if isinstance(operation, tr.Buy):
                             buytr = operation
+                            buycount+=1
                         elif isinstance(operation, tr.Sell):
                             selltr = operation
-                        if buytr is not None and selltr is not None:
-                            price = decimal.Decimal(selltr.change / buytr.change)
-                            logging.debug(
-                                f"Added price from csv: {selltr.coin}/{buytr.coin} price: {price}"
-                            )
-                            self.price_data.set_price_db(
-                                platform,
-                                selltr.coin,
-                                buytr.coin,
-                                timestamp,
-                                price,
-                            )
-                            break
+                            sellcount+=1
+                    
+                    if buycount==1 and sellcount==1:
+                        price = decimal.Decimal(selltr.change / buytr.change)
+                        logging.debug(
+                            f"Added price from csv: {selltr.coin}/{buytr.coin} price: {price}"
+                        )
+                        self.price_data.set_price_db(
+                            platform,
+                            selltr.coin,
+                            buytr.coin,
+                            timestamp,
+                            price,
+                        )
 
     def read_file(self, file_path: Path) -> None:
         """Import transactions form an account statement.
