@@ -853,9 +853,9 @@ class Book:
                             sellcount += 1
 
                     if buycount == 1 and sellcount == 1:
-                        price = decimal.Decimal(selltr.change / buytr.change)
+                        price = decimal.Decimal(buytr.change / selltr.change)
                         logging.debug(
-                            f"Added price from csv: {selltr.coin}/{buytr.coin} price: {price}"
+                            f"Added price from csv: {selltr.coin}/{buytr.coin} price: {price} timestamp: {timestamp}"
                         )
                         self.price_data.set_price_db(
                             platform,

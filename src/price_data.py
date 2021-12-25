@@ -694,10 +694,19 @@ class PriceData:
                         )
 
                 with sqlite3.connect(db_path) as conn:
-                    query = "SELECT name FROM sqlite_master WHERE type='table'"
+                    query = "SELECT name,sql FROM sqlite_master WHERE type='table'"
                     cur = conn.execute(query)
-                    tablenames = (result[0] for result in cur.fetchall())
-                    for tablename in tablenames:
+                    for tablename,sql in cur.fetchall():
+                        if not sql.lower().contains("price str"):
+                            query=f"""
+                            CREATE TABLE "sql_temp_table" (
+	                        "utc_time"	DATETIME PRIMARY KEY,
+	                        "price"	STR NOT NULL
+                            );
+                            INSERT INTO "sql_temp_table" ("price","utc_time") SELECT "price","utc_time" FROM "{tablename}";
+                            DROP TABLE "{tablename}";
+                            ALTER TABLE "sql_temp_table" "{tablename}";
+                            """
                         base_asset, quote_asset = tablename.split("/")
                         if base_asset > quote_asset:
                             query = f"Select utc_time,price FROM `{tablename}`"
