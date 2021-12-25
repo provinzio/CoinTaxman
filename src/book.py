@@ -843,16 +843,16 @@ class Book:
             ).items():
                 if len(operations_b) > 1:
                     buytr = selltr = None
-                    buycount=sellcount=0
+                    buycount = sellcount = 0
                     for operation in operations_b:
                         if isinstance(operation, tr.Buy):
                             buytr = operation
-                            buycount+=1
+                            buycount += 1
                         elif isinstance(operation, tr.Sell):
                             selltr = operation
-                            sellcount+=1
-                    
-                    if buycount==1 and sellcount==1:
+                            sellcount += 1
+
+                    if buycount == 1 and sellcount == 1:
                         price = decimal.Decimal(selltr.change / buytr.change)
                         logging.debug(
                             f"Added price from csv: {selltr.coin}/{buytr.coin} price: {price}"

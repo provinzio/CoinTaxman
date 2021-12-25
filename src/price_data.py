@@ -580,14 +580,11 @@ class PriceData:
             price (decimal.Decimal): [description]
         """
         assert coin != reference_coin
-        if coin < reference_coin:
-            coin_a = coin
-            coin_b = reference_coin
-        else:
-            coin_a = reference_coin
-            coin_b = coin
+        coin_a, coin_b, reciprocal = self._sort_pair(coin, reference_coin)
         db_path = self.get_db_path(platform)
         tablename = self.get_tablename(coin_a, coin_b)
+        if reciprocal:
+            price = misc.reciprocal(price)
         try:
             self.__set_price_db(db_path, tablename, utc_time, price)
         except sqlite3.IntegrityError as e:
@@ -601,6 +598,15 @@ class PriceData:
                     )
             else:
                 raise e
+
+    def _sort_pair(self, coin: str, reference_coin: str) -> list[str, str, bool]:
+        if reciprocal := coin > reference_coin:
+            coin_a = reference_coin
+            coin_b = coin
+        else:
+            coin_a = coin
+            coin_b = reference_coin
+        return coin_a, coin_b, reciprocal
 
     def get_price(
         self,
@@ -633,14 +639,7 @@ class PriceData:
             return decimal.Decimal("1")
 
         db_path = self.get_db_path(platform)
-        if coin < reference_coin:
-            coin_a = coin
-            coin_b = reference_coin
-            inverted = False
-        else:
-            coin_a = reference_coin
-            coin_b = coin
-            inverted = True
+        coin_a, coin_b, reciprocal = self._sort_pair(coin, reference_coin)
         tablename = self.get_tablename(coin_a, coin_b)
 
         # Check if price exists already in our database.
@@ -659,7 +658,7 @@ class PriceData:
             # Do not save price in database.
             price = self.__mean_price_db(db_path, tablename, utc_time)
 
-        if inverted:
+        if reciprocal:
             return misc.reciprocal(price)
         else:
             return price
@@ -700,8 +699,25 @@ class PriceData:
                     tablenames = (result[0] for result in cur.fetchall())
                     for tablename in tablenames:
                         base_asset, quote_asset = tablename.split("/")
-                        if base_asset>quote_asset:
-                            query=f"Select"
+                        if base_asset > quote_asset:
+                            query = f"Select utc_time,price FROM `{tablename}`"
+                            cur = conn.execute(query)
+
+                            for row in cur.fetchall():
+                                utc_time = datetime.datetime.strptime(
+                                    row[0], "%Y-%m-%d %H:%M:%S%z"
+                                )
+                                price = misc.reciprocal(decimal.Decimal(row[1]))
+                                self.set_price_db(platform, quote_asset,
+                                                  base_asset, utc_time, price)
+                            query = f"DROP TABLE `{tablename}`"
+                            cur = conn.execute(query)
+
+                    query = "SELECT name FROM sqlite_master WHERE type='table'"
+                    cur = conn.execute(query)
+                    tablenames = (result[0] for result in cur.fetchall())
+                    for tablename in tablenames:
+                        base_asset, quote_asset = tablename.split("/")
                         query = f"SELECT utc_time FROM `{tablename}` WHERE price<=0.0;"
                         cur = conn.execute(query)
 
