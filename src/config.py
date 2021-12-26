@@ -37,6 +37,8 @@ CALCULATE_VIRTUAL_SELL = True
 # taxable gains. Make sure, that this method is accepted by your tax
 # authority.
 MULTI_DEPOT = True
+# Export all events (True) or only taxable events (False)
+EXPORT_ALL_EVENTS = True
 
 # Read in environmental variables.
 if _env_country := environ.get("COUNTRY"):
