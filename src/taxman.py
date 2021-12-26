@@ -134,7 +134,7 @@ class Taxman:
                     if config.CALCULATE_VIRTUAL_SELL:
                         real_gain += gain
             remark = ", ".join(
-                f"{sc.sold} from {sc.op.utc_time} " f"({sc.op.__class__.__name__})"
+                f"{sc.sold} von {sc.op.utc_time} " f"({sc.op.__class__.__name__})"
                 for sc in sold_coins
             )
             return transaction.TaxEvent(
@@ -367,7 +367,8 @@ class Taxman:
             writer.writerow(["# updated", datetime.date.today().strftime("%x")])
 
             header = [
-                "Date",
+                "Date and Time UTC",
+                "Platform",
                 "Taxation Type",
                 f"Taxed Gain in {config.FIAT}",
                 "Action",
@@ -380,7 +381,8 @@ class Taxman:
             # Tax events are currently sorted by coin. Sort by time instead.
             for tx in sorted(self.tax_events, key=lambda tx: tx.op.utc_time):
                 line = [
-                    tx.op.utc_time,
+                    tx.op.utc_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    tx.op.platform,
                     tx.taxation_type,
                     tx.taxed_gain,
                     tx.op.__class__.__name__,
