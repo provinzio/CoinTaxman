@@ -251,23 +251,23 @@ class Taxman:
     def evaluate_taxation(self) -> None:
         """Evaluate the taxation using country specific function."""
         log.debug("Starting evaluation...")
-        
+
         if config.MULTI_DEPOT:
             # Evaluate taxation separated by platforms and coins.
-            for _, operations in misc.group_by(
+            for platform, operations in misc.group_by(
                 self.book.operations, "platform"
             ).items():
                 for coin, _operations in misc.group_by(operations, "coin").items():
-                    self.price_data.preload_prices(_operations, coin, platform)              
+                    self.price_data.preload_prices(_operations, coin, platform)
                 self._evaluate_taxation_per_coin(operations)
         else:
-            
-            for platform, _operations in misc.group_by(operations, "platform").items():
-                for coin, coin_operations in misc.group_by(_operations, "coin").items():
-                    self.price_data.preload_prices(coin_operations, coin, platform)
+
+            for plat, _ops in misc.group_by(self.book.operations, "platform").items():
+                for coin, coin_operations in misc.group_by(_ops, "coin").items():
+                    self.price_data.preload_prices(coin_operations, coin, plat)
             # Evaluate taxation separated by coins in a single virtual depot.
             self._evaluate_taxation_per_coin(self.book.operations)
-            
+
     def print_evaluation(self) -> None:
         """Print short summary of evaluation to stdout."""
         # Summarize the tax evaluation.
