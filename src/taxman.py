@@ -185,8 +185,8 @@ class Taxman:
                         config.FIAT
                     )
                     remark = (
-                        f"cost {cost} {config.FIAT}, "
-                        f"price {price} {config.FIAT}/{op.coin}"
+                        f"Kosten {cost} {config.FIAT}, "
+                        f"Preis {price} {config.FIAT}/{op.coin}"
                     )
                     tx = transaction.TaxEvent(
                         taxation_type,
