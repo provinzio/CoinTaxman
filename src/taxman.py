@@ -103,7 +103,7 @@ class Taxman:
 
             taxation_type = "Sonstige Einkünfte"
             # Price of the sell.
-            sell_price = self.price_data.get_cost(op)
+            sell_value = self.price_data.get_cost(op)
             taxed_gain = decimal.Decimal()
             real_gain = decimal.Decimal()
             # Coins which are older than (in this case) one year or
@@ -126,9 +126,9 @@ class Taxman:
                 )
                 # Only calculate the gains if necessary.
                 if is_taxable or config.CALCULATE_VIRTUAL_SELL:
-                    partial_sell_price = (sc.sold / op.change) * sell_price
+                    partial_sell_value = (sc.sold / op.change) * sell_value
                     sold_coin_cost = self.price_data.get_cost(sc)
-                    gain = partial_sell_price - sold_coin_cost
+                    gain = partial_sell_value - sold_coin_cost
                     if is_taxable:
                         taxed_gain += gain
                     if config.CALCULATE_VIRTUAL_SELL:
@@ -142,7 +142,7 @@ class Taxman:
                 taxed_gain,
                 op,
                 is_taxable,
-                sell_price,
+                sell_value,
                 real_gain,
                 remark,
             )
@@ -343,12 +343,12 @@ class Taxman:
         # Summarize the virtual sell, if all left over coins would be sold right now.
         if self.virtual_tax_events:
             assert config.CALCULATE_VIRTUAL_SELL
-            invsted = sum(tx.sell_price for tx in self.virtual_tax_events)
+            invested = sum(tx.sell_value for tx in self.virtual_tax_events)
             real_gains = sum(tx.real_gain for tx in self.virtual_tax_events)
             taxed_gains = sum(tx.taxed_gain for tx in self.virtual_tax_events)
             print()
             print(
-                f"You are currently invested with {invsted:.2f} {config.FIAT}.\n"
+                f"You are currently invested with {invested:.2f} {config.FIAT}.\n"
                 f"If you would sell everything right now, "
                 f"you would realize {real_gains:.2f} {config.FIAT} gains "
                 f"({taxed_gains:.2f} {config.FIAT} taxed gain)."
@@ -357,13 +357,13 @@ class Taxman:
             print("Your current portfolio should be:")
             for tx in sorted(
                 self.virtual_tax_events,
-                key=lambda tx: tx.sell_price,
+                key=lambda tx: tx.sell_value,
                 reverse=True,
             ):
                 print(
                     f"{tx.op.platform}: "
                     f"{tx.op.change:.6f} {tx.op.coin} > "
-                    f"{tx.sell_price:.2f} {config.FIAT} "
+                    f"{tx.sell_value:.2f} {config.FIAT} "
                     f"({tx.real_gain:.2f} gain, {tx.taxed_gain:.2f} taxed gain)"
                 )
 
@@ -401,7 +401,7 @@ class Taxman:
                 "Action",
                 "Amount",
                 "Asset",
-                f"Sell Price in {config.FIAT}",
+                f"Sell Value in {config.FIAT}",
                 "Remark",
             ]
             writer.writerow(header)
@@ -415,7 +415,7 @@ class Taxman:
                     tx.op.__class__.__name__,
                     tx.op.change,
                     tx.op.coin,
-                    tx.sell_price,
+                    tx.sell_value,
                     tx.remark,
                 ]
                 if tx.is_taxable or config.EXPORT_ALL_EVENTS:
