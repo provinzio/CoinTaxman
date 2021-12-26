@@ -33,6 +33,8 @@ MEAN_MISSING_PRICES = False
 # Calculate the (taxed) gains, if the left over coins would be sold right now.
 # This will fetch the current prices and therefore slow down repetitive runs.
 CALCULATE_VIRTUAL_SELL = True
+# Include virtual sells in the export
+EXPORT_VIRTUAL_SELL = False
 # Evaluate taxes for each depot/platform separately. This may reduce your
 # taxable gains. Make sure, that this method is accepted by your tax
 # authority.

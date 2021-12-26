@@ -405,6 +405,12 @@ class Taxman:
                 "Remark",
             ]
             writer.writerow(header)
+
+            if config.EXPORT_VIRTUAL_SELL:
+                # move virtual sells to tax_events list
+                self.tax_events = self.tax_events + self.virtual_tax_events
+                self.virtual_tax_events = []
+
             # Tax events are currently sorted by coin. Sort by time instead.
             for tx in sorted(self.tax_events, key=lambda tx: tx.op.utc_time):
                 line = [
