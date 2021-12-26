@@ -161,20 +161,20 @@ class Taxman:
                 tx = transaction.TaxEvent(taxation_type, taxed_gain, op, is_taxable)
             elif isinstance(op, transaction.CoinLend):
                 taxation_type = "CoinLend"
-                tx = transaction.TaxEvent(taxation_type, 0.0, op, False)
+                tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             elif isinstance(op, transaction.CoinLendEnd):
                 taxation_type = "CoinLendEnd"
-                tx = transaction.TaxEvent(taxation_type, 0.0, op, False)
+                tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             elif isinstance(op, transaction.Staking):
                 taxation_type = "Staking"
-                tx = transaction.TaxEvent(taxation_type, 0.0, op, False)
+                tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             elif isinstance(op, transaction.StakingEnd):
                 taxation_type = "StakingEnd"
-                tx = transaction.TaxEvent(taxation_type, 0.0, op, False)
+                tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             elif isinstance(op, transaction.Buy):
                 balance.put(op)
                 if misc.is_fiat(op.coin):
-                    tx = None
+                    continue
                 else:
                     taxation_type = "Kauf"
                     cost = self.price_data.get_cost(op)
@@ -190,21 +190,24 @@ class Taxman:
                     )
                     tx = transaction.TaxEvent(
                         taxation_type,
-                        0.0,
+                        decimal.Decimal(),
                         op,
                         False,
-                        0.0,
-                        0.0,
+                        decimal.Decimal(),
+                        decimal.Decimal(),
                         remark
                     )
             elif isinstance(op, transaction.Sell):
-                tx = evaluate_sell(op)
-                if not tx and not misc.is_fiat(op.coin):
+                if misc.is_fiat(op.coin):
+                    continue
+                if tx_ := evaluate_sell(op):
+                    tx = tx_
+                else:
                     taxation_type = (
                         "Verkauf "
                         "(außerhalb des Steuerjahres oder steuerfrei)"
                     )
-                    tx = transaction.TaxEvent(taxation_type, 0.0, op, False)
+                    tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             elif isinstance(
                 op, (transaction.CoinLendInterest, transaction.StakingInterest)
             ):
@@ -226,7 +229,7 @@ class Taxman:
             elif isinstance(op, transaction.Airdrop):
                 balance.put(op)
                 taxation_type = "Airdrop"
-                tx = transaction.TaxEvent(taxation_type, 0.0, op, False)
+                tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             elif isinstance(op, transaction.Commission):
                 balance.put(op)
                 taxation_type = "Einkünfte aus sonstigen Leistungen"
@@ -245,7 +248,7 @@ class Taxman:
                         "The evaluation might be wrong."
                     )
                 taxation_type = "Deposit"
-                tx = transaction.TaxEvent(taxation_type, 0.0, op, False)
+                tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             elif isinstance(op, transaction.Withdrawal):
                 if coin != config.FIAT:
                     log.warning(
@@ -254,7 +257,7 @@ class Taxman:
                         "The evaluation might be wrong."
                     )
                 taxation_type = "Withdrawal"
-                tx = transaction.TaxEvent(taxation_type, 0.0, op, False)
+                tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             else:
                 raise NotImplementedError
 
