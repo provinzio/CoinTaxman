@@ -856,6 +856,24 @@ class Book:
 
             log.info("Reading file from exchange %s at %s", exchange, file_path)
             read_file(file_path)
+
+            cctx_mapping = {
+                "binance": "binance",
+                "binance_v2": "binance",
+                "coinbase": "coinbasepro",
+                "coinbase_pro": "coinbasepro",
+                "kraken_ledgers_old": "kraken",
+                "kraken_ledgers": "kraken",
+                "kraken_trades": "kraken",
+                "bitpanda_pro_trades": "bitpanda",
+            }
+            api = cctx_mapping.get(exchange)
+
+            if api not in config.EXCHANGES:
+                log.warning(
+                    f"Exchange `{api}` not found in EXCHANGES API list in config.py. "
+                    "Consider adding it to obtain more accurate price data."
+                )
         else:
             log.warning(
                 f"Unable to detect the exchange of file `{file_path}`. "
