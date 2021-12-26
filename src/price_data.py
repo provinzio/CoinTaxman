@@ -261,7 +261,9 @@ class PriceData:
         # other combination should not occur, since I enter them within the trade
         # other pairs need to be tested. Also, they might need different behavior,
         # if there isn't a matching endpoint
-        assert base_asset == "BEST" and quote_asset == "EUR"
+        assert (
+            base_asset == "BEST" and quote_asset == "EUR"
+        ), f"{base_asset}_{quote_asset}"
         baseurl = "https://api.exchange.bitpanda.com/public/v1/candlesticks/BEST_EUR"
 
         # Bitpanda Pro only supports distinctive arguments for this, *not arbitrary*

@@ -84,6 +84,7 @@ class Book:
             "POS savings interest": "StakingInterest",
             "POS savings purchase": "Staking",
             "POS savings redemption": "StakingEnd",
+            "Withdraw": "Withdrawal",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -170,7 +171,7 @@ class Book:
         platform = "coinbase"
         operation_mapping = {
             "Receive": "Deposit",
-            "Send": "Withdraw",
+            "Send": "Withdrawal",
             "Coinbase Earn": "Buy",
         }
 
@@ -454,7 +455,7 @@ class Book:
             "transfer": "Airdrop",
             "reward": "StakingInterest",
             "deposit": "Deposit",
-            "withdrawal": "Withdraw",
+            "withdrawal": "Withdrawal",
         }
 
         # Need to track state of "duplicate entries"

@@ -118,7 +118,7 @@ class Deposit(Transaction):
     pass
 
 
-class Withdraw(Transaction):
+class Withdrawal(Transaction):
     pass
 
 
@@ -137,6 +137,7 @@ class TaxEvent:
     taxed_gain: decimal.Decimal
     op: Operation
     sell_price: decimal.Decimal = decimal.Decimal()
+    real_gain: decimal.Decimal = decimal.Decimal()
     remark: str = ""
 
 
@@ -215,7 +216,7 @@ loss_operations = [
     CoinLend,
     Staking,
     Sell,
-    Withdraw,
+    Withdrawal,
 ]
 operations_order = gain_operations + loss_operations
 
