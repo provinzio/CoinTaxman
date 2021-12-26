@@ -207,7 +207,12 @@ class Taxman:
                         "Verkauf "
                         "(außerhalb des Steuerjahres oder steuerfrei)"
                     )
-                    tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
+                    tx = transaction.TaxEvent(
+                        taxation_type,
+                        decimal.Decimal(),
+                        op,
+                        False
+                    )
             elif isinstance(
                 op, (transaction.CoinLendInterest, transaction.StakingInterest)
             ):
