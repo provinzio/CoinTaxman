@@ -118,7 +118,7 @@ class Deposit(Transaction):
     pass
 
 
-class Withdraw(Transaction):
+class Withdrawal(Transaction):
     pass
 
 
@@ -137,6 +137,7 @@ class TaxEvent:
     taxed_gain: decimal.Decimal
     op: Operation
     sell_price: decimal.Decimal = decimal.Decimal()
+    real_gain: decimal.Decimal = decimal.Decimal()
     remark: str = ""
 
 
@@ -155,7 +156,7 @@ loss_operations = [
     CoinLend,
     Staking,
     Sell,
-    Withdraw,
+    Withdrawal,
 ]
 operations_order = gain_operations + loss_operations
 
@@ -183,6 +184,6 @@ def sort_operations(
             idx = operations_order.index(type(op))
         except ValueError:
             idx = 0
-        return tuple([idx] + [getattr(op, key) for key in keys] if keys else [])
+        return tuple(([getattr(op, key) for key in keys] if keys else []) + [idx])
 
     return sorted(operations, key=key)

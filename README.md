@@ -38,6 +38,18 @@ Quick and easy installation can be done with `pip`.
 
 Have a look at our [Wiki](https://github.com/provinzio/CoinTaxman/wiki) for more information on how to obtain the account statement for your exchange.
 
+#### Makefile
+
+The Makefile offers multiple useful commands to quickly update the requirements, run the script, create a docker container, clean your code...
+
+If you have `make` installed, you can use e.g. `make run` to execute the script.
+Please have a look in the [Makefile](https://github.com/provinzio/CoinTaxman/blob/main/Makefile) for more information.
+
+#### Run as docker container
+
+Thanks to [jhoogstraat](https://github.com/jhoogstraat), you can also run CoinTaxman as a docker container.
+The image is hosted on dockerhub: [jeppy/cointaxman:latest](https://hub.docker.com/r/jeppy/cointaxman).
+
 ### Supporting the development
 
 Please consider supporting the development of this tool by either using my [Binance referral link](https://www.binance.com/en/register?ref=DS7C3HPD) if you want to create an account there or by donating to one of the adresses below.
@@ -136,6 +148,9 @@ Zusammenfassung in meinen Worten:
 - Der Tausch von Kryptowährung wird ebenfalls versteuert.
 - Gebühren zum Handel sind steuerlich abzugsfähig.
 - Es kann einmalig entschieden werden, ob nach FIFO oder LIFO versteuert werden soll.
+
+Weitere Grundsätze, die oben nicht angesprochen wurden:
+- Versteuerung erfolgt separat getrennt nach Depots (Wallets, Exchanges, etc.) [cryptotax](https://cryptotax.io/fifo-oder-lifo-bitcoin-gewinnermittlung/).
 
 ### Airdrops
 
