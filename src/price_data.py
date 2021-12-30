@@ -269,34 +269,41 @@ class PriceData:
         # if there were no trades in the requested time frame, the
         # returned data will be empty
         for t in timeframes:
-            end = utc_time.astimezone(pytz.UTC)
-            begin = utc_time.astimezone(pytz.UTC) - datetime.timedelta(minutes=t)
+            # if no trades can be found, move 30 min window to the past
+            for o in range(0, 300, 30):
+                end = utc_time.astimezone(pytz.UTC) - datetime.timedelta(minutes=o)
+                begin = end - datetime.timedelta(minutes=t)
 
-            # https://github.com/python/mypy/issues/3176
-            params: dict[str, Union[int, str]] = {
-                "unit": "MINUTES",
-                "period": t,
-                # convert ISO 8601 format to RFC3339 timestamp
-                "from": begin.isoformat().replace('+00:00', 'Z'),
-                "to": end.isoformat().replace('+00:00', 'Z'),
-            }
-            r = requests.get(baseurl, params=params)
+                # https://github.com/python/mypy/issues/3176
+                params: dict[str, Union[int, str]] = {
+                    "unit": "MINUTES",
+                    "period": t,
+                    # convert ISO 8601 format to RFC3339 timestamp
+                    "from": begin.isoformat().replace('+00:00', 'Z'),
+                    "to": end.isoformat().replace('+00:00', 'Z'),
+                }
+                r = requests.get(baseurl, params=params)
 
-            assert r.status_code == 200
+                assert r.status_code == 200
 
-            data = r.json()
+                data = r.json()
+                if data or t != timeframes[-1]:
+                    break
+                else:
+                    log.warning(
+                        f"No price data found for {base_asset} / {quote_asset} "
+                        f"at {end}, moving {timeframes[-1]} minute window to the past."
+                    )
+
             if data:
                 break
 
         # if we didn't get data for the 30 minute frame, give up?
         assert data
-        # There actually shouldn't be more than one entry if period and granularity are
-        # the same?
-        assert len(data) == 1
 
-        # simply take the average
-        high = misc.force_decimal(data[0]["high"])
-        low = misc.force_decimal(data[0]["low"])
+        # simply take the average of the latest data element
+        high = misc.force_decimal(data[-1]["high"])
+        low = misc.force_decimal(data[-1]["low"])
 
         # if spread is greater than 3%
         if (high - low) / high > 0.03:
