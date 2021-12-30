@@ -752,7 +752,7 @@ class Book:
 
         operation_mapping = {
             "deposit": "Deposit",
-            "withdrawal": "Withdraw",
+            "withdrawal": "Withdrawal",
             "buy": "Buy",
             "sell": "Sell",
         }
@@ -818,7 +818,7 @@ class Book:
                 if operation == "transfer":
                     log.warning(
                         f"'Transfer' operations are not "
-                        f"implemented, skipping: {file_path} line {row}."
+                        f"implemented, skipping row {row} of file {file_path}"
                     )
                     continue
 
@@ -828,7 +828,7 @@ class Book:
                 except KeyError:
                     raise RuntimeError(f"Unsupported operation '{operation}'")
 
-                if operation in ["Deposit", "Withdraw"]:
+                if operation in ["Deposit", "Withdrawal"]:
                     if asset_class == "Fiat":
                         change = misc.force_decimal(amount_fiat)
                         if fiat != asset:
@@ -840,8 +840,8 @@ class Book:
                         change = misc.force_decimal(amount_asset)
                     else:
                         raise RuntimeError(
-                            f"Unknown asset class {asset_class}: Should be Fiat or "
-                            f"Cryptocurrency in row {row} of file {file_path}"
+                            f"Unknown asset class {asset_class}: Should be 'Fiat' or "
+                            f"'Cryptocurrency' in row {row} of file {file_path}"
                         )
                 elif operation in ["Buy", "Sell"]:
                     if asset_price_currency != config.FIAT:
@@ -859,8 +859,8 @@ class Book:
 
                 if change < 0:
                     raise RuntimeError(
-                        f"Unexpected value for the amount '{change}' "
-                        f"of this {operation}."
+                        f"Unexpected value for the amount '{change}' of this "
+                        f"{operation} in row {row} of file {file_path}"
                     )
 
                 self.append_operation(
@@ -883,6 +883,7 @@ class Book:
 
             expected_header_row = {
                 "binance": 0,
+                "binance_v2": 0,
                 "coinbase": 0,
                 "coinbase_pro": 0,
                 "kraken_ledgers_old": 0,

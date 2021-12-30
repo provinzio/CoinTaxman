@@ -24,6 +24,7 @@ import time
 from pathlib import Path
 from typing import Any, Optional, Union
 
+import pytz
 import requests
 
 import config
@@ -247,8 +248,6 @@ class PriceData:
 
         Timeframe ends at the requested time.
 
-        Currently, only BEST_EUR is tested.
-
         Args:
             base_asset (str): The currency to get the price for.
             utc_time (datetime.datetime): Time of the trade to fetch the price for.
@@ -262,9 +261,6 @@ class PriceData:
             f"https://api.exchange.bitpanda.com/public/v1/"
             f"candlesticks/{base_asset}_{quote_asset}"
         )
-        assert (
-            base_asset == "BEST" and quote_asset == "EUR"
-        ), f"{base_asset}_{quote_asset}"
 
         # Bitpanda Pro only supports distinctive arguments for this, *not arbitrary*
         timeframes = [1, 5, 15, 30]
@@ -273,15 +269,16 @@ class PriceData:
         # if there were no trades in the requested time frame, the
         # returned data will be empty
         for t in timeframes:
-            end = utc_time
-            begin = utc_time - datetime.timedelta(minutes=t)
+            end = utc_time.astimezone(pytz.UTC)
+            begin = utc_time.astimezone(pytz.UTC) - datetime.timedelta(minutes=t)
 
             # https://github.com/python/mypy/issues/3176
             params: dict[str, Union[int, str]] = {
                 "unit": "MINUTES",
                 "period": t,
-                "from": begin.isoformat(),
-                "to": end.isoformat(),
+                # convert ISO 8601 format to RFC3339 timestamp
+                "from": begin.isoformat().replace('+00:00', 'Z'),
+                "to": end.isoformat().replace('+00:00', 'Z'),
             }
             r = requests.get(baseurl, params=params)
 
