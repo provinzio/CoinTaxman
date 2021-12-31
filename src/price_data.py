@@ -599,14 +599,14 @@ class PriceData:
             else:
                 raise e
 
-    def _sort_pair(self, coin: str, reference_coin: str) -> list[str, str, bool]:
+    def _sort_pair(self, coin: str, reference_coin: str) -> list[Union[str, str, bool]]:
         if reciprocal := coin > reference_coin:
             coin_a = reference_coin
             coin_b = coin
         else:
             coin_a = coin
             coin_b = reference_coin
-        return coin_a, coin_b, reciprocal
+        return [coin_a, coin_b, reciprocal]
 
     def get_price(
         self,
@@ -703,10 +703,11 @@ class PriceData:
                         if not sql.lower().contains("price str"):
                             query = f"""
                             CREATE TABLE "sql_temp_table" (
-	                        "utc_time"	DATETIME PRIMARY KEY,
-	                        "price"	STR NOT NULL
+                            "utc_time"	DATETIME PRIMARY KEY,
+                            "price"	STR NOT NULL
                             );
-                            INSERT INTO "sql_temp_table" ("price","utc_time") SELECT "price","utc_time" FROM "{tablename}";
+                            INSERT INTO "sql_temp_table" ("price","utc_time")
+                            SELECT "price","utc_time" FROM "{tablename}";
                             DROP TABLE "{tablename}";
                             ALTER TABLE "sql_temp_table" "{tablename}";
                             """
