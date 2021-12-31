@@ -649,6 +649,9 @@ class PriceData:
             except AttributeError:
                 raise NotImplementedError("Unable to read data from %s", platform)
             price = get_price(coin, utc_time, reference_coin, **kwargs)
+            if reciprocal:
+                price = misc.reciprocal(price)
+                reciprocal = False
             assert isinstance(price, decimal.Decimal)
             self.__set_price_db(db_path, tablename, utc_time, price)
 
@@ -696,9 +699,9 @@ class PriceData:
                 with sqlite3.connect(db_path) as conn:
                     query = "SELECT name,sql FROM sqlite_master WHERE type='table'"
                     cur = conn.execute(query)
-                    for tablename,sql in cur.fetchall():
+                    for tablename, sql in cur.fetchall():
                         if not sql.lower().contains("price str"):
-                            query=f"""
+                            query = f"""
                             CREATE TABLE "sql_temp_table" (
 	                        "utc_time"	DATETIME PRIMARY KEY,
 	                        "price"	STR NOT NULL
@@ -717,8 +720,9 @@ class PriceData:
                                     row[0], "%Y-%m-%d %H:%M:%S%z"
                                 )
                                 price = misc.reciprocal(decimal.Decimal(row[1]))
-                                self.set_price_db(platform, quote_asset,
-                                                  base_asset, utc_time, price)
+                                self.set_price_db(
+                                    platform, quote_asset, base_asset, utc_time, price
+                                )
                             query = f"DROP TABLE `{tablename}`"
                             cur = conn.execute(query)
 
