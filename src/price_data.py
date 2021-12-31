@@ -22,7 +22,7 @@ import logging
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Optional, Tuple, Union
 
 import requests
 
@@ -599,14 +599,14 @@ class PriceData:
             else:
                 raise e
 
-    def _sort_pair(self, coin: str, reference_coin: str) -> list[Union[str, str, bool]]:
+    def _sort_pair(self, coin: str, reference_coin: str) -> Tuple[str, str, bool]:
         if reciprocal := coin > reference_coin:
             coin_a = reference_coin
             coin_b = coin
         else:
             coin_a = coin
             coin_b = reference_coin
-        return [coin_a, coin_b, reciprocal]
+        return coin_a, coin_b, reciprocal
 
     def get_price(
         self,
@@ -651,7 +651,6 @@ class PriceData:
             price = get_price(coin, utc_time, reference_coin, **kwargs)
             if reciprocal:
                 price = misc.reciprocal(price)
-                reciprocal = False
             assert isinstance(price, decimal.Decimal)
             self.__set_price_db(db_path, tablename, utc_time, price)
 
@@ -703,7 +702,7 @@ class PriceData:
                         if not sql.lower().contains("price str"):
                             query = f"""
                             CREATE TABLE "sql_temp_table" (
-                            "utc_time"	DATETIME PRIMARY KEY,
+                            "utc_time" DATETIME PRIMARY KEY,
                             "price"	STR NOT NULL
                             );
                             INSERT INTO "sql_temp_table" ("price","utc_time")

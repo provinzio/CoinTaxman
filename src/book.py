@@ -853,9 +853,11 @@ class Book:
                             sellcount += 1
 
                     if buycount == 1 and sellcount == 1:
+                        # price definition example: BTCEUR = traded EUR / traded BTC
                         price = decimal.Decimal(buytr.change / selltr.change)
                         logging.debug(
-                            f"Added price from csv: {selltr.coin}/{buytr.coin} price: {price} timestamp: {timestamp}"
+                            f"Added {selltr.coin}/{buytr.coin} price from CSV: "
+                            f"{price} for {platform} at {timestamp}"
                         )
                         self.price_data.set_price_db(
                             platform,
