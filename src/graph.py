@@ -56,7 +56,7 @@ class PricePath:
             assert isinstance(markets, list)
             if exchange_id == "kraken":
                 log.warning(
-                    """Kraken is currently not supported due to only supporting 
+                    """Kraken is currently not supported due to only supporting
                         the last 720 candles of historic data"""
                 )
                 continue
