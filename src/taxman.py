@@ -265,7 +265,7 @@ class Taxman:
 
         if config.MULTI_DEPOT:
             # Evaluate taxation separated by platforms and coins.
-            for platform, operations in misc.group_by(
+            for _platform, operations in misc.group_by(
                 self.book.operations, "platform"
             ).items():
 

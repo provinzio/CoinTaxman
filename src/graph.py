@@ -54,7 +54,12 @@ class PricePath:
             exchange = exchange_class()
             markets = exchange.fetch_markets()
             assert isinstance(markets, list)
-
+            if exchange_id == "kraken":
+                log.warning(
+                    """Kraken is currently not supported due to only supporting 
+                        the last 720 candles of historic data"""
+                )
+                continue
             if exchange.has["fetchOHLCV"]:
                 toadd = [
                     (i["base"], i["quote"], exchange_id, i["symbol"]) for i in markets
