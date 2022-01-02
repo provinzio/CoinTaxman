@@ -508,7 +508,7 @@ class Book:
                 row = reader.line_num
 
                 # Skip duplicate entries for deposits / withdrawals and
-                # additional deposit / withdrawals lines for 
+                # additional deposit / withdrawals lines for
                 # staking / unstaking / staking reward actions
                 if _type in ["deposit", "withdrawal"]:
                     if refid not in refids:
