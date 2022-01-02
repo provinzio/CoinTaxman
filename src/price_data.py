@@ -580,10 +580,10 @@ class PriceData:
             price (decimal.Decimal): [description]
         """
         assert coin != reference_coin
-        coin_a, coin_b, reciprocal = self._sort_pair(coin, reference_coin)
+        coin_a, coin_b, inverted = self._sort_pair(coin, reference_coin)
         db_path = self.get_db_path(platform)
         tablename = self.get_tablename(coin_a, coin_b)
-        if reciprocal:
+        if inverted:
             price = misc.reciprocal(price)
         try:
             self.__set_price_db(db_path, tablename, utc_time, price)
@@ -615,7 +615,7 @@ class PriceData:
         else:
             coin_a = coin
             coin_b = reference_coin
-        return coin_a, coin_b, reciprocal
+        return coin_a, coin_b, inverted
 
     def get_price(
         self,
@@ -648,7 +648,7 @@ class PriceData:
             return decimal.Decimal("1")
 
         db_path = self.get_db_path(platform)
-        coin_a, coin_b, reciprocal = self._sort_pair(coin, reference_coin)
+        coin_a, coin_b, inverted = self._sort_pair(coin, reference_coin)
         tablename = self.get_tablename(coin_a, coin_b)
 
         # Check if price exists already in our database.
@@ -658,7 +658,7 @@ class PriceData:
             except AttributeError:
                 raise NotImplementedError("Unable to read data from %s", platform)
             price = get_price(coin, utc_time, reference_coin, **kwargs)
-            if reciprocal:
+            if inverted:
                 price = misc.reciprocal(price)
             assert isinstance(price, decimal.Decimal)
             self.__set_price_db(db_path, tablename, utc_time, price)
@@ -669,9 +669,8 @@ class PriceData:
             # Do not save price in database.
             price = self.__mean_price_db(db_path, tablename, utc_time)
 
-        if reciprocal:
-            return misc.reciprocal(price)
-        else:
+        if inverted:
+            price = misc.reciprocal(price)
             return price
 
     def get_cost(
