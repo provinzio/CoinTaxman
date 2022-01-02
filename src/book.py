@@ -452,30 +452,15 @@ class Book:
         operation_mapping = {
             "spend": "Sell",  # Sell ordered via 'Buy Crypto' button
             "receive": "Buy",  # Buy ordered via 'Buy Crypto' button
-            "transfer": "Airdrop",
             "reward": "StakingInterest",
+            "staking": "StakingInterest",
             "deposit": "Deposit",
             "withdrawal": "Withdrawal",
         }
 
-        # Need to track state of "duplicate entries"
-        # for deposits / withdrawals;
-        # the second deposit and the first withdrawal entry
-        # need to be skipped.
-        #   dup_state["deposit"] == 0:
-        #       Deposit is broadcast to blockchain
-        #       > Taxable event (is in public trade history)
-        #   dup_state["deposit"] == 1:
-        #       Deposit is credited to Kraken account
-        #       > Skipped
-        #   dup_state["withdrawal"] == 0:
-        #       Withdrawal is requested in Kraken account
-        #       > Skipped
-        #   dup_state["withdrawal"] == 1:
-        #       Withdrawal is broadcast to blockchain
-        #       > Taxable event (is in public trade history)
-        dup_state = {"deposit": 0, "withdrawal": 0}
-        dup_skip = {"deposit": 1, "withdrawal": 0}
+        # Need to track state of duplicate entries
+        # for deposits / withdrawals based on refid
+        refids = []
 
         with open(file_path, encoding="utf8") as f:
             reader = csv.reader(f)
@@ -522,35 +507,57 @@ class Book:
 
                 row = reader.line_num
 
-                # Skip "duplicate entries" for deposits / withdrawals
-                if _type in dup_state.keys():
-                    skip = dup_state[_type] == dup_skip[_type]
-                    dup_state[_type] = (dup_state[_type] + 1) % 2
-                    if skip:
+                # Skip duplicate entries for deposits / withdrawals and
+                # additional deposit / withdrawals lines for 
+                # staking / unstaking / staking reward actions
+                if _type in ["deposit", "withdrawal"]:
+                    if refid not in refids:
+                        refids.append(refid)
                         continue
 
                 # Parse data.
                 utc_time = datetime.datetime.strptime(_utc_time, "%Y-%m-%d %H:%M:%S")
                 utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
                 change = misc.force_decimal(_amount)
+                # remove the appended .S for staked assets
+                _asset = _asset.replace(".S", "")
                 coin = kraken_asset_map.get(_asset, _asset)
                 fee = misc.force_decimal(_fee)
                 operation = operation_mapping.get(_type)
                 if operation is None:
                     if _type == "trade":
                         operation = "Sell" if change < 0 else "Buy"
-                    elif _type in ["margin trade", "rollover", "settled"]:
-                        log.error(
-                            f"{file_path}: {row}: Margin trading is "
-                            "currently not supported. "
-                            "Please create an Issue or PR."
+                    elif _type in ["margin trade", "rollover", "settled", "margin"]:
+                        log.warning(
+                            f"{file_path}: {row}: Margin trading is currently not "
+                            "supported. Please create an Issue or PR."
                         )
-                        raise RuntimeError
+                        continue
+                    elif _type == "transfer":
+                        if num_columns == 9:
+                            # for backwards compatibility assume Airdrop for staking
+                            log.warning(
+                                f"{file_path}: {row}: Staking is not supported for old"
+                                " Kraken ledger formats. Please create an Issue or PR."
+                            )
+                            operation = "Airdrop"
+                        elif subtype == "stakingfromspot":
+                            operation = "Staking"
+                        elif subtype == "stakingtospot":
+                            operation = "StakingEnd"
+                        elif subtype in ["spottostaking", "spotfromstaking"]:
+                            # duplicate entries for staking actions
+                            continue
+                        else:
+                            log.error(
+                                f"{file_path}: {row}: Order subtype '{subtype}' is "
+                                "currently not supported. Please create an Issue or PR."
+                            )
+                            raise RuntimeError
                     else:
                         log.error(
-                            f"{file_path}: {row}: Other order type '{_type}' "
-                            "is currently not supported. "
-                            "Please create an Issue or PR."
+                            f"{file_path}: {row}: Other order type '{_type}' is "
+                            "currently not supported. Please create an Issue or PR."
                         )
                         raise RuntimeError
                 change = abs(change)
@@ -568,14 +575,6 @@ class Book:
                     self.append_operation(
                         "Fee", utc_time, platform, fee, coin, row, file_path
                     )
-
-        assert dup_state["deposit"] == 0, (
-            "Orphaned deposit. (Must always come in pairs). " "Is your file corrupted?"
-        )
-        assert dup_state["withdrawal"] == 0, (
-            "Orphaned withdrawal. (Must always come in pairs). "
-            "Is your file corrupted?"
-        )
 
     def _read_kraken_ledgers_old(self, file_path: Path) -> None:
 
