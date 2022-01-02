@@ -600,7 +600,16 @@ class PriceData:
                 raise e
 
     def _sort_pair(self, coin: str, reference_coin: str) -> Tuple[str, str, bool]:
-        if reciprocal := coin > reference_coin:
+        """Sort the coin pair in alphanumerical order.
+
+        Args:
+            coin (str)
+            reference_coin (str)
+
+        Returns:
+            Tuple[str, str, bool]: First coin, second coin, inverted
+        """
+        if inverted := coin > reference_coin:
             coin_a = reference_coin
             coin_b = coin
         else:
