@@ -540,6 +540,9 @@ class PriceData:
             utc_time (datetime.datetime)
             price (decimal.Decimal)
         """
+        # TODO if db_path doesn't exists. Create db with §version table and
+        #      newest version number. It would be nicer, if this could be done
+        #      as a preprocessing step. see book.py
         with sqlite3.connect(db_path) as conn:
             cur = conn.cursor()
             query = f"INSERT INTO `{tablename}`" "('utc_time', 'price') VALUES (?, ?);"
@@ -673,7 +676,7 @@ class PriceData:
 
         if inverted:
             price = misc.reciprocal(price)
-            return price
+        return price
 
     def get_cost(
         self,
@@ -706,36 +709,6 @@ class PriceData:
                         )
 
                 with sqlite3.connect(db_path) as conn:
-                    query = "SELECT name,sql FROM sqlite_master WHERE type='table'"
-                    cur = conn.execute(query)
-                    for tablename, sql in cur.fetchall():
-                        if not sql.lower().contains("price str"):
-                            query = f"""
-                            CREATE TABLE "sql_temp_table" (
-                            "utc_time" DATETIME PRIMARY KEY,
-                            "price"	STR NOT NULL
-                            );
-                            INSERT INTO "sql_temp_table" ("price","utc_time")
-                            SELECT "price","utc_time" FROM "{tablename}";
-                            DROP TABLE "{tablename}";
-                            ALTER TABLE "sql_temp_table" "{tablename}";
-                            """
-                        base_asset, quote_asset = tablename.split("/")
-                        if base_asset > quote_asset:
-                            query = f"Select utc_time,price FROM `{tablename}`"
-                            cur = conn.execute(query)
-
-                            for row in cur.fetchall():
-                                utc_time = datetime.datetime.strptime(
-                                    row[0], "%Y-%m-%d %H:%M:%S%z"
-                                )
-                                price = misc.reciprocal(decimal.Decimal(row[1]))
-                                self.set_price_db(
-                                    platform, quote_asset, base_asset, utc_time, price
-                                )
-                            query = f"DROP TABLE `{tablename}`"
-                            cur = conn.execute(query)
-
                     query = "SELECT name FROM sqlite_master WHERE type='table'"
                     cur = conn.execute(query)
                     tablenames = (result[0] for result in cur.fetchall())

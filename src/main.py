@@ -18,6 +18,7 @@ import logging
 
 import log_config  # noqa: F401
 from book import Book
+from patch_database import patch_databases
 from price_data import PriceData
 from taxman import Taxman
 
@@ -25,6 +26,8 @@ log = logging.getLogger(__name__)
 
 
 def main() -> None:
+    patch_databases()
+
     price_data = PriceData()
     book = Book(price_data)
     taxman = Taxman(book, price_data)

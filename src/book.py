@@ -905,6 +905,8 @@ class Book:
         assert file_path.is_file()
 
         if exchange := self.detect_exchange(file_path):
+            # TODO check that database file exists. if missing, add file with
+            #      highest version number (highest patch number)
             try:
                 read_file = getattr(self, f"_read_{exchange}")
             except AttributeError:
