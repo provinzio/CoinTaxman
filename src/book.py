@@ -851,6 +851,7 @@ class Book:
                             "fully implemented yet."
                         )
                     change = misc.force_decimal(amount_asset)
+                    change_fiat = misc.force_decimal(amount_fiat)
                     # Save price in our local database for later.
                     price = misc.force_decimal(asset_price)
                     self.price_data.set_price_db(
@@ -866,6 +867,16 @@ class Book:
                 self.append_operation(
                     operation, utc_time, platform, change, asset, row, file_path
                 )
+
+                # add buy / sell operation for fiat currency
+                if operation == "Buy":
+                    self.append_operation(
+                        "Sell", utc_time, platform, change_fiat, "EUR", row, file_path
+                    )
+                elif operation == "Sell":
+                    self.append_operation(
+                        "Buy", utc_time, platform, change_fiat, "EUR", row, file_path
+                    )
 
                 if fee != "-":
                     self.append_operation(
