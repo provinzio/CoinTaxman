@@ -834,38 +834,64 @@ class Book:
 
         return None
 
-    def get_price_from_csv(self):
-        for platform, operations_a in misc.group_by(
+    def get_price_from_csv(self) -> None:
+        """Calculate coin prices from buy/sell operations in CSV files.
+
+        When exactly one buy and sell happend at the exact same time,
+        these two operations might belong together and we can calculate
+        the paid price for this transaction.
+        """
+        # Group operations by platform.
+        for platform, platform_operations in misc.group_by(
             self.operations, "platform"
         ).items():
-            for timestamp, operations_b in misc.group_by(
-                operations_a, "utc_time"
+            # Group operations by time.
+            # Look at all operations which happend at the same time.
+            for timestamp, time_operations in misc.group_by(
+                platform_operations, "utc_time"
             ).items():
-                if len(operations_b) > 1:
-                    buytr = selltr = None
-                    buycount = sellcount = 0
-                    for operation in operations_b:
-                        if isinstance(operation, tr.Buy):
-                            buytr = operation
-                            buycount += 1
-                        elif isinstance(operation, tr.Sell):
-                            selltr = operation
-                            sellcount += 1
+                buytr = selltr = None
+                buycount = sellcount = 0
 
-                    if buycount == 1 and sellcount == 1:
-                        # price definition example: BTCEUR = traded EUR / traded BTC
-                        price = decimal.Decimal(buytr.change / selltr.change)
-                        logging.debug(
-                            f"Added {selltr.coin}/{buytr.coin} price from CSV: "
-                            f"{price} for {platform} at {timestamp}"
-                        )
-                        self.price_data.set_price_db(
-                            platform,
-                            selltr.coin,
-                            buytr.coin,
-                            timestamp,
-                            price,
-                        )
+                # Extract the buy and sell operation.
+                for operation in time_operations:
+                    if isinstance(operation, tr.Buy):
+                        buytr = operation
+                        buycount += 1
+                    elif isinstance(operation, tr.Sell):
+                        selltr = operation
+                        sellcount += 1
+
+                # Skip the operations of this timestamp when there aren't
+                # exactly one buy and one sell operation.
+                # We can only match the buy and sell operations, when there
+                # are exactly one buy and one sell operation.
+                if not (buycount == 1 and sellcount == 1):
+                    continue
+
+                assert isinstance(timestamp, datetime.datetime)
+                assert isinstance(buytr, tr.Buy)
+                assert isinstance(selltr, tr.Sell)
+
+                # Price definition example for buying BTC with EUR:
+                # Symbol: BTCEUR
+                # coin: BTC (buytr.coin)
+                # reference coin: EUR (selltr.coin)
+                # price = traded EUR / traded BTC
+                price = decimal.Decimal(selltr.change / buytr.change)
+
+                logging.debug(
+                    f"Added {buytr.coin}/{selltr.coin} price from CSV: "
+                    f"{price} for {platform} at {timestamp}"
+                )
+
+                self.price_data.set_price_db(
+                    platform,
+                    buytr.coin,
+                    selltr.coin,
+                    timestamp,
+                    price,
+                )
 
     def read_file(self, file_path: Path) -> None:
         """Import transactions form an account statement.
