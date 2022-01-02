@@ -25,7 +25,6 @@ import core
 
 config = configparser.ConfigParser()
 config.read("config.ini")
-print(config.sections())
 COUNTRY = core.Country[config["BASE"].get("COUNTRY", "GERMANY")]
 TAX_YEAR = int(config["BASE"].get("TAX_YEAR", "2021"))
 MEAN_MISSING_PRICES = config["BASE"].getboolean("MEAN_MISSING_PRICES")
