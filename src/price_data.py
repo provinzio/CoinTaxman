@@ -336,8 +336,7 @@ class PriceData:
         """
         target_timestamp = misc.to_ms_timestamp(utc_time)
         root_url = "https://api.kraken.com/0/public/Trades"
-        pair = base_asset + quote_asset
-        pair = kraken_pair_map.get(pair, pair)
+        inverse = False
 
         minutes_offset = 0
         while minutes_offset < 120:
@@ -346,10 +345,13 @@ class PriceData:
             since = misc.to_ns_timestamp(
                 utc_time - datetime.timedelta(minutes=minutes_offset)
             )
-            url = f"{root_url}?{pair=:}&{since=:}"
 
             num_retries = 10
             while num_retries:
+                pair = base_asset + quote_asset
+                pair = kraken_pair_map.get(pair, pair)
+                url = f"{root_url}?{pair=:}&{since=:}"
+
                 log.debug(
                     f"Querying trades for {pair} at {utc_time} "
                     f"(offset={minutes_offset}m): Calling %s",
@@ -361,6 +363,18 @@ class PriceData:
 
                 if not data["error"]:
                     break
+                elif data["error"] == ['EGeneral:Invalid arguments']:
+                    # cancel if inverse pair has been tried
+                    if inverse:
+                        num_retries = 0
+                        continue
+                    # try inverse pair
+                    else:
+                        log.debug("Invalid arguments error, trying inverse coin pair")
+                        inverse = not inverse
+                        temp_asset = quote_asset
+                        quote_asset = base_asset
+                        base_asset = temp_asset
                 else:
                     num_retries -= 1
                     sleep_duration = 2 ** (10 - num_retries)
@@ -408,6 +422,8 @@ class PriceData:
                     )
 
             price = misc.force_decimal(data[closest_match_index][0])
+            if inverse:
+                price = misc.reciprocal(price)
             return price
 
         log.warning(
