@@ -405,8 +405,12 @@ class PriceData:
             if closest_match_index == -1:
                 continue
 
-            # The desired timestamp is in the future
-            if closest_match_index == len(data_timestamps_ms) - 1:
+            now_timestamp = misc.to_ms_timestamp(datetime.datetime.now().astimezone())
+            # The desired timestamp is in the future. Ignore if the target timestamp
+            # is very close to the current timestamp (for virtual sells)
+            if closest_match_index == len(data_timestamps_ms) - 1 and \
+                (now_timestamp > target_timestamp + 3600 * 1000
+                    or not config.CALCULATE_VIRTUAL_SELL):
 
                 if minutes_step == 1:
                     # Cannot remove interval any further; give up
