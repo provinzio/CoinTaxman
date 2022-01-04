@@ -521,7 +521,7 @@ class Book:
                 utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
                 change = misc.force_decimal(_amount)
                 # remove the appended .S for staked assets
-                _asset = _asset.replace(".S", "")
+                _asset = _asset.removesuffix(".S")
                 coin = kraken_asset_map.get(_asset, _asset)
                 fee = misc.force_decimal(_fee)
                 operation = operation_mapping.get(_type)

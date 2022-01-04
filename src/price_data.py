@@ -372,9 +372,7 @@ class PriceData:
                     else:
                         log.debug("Invalid arguments error, trying inverse coin pair")
                         inverse = not inverse
-                        temp_asset = quote_asset
-                        quote_asset = base_asset
-                        base_asset = temp_asset
+                        base_asset, quote_asset = quote_asset, base_asset
                 else:
                     num_retries -= 1
                     sleep_duration = 2 ** (10 - num_retries)
@@ -407,7 +405,7 @@ class PriceData:
 
             now_timestamp = misc.to_ms_timestamp(datetime.datetime.now().astimezone())
             # The desired timestamp is in the future. Ignore if the target timestamp
-            # is very close to the current timestamp (for virtual sells)
+            # is within one hour to the current timestamp (for virtual sells)
             if closest_match_index == len(data_timestamps_ms) - 1 and \
                 (now_timestamp > target_timestamp + 3600 * 1000
                     or not config.CALCULATE_VIRTUAL_SELL):
