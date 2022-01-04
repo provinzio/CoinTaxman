@@ -880,11 +880,23 @@ class Book:
                 # add buy / sell operation for fiat currency
                 if operation == "Buy":
                     self.append_operation(
-                        "Sell", utc_time, platform, change_fiat, config.FIAT.upper(), row, file_path
+                        "Sell",
+                        utc_time,
+                        platform,
+                        change_fiat,
+                        config.FIAT.upper(),
+                        row,
+                        file_path,
                     )
                 elif operation == "Sell":
                     self.append_operation(
-                        "Buy", utc_time, platform, change_fiat, config.FIAT.upper(), row, file_path
+                        "Buy",
+                        utc_time,
+                        platform,
+                        change_fiat,
+                        config.FIAT.upper(),
+                        row,
+                        file_path,
                     )
 
                 if fee != "-":
@@ -1028,10 +1040,10 @@ class Book:
                     header_row_num = expected_header_row[exchange]
                     # iterate since header row may appear earlier
                     for _ in range(header_row_num):
-                        header = next(reader)
+                        header = next(reader, None)
                         if header == expected:
                             return exchange
-                    # rewind the file after each expected header checked
+                    # rewind the file after each header check
                     f.seek(0)
 
         return None
