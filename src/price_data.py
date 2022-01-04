@@ -269,17 +269,17 @@ class PriceData:
         # returned data will be empty
         for t in timeframes:
             num_offsets = 0
-            for num_retries in range(6):
+            for num_offsets in range(6):
                 # if no trades can be found, move 30 min window to the past
                 window_offset = num_offsets * 30
+                end = utc_time.astimezone(datetime.timezone.utc) \
+                    - datetime.timedelta(minutes=window_offset)
+                begin = end - datetime.timedelta(minutes=t)
                 if num_offsets:
                     log.warning(
                         f"No price data found for {base_asset} / {quote_asset} "
                         f"at {end}, moving {timeframes[-1]} minute window to the past."
                     )
-                end = utc_time.astimezone(datetime.timezone.utc) \
-                    - datetime.timedelta(minutes=window_offset)
-                begin = end - datetime.timedelta(minutes=t)
 
                 # https://github.com/python/mypy/issues/3176
                 params: dict[str, Union[int, str]] = {
@@ -295,7 +295,7 @@ class PriceData:
                 )
                 r = requests.get(baseurl, params=params)
 
-                assert r.status_code == 200, f"No valid response from Bitpanda API"
+                assert r.status_code == 200, "No valid response from Bitpanda API"
                 data = r.json()
 
                 # exit loop if data is valid or maximum timeframe is not reached yet

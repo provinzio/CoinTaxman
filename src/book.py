@@ -830,7 +830,7 @@ class Book:
                     log.error(
                         f"Unsupported operation '{operation}' "
                         f"in row {row} of file {file_path}"
-                    )                    
+                    )
                     raise RuntimeError
 
                 if operation in ["Deposit", "Withdrawal"]:
