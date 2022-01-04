@@ -783,7 +783,8 @@ class Book:
                 try:
                     line = next(reader)
                 except StopIteration:
-                    raise RuntimeError(f"Expected header not found in file {file_path}")
+                    log.error(f"Expected header not found in file {file_path}")
+                    raise RuntimeError
 
             for (
                 _tx_id,
@@ -826,43 +827,51 @@ class Book:
                 try:
                     operation = operation_mapping[operation]
                 except KeyError:
-                    raise RuntimeError(f"Unsupported operation '{operation}'")
+                    log.error(
+                        f"Unsupported operation '{operation}' "
+                        f"in row {row} of file {file_path}"
+                    )                    
+                    raise RuntimeError
 
                 if operation in ["Deposit", "Withdrawal"]:
                     if asset_class == "Fiat":
                         change = misc.force_decimal(amount_fiat)
                         if fiat != asset:
-                            raise RuntimeError(
+                            log.error(
                                 f"Asset {asset} should be {fiat} in "
                                 f"row {row} of file {file_path}"
                             )
+                            raise RuntimeError
                     elif asset_class == "Cryptocurrency":
                         change = misc.force_decimal(amount_asset)
                     else:
-                        raise RuntimeError(
+                        log.error(
                             f"Unknown asset class {asset_class}: Should be 'Fiat' or "
                             f"'Cryptocurrency' in row {row} of file {file_path}"
                         )
+                        raise RuntimeError
                 elif operation in ["Buy", "Sell"]:
                     if asset_price_currency != config.FIAT:
-                        raise RuntimeError(
-                            "Only Euro is supported as 'Asset market price currency' "
-                            "currency, since price fetching for fiat currencies is not "
-                            "fully implemented yet."
+                        log.error(
+                            f"Only {config.FIAT.upper()} is supported as "
+                            "'Asset market price currency', since price fetching for "
+                            "fiat currencies is not fully implemented yet."
                         )
+                        raise RuntimeError
                     change = misc.force_decimal(amount_asset)
                     change_fiat = misc.force_decimal(amount_fiat)
                     # Save price in our local database for later.
                     price = misc.force_decimal(asset_price)
                     self.price_data.set_price_db(
-                        platform, asset, "EUR", utc_time, price
+                        platform, asset, config.FIAT.upper(), utc_time, price
                     )
 
                 if change < 0:
-                    raise RuntimeError(
+                    log.error(
                         f"Unexpected value for the amount '{change}' of this "
                         f"{operation} in row {row} of file {file_path}"
                     )
+                    raise RuntimeError
 
                 self.append_operation(
                     operation, utc_time, platform, change, asset, row, file_path
@@ -871,11 +880,11 @@ class Book:
                 # add buy / sell operation for fiat currency
                 if operation == "Buy":
                     self.append_operation(
-                        "Sell", utc_time, platform, change_fiat, "EUR", row, file_path
+                        "Sell", utc_time, platform, change_fiat, config.FIAT.upper(), row, file_path
                     )
                 elif operation == "Sell":
                     self.append_operation(
-                        "Buy", utc_time, platform, change_fiat, "EUR", row, file_path
+                        "Buy", utc_time, platform, change_fiat, config.FIAT.upper(), row, file_path
                     )
 
                 if fee != "-":
@@ -893,15 +902,15 @@ class Book:
         if file_path.suffix == ".csv":
 
             expected_header_row = {
-                "binance": 0,
-                "binance_v2": 0,
-                "coinbase": 0,
-                "coinbase_pro": 0,
-                "kraken_ledgers_old": 0,
-                "kraken_ledgers": 0,
-                "kraken_trades": 0,
-                "bitpanda_pro_trades": 3,
-                "bitpanda": 6,
+                "binance": 1,
+                "binance_v2": 1,
+                "coinbase": 1,
+                "coinbase_pro": 1,
+                "kraken_ledgers_old": 1,
+                "kraken_ledgers": 1,
+                "kraken_trades": 1,
+                "bitpanda_pro_trades": 4,
+                "bitpanda": 7,
             }
 
             expected_headers = {
@@ -1014,14 +1023,15 @@ class Book:
             }
             with open(file_path, encoding="utf8") as f:
                 reader = csv.reader(f)
-                # check all potential headers at their exprected header row,
-                # rewind the file after each expected header checked
+                # check all potential headers at their expected header row
                 for exchange, expected in expected_headers.items():
                     header_row_num = expected_header_row[exchange]
-                    for _ in range(header_row_num + 1):
+                    # iterate since header row may appear earlier
+                    for _ in range(header_row_num):
                         header = next(reader)
                         if header == expected:
                             return exchange
+                    # rewind the file after each expected header checked
                     f.seek(0)
 
         return None
