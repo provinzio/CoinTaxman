@@ -24,7 +24,6 @@ import time
 from pathlib import Path
 from typing import Any, Optional, Union
 
-import pytz
 import requests
 
 import config
@@ -269,9 +268,17 @@ class PriceData:
         # if there were no trades in the requested time frame, the
         # returned data will be empty
         for t in timeframes:
-            # if no trades can be found, move 30 min window to the past
-            for o in range(0, 300, 30):
-                end = utc_time.astimezone(pytz.UTC) - datetime.timedelta(minutes=o)
+            num_offsets = 0
+            for num_retries in range(6):
+                # if no trades can be found, move 30 min window to the past
+                window_offset = num_offsets * 30
+                if num_offsets:
+                    log.warning(
+                        f"No price data found for {base_asset} / {quote_asset} "
+                        f"at {end}, moving {timeframes[-1]} minute window to the past."
+                    )
+                end = utc_time.astimezone(datetime.timezone.utc) \
+                    - datetime.timedelta(minutes=window_offset)
                 begin = end - datetime.timedelta(minutes=t)
 
                 # https://github.com/python/mypy/issues/3176
@@ -282,18 +289,18 @@ class PriceData:
                     "from": begin.isoformat().replace('+00:00', 'Z'),
                     "to": end.isoformat().replace('+00:00', 'Z'),
                 }
+                log.debug(
+                    f"Calling Bitpanda API for {base_asset} / {quote_asset} "
+                    f"price for {t} minute timeframe ending at {end}"
+                )
                 r = requests.get(baseurl, params=params)
 
-                assert r.status_code == 200
-
+                assert r.status_code == 200, f"No valid response from Bitpanda API"
                 data = r.json()
+
+                # exit loop if data is valid or maximum timeframe is not reached yet
                 if data or t != timeframes[-1]:
                     break
-                else:
-                    log.warning(
-                        f"No price data found for {base_asset} / {quote_asset} "
-                        f"at {end}, moving {timeframes[-1]} minute window to the past."
-                    )
 
             if data:
                 break
