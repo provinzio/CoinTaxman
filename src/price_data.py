@@ -364,31 +364,37 @@ class PriceData:
                 if not data["error"]:
                     break
                 elif data["error"] == ['EGeneral:Invalid arguments']:
-                    # cancel if inverse pair has been tried
-                    if inverse:
-                        num_retries = 0
-                        continue
                     # try inverse pair
-                    else:
-                        log.debug("Invalid arguments error, trying inverse coin pair")
+                    if not inverse:
+                        log.warning(
+                            f"Invalid arguments error for {pair} at {utc_time} "
+                            f"(offset={minutes_offset}m): "
+                            f"Trying inverse coin pair ..."
+                        )
                         inverse = not inverse
                         base_asset, quote_asset = quote_asset, base_asset
+                    # cancel if inverse pair has been tried
+                    else:
+                        log.error(
+                            f"Could not retrieve trades for {pair} or inverse pair at "
+                            f"{utc_time} (offset={minutes_offset}m): "
+                            "Invalid arguments error. Please create an Issue or PR."
+                        )
+                        raise RuntimeError
                 else:
                     num_retries -= 1
                     sleep_duration = 2 ** (10 - num_retries)
                     log.warning(
-                        f"Querying trades for {pair} at {utc_time} "
-                        f"(offset={minutes_offset}m): "
-                        f"Could not retrieve trades: {data['error']}. "
+                        f"Could not retrieve trades for {pair} at {utc_time} "
+                        f"(offset={minutes_offset}m): {data['error']}. "
                         f"Retry in {sleep_duration} s ..."
                     )
                     time.sleep(sleep_duration)
                     continue
             else:
                 log.error(
-                    f"Querying trades for {pair} at {utc_time} "
-                    f"(offset={minutes_offset}m): "
-                    f"Could not retrieve trades: {data['error']}"
+                    f"Could not retrieve trades for {pair} at {utc_time} "
+                    f"(offset={minutes_offset}m): {data['error']}. "
                 )
                 raise RuntimeError("Kraken response keeps having error flags.")
 
@@ -429,8 +435,7 @@ class PriceData:
             return price
 
         log.warning(
-            f"Querying trades for {pair} at {utc_time}: "
-            f"Failed to find matching exchange rate. "
+            f"Failed to find matching exchange rate for {pair} at {utc_time}: "
             "Please create an Issue or PR."
         )
         return decimal.Decimal()
