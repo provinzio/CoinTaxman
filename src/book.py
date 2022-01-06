@@ -461,7 +461,6 @@ class Book:
         # Need to track state of duplicate entries
         # for deposits / withdrawals based on refid
         refids = []
-        margin_warnings = 0
 
         with open(file_path, encoding="utf8") as f:
             reader = csv.reader(f)
@@ -529,8 +528,11 @@ class Book:
                     if _type == "trade":
                         operation = "Sell" if change < 0 else "Buy"
                     elif _type in ["margin trade", "rollover", "settled", "margin"]:
-                        margin_warnings += 1
-                        continue
+                        log.error(
+                            f"{file_path}: {row}: Margin trading is currently not "
+                            "supported. Please create an Issue or PR."
+                        )
+                        raise RuntimeError
                     elif _type == "transfer":
                         if num_columns == 9:
                             # for backwards compatibility assume Airdrop for staking
@@ -573,12 +575,6 @@ class Book:
                     self.append_operation(
                         "Fee", utc_time, platform, fee, coin, row, file_path
                     )
-
-        if margin_warnings:
-            log.warning(
-                f"{file_path}: {margin_warnings} margin entries. Margin trading is "
-                "currently not supported. Please create an Issue or PR."
-            )
 
     def _read_kraken_ledgers_old(self, file_path: Path) -> None:
 
