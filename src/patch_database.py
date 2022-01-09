@@ -22,6 +22,8 @@ from pathlib import Path
 
 import config
 import misc
+from inspect import getmembers, isfunction
+import sys
 
 FUNC_PREFIX = "__patch_"
 log = logging.getLogger(__name__)
@@ -156,7 +158,7 @@ def patch_databases() -> None:
         # Determine all necessary patch functions.
         patch_func_names = [
             func
-            for func in dir()
+            for func in str(getmembers(sys.modules[__name__], isfunction)[0])
             if func.startswith(FUNC_PREFIX)
             if get_patch_func_version(func) > current_version
         ]
