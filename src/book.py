@@ -27,6 +27,7 @@ import misc
 import transaction as tr
 from core import kraken_asset_map
 from price_data import PriceData
+from database import set_price_db
 
 log = logging.getLogger(__name__)
 
@@ -284,7 +285,7 @@ class Book:
                 assert _currency_spot == "EUR"
 
                 # Save price in our local database for later.
-                self.price_data.set_price_db(platform, coin, "EUR", utc_time, eur_spot)
+                set_price_db(platform, coin, "EUR", utc_time, eur_spot)
 
                 if operation == "Convert":
                     # Parse change + coin from remark, which is
@@ -317,7 +318,7 @@ class Book:
                     )
 
                     # Save convert price in local database, too.
-                    self.price_data.set_price_db(
+                    set_price_db(
                         platform, convert_coin, "EUR", utc_time, convert_eur_spot
                     )
                 else:
@@ -721,9 +722,9 @@ class Book:
 
                 # Save price in our local database for later.
                 price = misc.force_decimal(_price)
-                self.price_data.set_price_db(platform, coin, "EUR", utc_time, price)
+                set_price_db(platform, coin, "EUR", utc_time, price)
                 if best_price:
-                    self.price_data.set_price_db(
+                    set_price_db(
                         platform,
                         "BEST",
                         "EUR",
@@ -885,7 +886,7 @@ class Book:
                     f"{price} for {platform} at {timestamp}"
                 )
 
-                self.price_data.set_price_db(
+                set_price_db(
                     platform,
                     buytr.coin,
                     selltr.coin,

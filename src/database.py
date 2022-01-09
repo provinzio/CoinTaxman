@@ -4,7 +4,7 @@ import logging
 import sqlite3
 from pathlib import Path
 import misc
-from typing import Optional
+from typing import Optional, Any, Tuple
 
 import config
 
@@ -49,7 +49,7 @@ def get_version(db_path: Path) -> int:
             )
 
 
-def get_price(
+def get_price_db(
     db_path: Path,
     tablename: str,
     utc_time: datetime.datetime,
@@ -82,7 +82,7 @@ def get_price(
     return None
 
 
-def mean_price(
+def mean_price_db(
     db_path: Path,
     tablename: str,
     utc_time: datetime.datetime,
@@ -187,6 +187,66 @@ def __set_price_db(
             else:
                 raise e
         conn.commit()
+
+
+def set_price_db(
+    platform: str,
+    coin: str,
+    reference_coin: str,
+    utc_time: datetime.datetime,
+    price: decimal.Decimal,
+) -> None:
+    """Write price to database.
+
+    Tries to insert a historical price into the local database.
+
+    A warning will be raised, if there is already a different price.
+
+    Args:
+        platform (str): [description]
+        coin (str): [description]
+        reference_coin (str): [description]
+        utc_time (datetime.datetime): [description]
+        price (decimal.Decimal): [description]
+    """
+    assert coin != reference_coin
+    coin_a, coin_b, inverted = _sort_pair(coin, reference_coin)
+    db_path = get_db_path(platform)
+    tablename = get_tablename(coin_a, coin_b)
+    if inverted:
+        price = misc.reciprocal(price)
+    try:
+        __set_price_db(db_path, tablename, utc_time, price)
+    except sqlite3.IntegrityError as e:
+        if str(e) == f"UNIQUE constraint failed: {tablename}.utc_time":
+            price_db = get_price_db(db_path, tablename, utc_time)
+            if price != price_db:
+                log.warning(
+                    "Tried to write price to database, "
+                    "but a different price exists already."
+                    f"({platform=}, {tablename=}, {utc_time=}, {price=})"
+                )
+        else:
+            raise e
+
+
+def _sort_pair(coin: str, reference_coin: str) -> Tuple[str, str, bool]:
+    """Sort the coin pair in alphanumerical order.
+
+    Args:
+        coin (str)
+        reference_coin (str)
+
+    Returns:
+        Tuple[str, str, bool]: First coin, second coin, inverted
+    """
+    if inverted := coin > reference_coin:
+        coin_a = reference_coin
+        coin_b = coin
+    else:
+        coin_a = coin
+        coin_b = reference_coin
+    return coin_a, coin_b, inverted
 
 
 def get_tablename(coin: str, reference_coin: str) -> str:

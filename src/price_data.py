@@ -29,7 +29,13 @@ import requests
 import config
 import misc
 import transaction
-from database import get_price
+from database import (
+    set_price_db,
+    mean_price_db,
+    get_price_db,
+    get_tablename,
+    get_db_path,
+)
 from core import kraken_pair_map
 
 log = logging.getLogger(__name__)
@@ -108,13 +114,13 @@ class PriceData:
                     raise RuntimeError(f"Can not retrieve {symbol=} from binance")
                 # Changing the order of the assets require to
                 # invert the price.
-                price = get_price(
+                price = self.get_price(
                     "binance", quote_asset, utc_time, base_asset, swapped_symbols=True
                 )
                 return misc.reciprocal(price)
 
-            btc = get_price("binance", base_asset, utc_time, "BTC")
-            quote = get_price("binance", "BTC", utc_time, quote_asset)
+            btc = self.get_price("binance", base_asset, utc_time, "BTC")
+            quote = self.get_price("binance", "BTC", utc_time, quote_asset)
             return btc * quote
 
         response.raise_for_status()
@@ -129,10 +135,10 @@ class PriceData:
             )
             if quote_asset == "USDT":
                 return decimal.Decimal()
-            quote = get_price("binance", quote_asset, utc_time, "USDT")
+            quote = self.get_price("binance", quote_asset, utc_time, "USDT")
             if quote == 0.0:
                 return quote
-            usdt = get_price("binance", base_asset, utc_time, "USDT")
+            usdt = self.get_price("binance", base_asset, utc_time, "USDT")
             return usdt / quote
 
         # Calculate average price.
@@ -418,13 +424,61 @@ class PriceData:
         )
         return decimal.Decimal()
 
+    def get_price(
+        self,
+        platform: str,
+        coin: str,
+        utc_time: datetime.datetime,
+        reference_coin: str = config.FIAT,
+        **kwargs: Any,
+    ) -> decimal.Decimal:
+        """Get the price of a coin pair from a specific `platform` at `utc_time`.
+        The function tries to retrieve the price from the local database first.
+        If the price does not exist, its gathered from a platform specific
+        function and saved to our local database for future access.
+        Args:
+            platform (str)
+            coin (str)
+            utc_time (datetime.datetime)
+            reference_coin (str, optional): Defaults to config.FIAT.
+        Raises:
+            NotImplementedError: Platform specific GET function is not
+                                    implemented.
+        Returns:
+            decimal.Decimal: Price of the coin pair.
+        """
+        if coin == reference_coin:
+            return decimal.Decimal("1")
+
+        db_path = get_db_path(platform)
+        tablename = get_tablename(coin, reference_coin)
+
+        # Check if price exists already in our database.
+        if (price := get_price_db(db_path, tablename, utc_time)) is None:
+            try:
+                get_price = getattr(self, f"_get_price_{platform}")
+            except AttributeError:
+                raise NotImplementedError("Unable to read data from %s", platform)
+
+            price = get_price(coin, utc_time, reference_coin, **kwargs)
+            assert isinstance(price, decimal.Decimal)
+            set_price_db(db_path, tablename, utc_time, price)
+
+        if config.MEAN_MISSING_PRICES and price <= 0.0:
+            # The price is missing. Check for prices before and after the
+            # transaction and estimate the price.
+            # Do not save price in database.
+            price = mean_price_db(db_path, tablename, utc_time)
+
+        return price
+
     def get_cost(
         self,
         tr: Union[transaction.Operation, transaction.SoldCoin],
         reference_coin: str = config.FIAT,
     ) -> decimal.Decimal:
         op = tr if isinstance(tr, transaction.Operation) else tr.op
-        price = get_price(op.platform, op.coin, op.utc_time, reference_coin)
+        price = self.get_price(op.platform, op.coin, op.utc_time, reference_coin)
         if isinstance(tr, transaction.Operation):
             return price * tr.change
         if isinstance(tr, transaction.SoldCoin):

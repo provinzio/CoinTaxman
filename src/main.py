@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 
 
 def main() -> None:
-    patch_databases()
+    # patch_databases()
 
     price_data = PriceData()
     book = Book(price_data)
