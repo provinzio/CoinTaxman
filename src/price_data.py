@@ -29,6 +29,7 @@ import requests
 import config
 import misc
 import transaction
+from database import get_price
 from core import kraken_pair_map
 
 log = logging.getLogger(__name__)
@@ -107,13 +108,13 @@ class PriceData:
                     raise RuntimeError(f"Can not retrieve {symbol=} from binance")
                 # Changing the order of the assets require to
                 # invert the price.
-                price = self.get_price(
+                price = get_price(
                     "binance", quote_asset, utc_time, base_asset, swapped_symbols=True
                 )
                 return misc.reciprocal(price)
 
-            btc = self.get_price("binance", base_asset, utc_time, "BTC")
-            quote = self.get_price("binance", "BTC", utc_time, quote_asset)
+            btc = get_price("binance", base_asset, utc_time, "BTC")
+            quote = get_price("binance", "BTC", utc_time, quote_asset)
             return btc * quote
 
         response.raise_for_status()
@@ -128,10 +129,10 @@ class PriceData:
             )
             if quote_asset == "USDT":
                 return decimal.Decimal()
-            quote = self.get_price("binance", quote_asset, utc_time, "USDT")
+            quote = get_price("binance", quote_asset, utc_time, "USDT")
             if quote == 0.0:
                 return quote
-            usdt = self.get_price("binance", base_asset, utc_time, "USDT")
+            usdt = get_price("binance", base_asset, utc_time, "USDT")
             return usdt / quote
 
         # Calculate average price.
@@ -417,274 +418,13 @@ class PriceData:
         )
         return decimal.Decimal()
 
-    def __get_price_db(
-        self,
-        db_path: Path,
-        tablename: str,
-        utc_time: datetime.datetime,
-    ) -> Optional[decimal.Decimal]:
-        """Try to retrieve the price from our local database.
-
-        Args:
-            db_path (Path)
-            tablename (str)
-            utc_time (datetime.datetime)
-
-        Returns:
-            Optional[decimal.Decimal]: Price.
-        """
-        if db_path.is_file():
-            with sqlite3.connect(db_path) as conn:
-                cur = conn.cursor()
-                query = f"SELECT price FROM `{tablename}` WHERE utc_time=?;"
-
-                try:
-                    cur.execute(query, (utc_time,))
-                except sqlite3.OperationalError as e:
-                    if str(e) == f"no such table: {tablename}":
-                        return None
-                    raise e
-
-                if prices := cur.fetchone():
-                    return misc.force_decimal(prices[0])
-
-        return None
-
-    def __mean_price_db(
-        self,
-        db_path: Path,
-        tablename: str,
-        utc_time: datetime.datetime,
-    ) -> decimal.Decimal:
-        """Try to retrieve the price right before and after `utc_time`
-        from our local database.
-
-        Return 0 if the price could not be estimated.
-        The function does not check, if a price for `utc_time` exists.
-
-        Args:
-            db_path (Path)
-            tablename (str)
-            utc_time (datetime.datetime)
-
-        Returns:
-            decimal.Decimal: Price.
-        """
-        if db_path.is_file():
-            with sqlite3.connect(db_path) as conn:
-                cur = conn.cursor()
-
-                before_query = (
-                    f"SELECT utc_time, price FROM `{tablename}` "
-                    f"WHERE utc_time<? AND price > 0 "
-                    "ORDER BY utc_time DESC "
-                    "LIMIT 1"
-                )
-                try:
-                    cur.execute(before_query, (utc_time,))
-                except sqlite3.OperationalError as e:
-                    if str(e) == f"no such table: {tablename}":
-                        return decimal.Decimal()
-                    raise e
-                if result := cur.fetchone():
-                    before_time = misc.parse_iso_timestamp_to_decimal_timestamp(
-                        result[0]
-                    )
-                    before_price = misc.force_decimal(result[1])
-                else:
-                    return decimal.Decimal()
-
-                after_query = (
-                    f"SELECT utc_time, price FROM `{tablename}` "
-                    f"WHERE utc_time>? AND price > 0 "
-                    "ORDER BY utc_time ASC "
-                    "LIMIT 1"
-                )
-                try:
-                    cur.execute(after_query, (utc_time,))
-                except sqlite3.OperationalError as e:
-                    if str(e) == f"no such table: {tablename}":
-                        return decimal.Decimal()
-                    raise e
-                if result := cur.fetchone():
-                    after_time = misc.parse_iso_timestamp_to_decimal_timestamp(
-                        result[0]
-                    )
-                    after_price = misc.force_decimal(result[1])
-                else:
-                    return decimal.Decimal()
-
-                if before_price and after_price:
-                    d_utc_time = misc.to_decimal_timestamp(utc_time)
-                    # Linear gradiant between the neighbored transactions.
-                    m = (after_price - before_price) / (after_time - before_time)
-                    price = before_price + (d_utc_time - before_time) * m
-                    return price
-
-        return decimal.Decimal()
-
-    def __set_price_db(
-        self,
-        db_path: Path,
-        tablename: str,
-        utc_time: datetime.datetime,
-        price: decimal.Decimal,
-    ) -> None:
-        """Write price to database.
-
-        Create database/table if necessary.
-
-        Args:
-            db_path (Path)
-            tablename (str)
-            utc_time (datetime.datetime)
-            price (decimal.Decimal)
-        """
-        # TODO if db_path doesn't exists. Create db with §version table and
-        #      newest version number. It would be nicer, if this could be done
-        #      as a preprocessing step. see book.py
-        with sqlite3.connect(db_path) as conn:
-            cur = conn.cursor()
-            query = f"INSERT INTO `{tablename}`" "('utc_time', 'price') VALUES (?, ?);"
-            try:
-                cur.execute(query, (utc_time, str(price)))
-            except sqlite3.OperationalError as e:
-                if str(e) == f"no such table: {tablename}":
-                    create_query = (
-                        f"CREATE TABLE `{tablename}`"
-                        "(utc_time DATETIME PRIMARY KEY, "
-                        "price STR NOT NULL);"
-                    )
-                    cur.execute(create_query)
-                    cur.execute(query, (utc_time, str(price)))
-                else:
-                    raise e
-            conn.commit()
-
-    def set_price_db(
-        self,
-        platform: str,
-        coin: str,
-        reference_coin: str,
-        utc_time: datetime.datetime,
-        price: decimal.Decimal,
-    ) -> None:
-        """Write price to database.
-
-        Tries to insert a historical price into the local database.
-
-        A warning will be raised, if there is already a different price.
-
-        Args:
-            platform (str): [description]
-            coin (str): [description]
-            reference_coin (str): [description]
-            utc_time (datetime.datetime): [description]
-            price (decimal.Decimal): [description]
-        """
-        assert coin != reference_coin
-        coin_a, coin_b, inverted = self._sort_pair(coin, reference_coin)
-        db_path = self.get_db_path(platform)
-        tablename = self.get_tablename(coin_a, coin_b)
-        if inverted:
-            price = misc.reciprocal(price)
-        try:
-            self.__set_price_db(db_path, tablename, utc_time, price)
-        except sqlite3.IntegrityError as e:
-            if str(e) == f"UNIQUE constraint failed: {tablename}.utc_time":
-                price_db = self.get_price(platform, coin_a, utc_time, coin_b)
-                if price != price_db:
-                    log.warning(
-                        "Tried to write price to database, "
-                        "but a different price exists already."
-                        f"({platform=}, {tablename=}, {utc_time=}, {price=})"
-                    )
-            else:
-                raise e
-
-    def _sort_pair(self, coin: str, reference_coin: str) -> Tuple[str, str, bool]:
-        """Sort the coin pair in alphanumerical order.
-
-        Args:
-            coin (str)
-            reference_coin (str)
-
-        Returns:
-            Tuple[str, str, bool]: First coin, second coin, inverted
-        """
-        if inverted := coin > reference_coin:
-            coin_a = reference_coin
-            coin_b = coin
-        else:
-            coin_a = coin
-            coin_b = reference_coin
-        return coin_a, coin_b, inverted
-
-    def get_price(
-        self,
-        platform: str,
-        coin: str,
-        utc_time: datetime.datetime,
-        reference_coin: str = config.FIAT,
-        **kwargs: Any,
-    ) -> decimal.Decimal:
-        """Get the price of a coin pair from a specific `platform` at `utc_time`.
-
-        The function tries to retrieve the price from the local database first.
-        If the price does not exist, its gathered from a platform specific
-        function and saved to our local database for future access.
-
-        Args:
-            platform (str)
-            coin (str)
-            utc_time (datetime.datetime)
-            reference_coin (str, optional): Defaults to config.FIAT.
-
-        Raises:
-            NotImplementedError: Platform specific GET function is not
-                                 implemented.
-
-        Returns:
-            decimal.Decimal: Price of the coin pair.
-        """
-        if coin == reference_coin:
-            return decimal.Decimal("1")
-
-        db_path = self.get_db_path(platform)
-        coin_a, coin_b, inverted = self._sort_pair(coin, reference_coin)
-        tablename = self.get_tablename(coin_a, coin_b)
-
-        # Check if price exists already in our database.
-        if (price := self.__get_price_db(db_path, tablename, utc_time)) is None:
-            # The price does not exist in our database.
-            # Gather the price from a platform specific function.
-            try:
-                get_price = getattr(self, f"_get_price_{platform}")
-            except AttributeError:
-                raise NotImplementedError("Unable to read data from %s", platform)
-            price = get_price(coin, utc_time, reference_coin, **kwargs)
-            if inverted:
-                price = misc.reciprocal(price)
-            assert isinstance(price, decimal.Decimal)
-            self.__set_price_db(db_path, tablename, utc_time, price)
-
-        if config.MEAN_MISSING_PRICES and price <= 0.0:
-            # The price is missing. Check for prices before and after the
-            # transaction and estimate the price.
-            # Do not save price in database.
-            price = self.__mean_price_db(db_path, tablename, utc_time)
-
-        if inverted:
-            price = misc.reciprocal(price)
-        return price
-
     def get_cost(
         self,
         tr: Union[transaction.Operation, transaction.SoldCoin],
         reference_coin: str = config.FIAT,
     ) -> decimal.Decimal:
         op = tr if isinstance(tr, transaction.Operation) else tr.op
-        price = self.get_price(op.platform, op.coin, op.utc_time, reference_coin)
+        price = get_price(op.platform, op.coin, op.utc_time, reference_coin)
         if isinstance(tr, transaction.Operation):
             return price * tr.change
         if isinstance(tr, transaction.SoldCoin):
