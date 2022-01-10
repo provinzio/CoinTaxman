@@ -260,8 +260,10 @@ class Taxman:
                 )
                 self.price_data.preload_prices(s_operations, coin, plat)
                 counter += len(coin_operations)
-                log.info(f"{counter} out of {total_operations} operations processed.")
-                log.info(f"{counter/total_operations*100}% done")
+                log.info(
+                    "{:6.2f} % done, {:6d} out of {:d} operations processed".
+                    format(counter / total_operations * 100, counter, total_operations)
+                )
 
         if config.MULTI_DEPOT:
             # Evaluate taxation separated by platforms and coins.

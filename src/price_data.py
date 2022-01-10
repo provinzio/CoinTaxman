@@ -594,10 +594,14 @@ class PriceData:
             if str(e) == f"UNIQUE constraint failed: {tablename}.utc_time":
                 price_db = self.get_price(platform, coin, utc_time, reference_coin)
                 if price != price_db:
+                    rel_error = abs(price - price_db) / price * 100
                     log.warning(
-                        "Tried to write price to database, "
-                        "but a different price exists already."
-                        f"({platform=}, {tablename=}, {utc_time=}, {price=})"
+                        f"Tried to write {tablename} price to database, but a "
+                        f"different price exists already ({platform} @ {utc_time})"
+                    )
+                    log.warning(
+                        f"price: {price}, database price: {price_db}, "
+                        f"relative error: %.6f %%", rel_error
                     )
             else:
                 raise e
@@ -940,6 +944,12 @@ class PriceData:
         # We do not have to preload prices, if there are no operations or the coin is
         # the same as the reference coin.
         if not operations or coin == reference_coin:
+            return
+
+        if platform == "kraken":
+            log.warning(
+                f"Will not preload prices for {platform}, reverting to default API."
+            )
             return
 
         # Only consider the operations for which we have no prices in the database.
