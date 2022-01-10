@@ -22,7 +22,7 @@ import logging
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Union
 
 import requests
 
@@ -462,7 +462,7 @@ class PriceData:
 
             price = get_price(coin, utc_time, reference_coin, **kwargs)
             assert isinstance(price, decimal.Decimal)
-            set_price_db(db_path, tablename, utc_time, price)
+            set_price_db("", coin, reference_coin, utc_time, price, db_path)
 
         if config.MEAN_MISSING_PRICES and price <= 0.0:
             # The price is missing. Check for prices before and after the

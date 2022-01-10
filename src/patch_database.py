@@ -18,12 +18,12 @@ import datetime
 import decimal
 import logging
 import sqlite3
+import sys
+from inspect import getmembers, isfunction
 from pathlib import Path
 
 import config
-import misc
-from inspect import getmembers, isfunction
-import sys
+from database import set_price_db
 
 FUNC_PREFIX = "__patch_"
 log = logging.getLogger(__name__)
@@ -97,7 +97,22 @@ def __patch_001(db_path: Path) -> None:
     Args:
         db_path (Path): [description]
     """
-    raise NotImplementedError
+    logging.info("applying patch 001")
+    with sqlite3.connect(db_path) as conn:
+        query = "SELECT name,sql FROM sqlite_master WHERE type='table'"
+        cur = conn.execute(query)
+        for tablename, sql in cur.fetchall():
+            if not sql.lower().contains("price str"):
+                query = f"""
+                CREATE TABLE "sql_temp_table" (
+                "utc_time" DATETIME PRIMARY KEY,
+                "price"	STR NOT NULL
+                );
+                INSERT INTO "sql_temp_table" ("price","utc_time")
+                SELECT "price","utc_time" FROM "{tablename}";
+                DROP TABLE "{tablename}";
+                ALTER TABLE "sql_temp_table" "{tablename}";
+                """
 
 
 def __patch_002(db_path: Path) -> None:
@@ -106,10 +121,10 @@ def __patch_002(db_path: Path) -> None:
     Args:
         db_path (Path)
     """
+    logging.info("applying patch 002")
     with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
         tablenames = get_tablenames(cur)
-
         # Iterate over all tables.
         for tablename in tablenames:
             base_asset, quote_asset = tablename.split("/")
@@ -120,27 +135,13 @@ def __patch_002(db_path: Path) -> None:
                 # Query all prices from the table.
                 cur = conn.execute(f"Select utc_time, price FROM `{tablename}`;")
 
-                new_values = []
-                for _utc_time, _price in cur.fetchall():
+                for _utc_time, _price in list(cur.fetchall()):
                     # Convert the data.
                     utc_time = datetime.datetime.strptime(
                         _utc_time, "%Y-%m-%d %H:%M:%S%z"
                     )
                     price = decimal.Decimal(_price)
-
-                    # Calculate the price of the inverse symbol.
-                    oth_price = misc.reciprocal(price)
-                    new_values.append(utc_time, oth_price)
-
-                assert quote_asset < base_asset
-                # TODO Refactor code, so that a DatabaseHandle/Class exists,
-                #      which presents basic functions to work with the database.
-                #      e.g. get_tablename function from price_data
-                new_tablename = f"{quote_asset}/{base_asset}"
-                # TODO bulk insert new values in table.
-                # TODO Make sure, that no duplicates exists in the new table.
-
-                # Remove the old table.
+                    set_price_db("", base_asset, quote_asset, utc_time, price, db_path)
                 cur = conn.execute(f"DROP TABLE `{tablename}`;")
 
 
@@ -157,10 +158,10 @@ def patch_databases() -> None:
 
         # Determine all necessary patch functions.
         patch_func_names = [
-            func
-            for func in str(getmembers(sys.modules[__name__], isfunction)[0])
-            if func.startswith(FUNC_PREFIX)
-            if get_patch_func_version(func) > current_version
+            func[0]
+            for func in getmembers(sys.modules[__name__], isfunction)
+            if func[0].startswith(FUNC_PREFIX)
+            if get_patch_func_version(func[0]) > current_version
         ]
 
         # Sort patch functions chronological.

@@ -3,10 +3,10 @@ import decimal
 import logging
 import sqlite3
 from pathlib import Path
-import misc
-from typing import Optional, Any, Tuple
+from typing import Optional, Tuple
 
 import config
+import misc
 
 log = logging.getLogger(__name__)
 
@@ -195,6 +195,7 @@ def set_price_db(
     reference_coin: str,
     utc_time: datetime.datetime,
     price: decimal.Decimal,
+    db_path: Path = None,
 ) -> None:
     """Write price to database.
 
@@ -211,7 +212,8 @@ def set_price_db(
     """
     assert coin != reference_coin
     coin_a, coin_b, inverted = _sort_pair(coin, reference_coin)
-    db_path = get_db_path(platform)
+    if db_path is None and platform == "":
+        db_path = get_db_path(platform)
     tablename = get_tablename(coin_a, coin_b)
     if inverted:
         price = misc.reciprocal(price)
