@@ -29,14 +29,14 @@ import requests
 import config
 import misc
 import transaction
+from core import kraken_pair_map
 from database import (
-    set_price_db,
-    mean_price_db,
+    get_db_path,
     get_price_db,
     get_tablename,
-    get_db_path,
+    mean_price_db,
+    set_price_db,
 )
-from core import kraken_pair_map
 
 log = logging.getLogger(__name__)
 
