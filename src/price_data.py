@@ -264,22 +264,30 @@ class PriceData:
         # Bitpanda Pro only supports distinctive arguments for this, *not arbitrary*
         timeframes = [1, 5, 15, 30]
 
-        # get the smallest timeframe possible
-        # if there were no trades in the requested time frame, the
-        # returned data will be empty
+        # Try to find the price in the most detailed timeframe, to get the best matching
+        # price for the transaction. If we can not find the price in a timeframe, use
+        # the next bigger frame and try again. If we reached the highest timeframe, move
+        # the fetched time window into the past, to get the latest transaction from the
+        # API. If there were no trades in the requested time frame, the returned data
+        # will be empty
         for t in timeframes:
-            num_offsets = 0
-            for num_offsets in range(6):
+            # Maximum number of allowed offsets into the past to find a valid price
+            # before we throw an error. We do not offset the time window as long as we
+            # can choose a bigger timeframe instead. num_max_offsets has been determined
+            # empirically and may be changed.
+            num_max_offsets = 12 if t == timeframes[-1] else 1
+            for num_offset in range(num_max_offsets):
                 # if no trades can be found, move 30 min window to the past
-                window_offset = num_offsets * 30
+                window_offset = num_offset * t
+                # issue warning if no data could be found in the last loop
+                if num_offset:
+                    log.warning(
+                        f"No price data found for {base_asset} / {quote_asset} "
+                        f"at {end}, moving {t} minutes window to the past."
+                    )
                 end = utc_time.astimezone(datetime.timezone.utc) \
                     - datetime.timedelta(minutes=window_offset)
                 begin = end - datetime.timedelta(minutes=t)
-                if num_offsets:
-                    log.warning(
-                        f"No price data found for {base_asset} / {quote_asset} "
-                        f"at {end}, moving {timeframes[-1]} minute window to the past."
-                    )
 
                 # https://github.com/python/mypy/issues/3176
                 params: dict[str, Union[int, str]] = {
@@ -289,10 +297,17 @@ class PriceData:
                     "from": begin.isoformat().replace('+00:00', 'Z'),
                     "to": end.isoformat().replace('+00:00', 'Z'),
                 }
-                log.debug(
-                    f"Calling Bitpanda API for {base_asset} / {quote_asset} "
-                    f"price for {t} minute timeframe ending at {end}"
-                )
+                if num_offset:
+                    log.debug(
+                        f"Calling Bitpanda API for {base_asset} / {quote_asset} price "
+                        f"for {t} minute timeframe ending at {end} "
+                        f"(includes {window_offset} minutes offset)"
+                    )
+                else:
+                    log.debug(
+                        f"Calling Bitpanda API for {base_asset} / {quote_asset} price "
+                        f"for {t} minute timeframe ending at {end}"
+                    )
                 r = requests.get(baseurl, params=params)
 
                 assert r.status_code == 200, "No valid response from Bitpanda API"
@@ -302,11 +317,18 @@ class PriceData:
                 if data or t != timeframes[-1]:
                     break
 
+            # exit loop if data is valid
             if data:
                 break
+        else:
+            log.error(
+                f"No price data found for {base_asset} / {quote_asset} at {end}. "
+                f"You can try to increase num_max_offsets to obtain older price data."
+            )
+            raise RuntimeError
 
-        # if we didn't get data for the 30 minute frame, give up?
-        assert data
+        # this should never be triggered, but just in case assert received data
+        assert data, f"No valid price data for {base_asset} / {quote_asset} at {end}"
 
         # simply take the average of the latest data element
         high = misc.force_decimal(data[-1]["high"])
