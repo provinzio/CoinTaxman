@@ -279,12 +279,6 @@ class PriceData:
             for num_offset in range(num_max_offsets):
                 # if no trades can be found, move 30 min window to the past
                 window_offset = num_offset * t
-                # issue warning if no data could be found in the last loop
-                if num_offset:
-                    log.warning(
-                        f"No price data found for {base_asset} / {quote_asset} "
-                        f"at {end}, moving {t} minutes window to the past."
-                    )
                 end = utc_time.astimezone(datetime.timezone.utc) \
                     - datetime.timedelta(minutes=window_offset)
                 begin = end - datetime.timedelta(minutes=t)
@@ -313,9 +307,16 @@ class PriceData:
                 assert r.status_code == 200, "No valid response from Bitpanda API"
                 data = r.json()
 
-                # exit loop if data is valid or maximum timeframe is not reached yet
-                if data or t != timeframes[-1]:
+                # exit loop if data is valid
+                if data:
                     break
+
+                # issue warning if time window is moved to the past
+                if num_offset < num_max_offsets - 1:
+                    log.warning(
+                        f"No price data found for {base_asset} / {quote_asset} "
+                        f"at {end}, moving {t} minutes window to the past."
+                    )
 
             # exit loop if data is valid
             if data:
