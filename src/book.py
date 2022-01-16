@@ -572,12 +572,12 @@ class Book:
                 # since these are the points in time where the user actually has the
                 # assets at their disposal. The first deposit and second withdrawal are
                 # in the public trade history and are skipped.
-                # For staking / unstaking / staking reward actions, deposits / 
+                # For staking / unstaking / staking reward actions, deposits /
                 # withdrawals only occur once and will be ignored.
                 if operation in ["Deposit", "Withdrawal"]:
                     # search for refid in refids list
                     refid_idxs = [
-                        idx for idx, op in enumerate(held_operations) \
+                        idx for idx, op in enumerate(held_operations)
                         if op["refid"] == refid
                     ]
                     # refid should not exist more than once in list

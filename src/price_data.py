@@ -315,10 +315,12 @@ class PriceData:
         For this we fetch one chunk of the trade history, starting
         `minutes_step`minutes before this timestamp.
         We then walk through the history until the closest timestamp match is
-        found. Otherwise, we start another 10 minutes earlier and try again.
+        found. Otherwise (if all received price data points are newer than the desired
+        timestamp), we start another 10 minutes earlier and try again.
         (Exiting with a warning and zero price after hitting the arbitrarily
         chosen offset limit of 120 minutes). If the initial offset is already
-        too large, recursively retry by reducing the offset step,
+        too large (i.e. all received price data points are older than the desired
+        timestamp), recursively retry by reducing the offset step,
         down to 1 minute.
 
         Documentation: https://www.kraken.com/features/api
@@ -406,18 +408,34 @@ class PriceData:
             )
 
             # The desired timestamp is in the past; increase the offset
+            # desired timestamp is smaller than all timestamps of the received data
             if closest_match_index == -1:
                 continue
 
-            now_timestamp = misc.to_ms_timestamp(datetime.datetime.now().astimezone())
-            # The desired timestamp is in the future. Ignore if the target timestamp
-            # is within one hour to the current timestamp (for virtual sells)
-            if closest_match_index == len(data_timestamps_ms) - 1 and \
-                (now_timestamp > target_timestamp + 3600 * 1000
-                    or not config.CALCULATE_VIRTUAL_SELL):
-
-                if minutes_step == 1:
-                    # Cannot remove interval any further; give up
+            # The desired timestamp is in the future
+            # desired timestamp is larger than all timestamps of the received data
+            if closest_match_index == len(data_timestamps_ms) - 1:
+                if len(data_timestamps_ms) < 100:
+                    # The API returns the last 1000 trades. If less than 100 trades are
+                    # received, it can be assumed that we've received the last trade.
+                    price_timestamp = data_timestamps_ms[closest_match_index]
+                    log.debug(
+                        "Accepting price from "
+                        f"{datetime.datetime.fromtimestamp(price_timestamp/1000.0)} "
+                        f"as latest price for {pair} at {utc_time}"
+                    )
+                    # This should normally only happen for virtual sells, therefore
+                    # raise a warning if the target timestamp is older than one hour
+                    now_timestamp = misc.to_ms_timestamp(
+                        datetime.datetime.now().astimezone()
+                    )
+                    if target_timestamp < now_timestamp - 3600 * 1000:
+                        log.warning(
+                            f"Timestamp for {pair} at {utc_time} is older than one "
+                            "hour, still accepted latest received trading price"
+                        )
+                elif minutes_step == 1:
+                    # Cannot reduce interval any further; give up
                     break
                 else:
                     # We missed the desired timestamp because our initial step
