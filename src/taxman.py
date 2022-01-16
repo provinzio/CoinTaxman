@@ -150,30 +150,28 @@ class Taxman:
         for op in operations:
             if isinstance(op, transaction.Fee):
                 balance.remove_fee(op.change)
+                # fees reduce taxed gain in the corresponding tax period
+                is_taxable = self.in_tax_year(op)
                 taxation_type = "Sonstige Einkünfte"
-                if self.in_tax_year(op):
-                    # Fees reduce taxed gain.
-                    is_taxable = True
-                else:
+                if not is_taxable:
                     taxation_type += " außerhalb des Steuerjahres"
-                    is_taxable = False
                 taxed_gain = -self.price_data.get_cost(op)
                 tx = transaction.TaxEvent(taxation_type, taxed_gain, op, is_taxable)
             elif isinstance(op, transaction.CoinLend):
-                taxation_type = "CoinLend"
+                taxation_type = "Krypto-Lending Beginn"
                 tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             elif isinstance(op, transaction.CoinLendEnd):
-                taxation_type = "CoinLendEnd"
+                taxation_type = "Krypto-Lending Ende"
                 tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             elif isinstance(op, transaction.Staking):
-                taxation_type = "Staking"
+                taxation_type = "Krypto-Staking Beginn"
                 tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             elif isinstance(op, transaction.StakingEnd):
-                taxation_type = "StakingEnd"
+                taxation_type = "Krypto-Staking Ende"
                 tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             elif isinstance(op, transaction.Buy):
                 balance.put(op)
-                if misc.is_fiat(op.coin):
+                if op.coin.casefold() == config.FIAT.casefold():
                     continue
                 else:
                     taxation_type = "Kauf"
@@ -193,20 +191,16 @@ class Taxman:
                         decimal.Decimal(),
                         op,
                         False,
-                        decimal.Decimal(),
-                        decimal.Decimal(),
-                        remark
+                        remark=remark
                     )
             elif isinstance(op, transaction.Sell):
-                if misc.is_fiat(op.coin):
+                if op.coin.casefold() == config.FIAT.casefold():
                     continue
-                if tx_ := evaluate_sell(op):
-                    tx = tx_
-                else:
-                    taxation_type = (
-                        "Verkauf "
-                        "(außerhalb des Steuerjahres oder steuerfrei)"
-                    )
+                if not (tx := evaluate_sell(op)):
+                    if self.in_tax_year(op):
+                        taxation_type = "Verkauf (nicht steuerbar)"
+                    else:    
+                        taxation_type = "Verkauf (außerhalb des Steuerjahres)"
                     tx = transaction.TaxEvent(
                         taxation_type,
                         decimal.Decimal(),
@@ -217,18 +211,19 @@ class Taxman:
                 op, (transaction.CoinLendInterest, transaction.StakingInterest)
             ):
                 balance.put(op)
+                is_taxable = self.in_tax_year(op)
                 if misc.is_fiat(coin):
-                    assert not isinstance(
-                        op, transaction.StakingInterest
-                    ), "You can not stake fiat currencies."
                     taxation_type = "Einkünfte aus Kapitalvermögen"
+                    if isinstance(op, transaction.StakingInterest):
+                        log.error(
+                            f"{coin} at {op.platform}, {op.utc_time}: "
+                            "You can not stake fiat currencies."
+                        )
+                        raise RuntimeError
                 else:
                     taxation_type = "Einkünfte aus sonstigen Leistungen"
-                if self.in_tax_year(op):
-                    is_taxable = True
-                else:
+                if not is_taxable:
                     taxation_type += " außerhalb des Steuerjahres"
-                    is_taxable = False
                 taxed_gain = self.price_data.get_cost(op)
                 tx = transaction.TaxEvent(taxation_type, taxed_gain, op, is_taxable)
             elif isinstance(op, transaction.Airdrop):
@@ -237,12 +232,10 @@ class Taxman:
                 tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             elif isinstance(op, transaction.Commission):
                 balance.put(op)
+                is_taxable = self.in_tax_year(op)
                 taxation_type = "Einkünfte aus sonstigen Leistungen"
-                if self.in_tax_year(op):
-                    is_taxable = True
-                else:
+                if not is_taxable:
                     taxation_type += " außerhalb des Steuerjahres"
-                    is_taxable = False
                 taxed_gain = self.price_data.get_cost(op)
                 tx = transaction.TaxEvent(taxation_type, taxed_gain, op, is_taxable)
             elif isinstance(op, transaction.Deposit):
@@ -252,7 +245,7 @@ class Taxman:
                         f"on {op.platform} at {op.utc_time}. "
                         "The evaluation might be wrong."
                     )
-                taxation_type = "Deposit"
+                taxation_type = "Einzahlung"
                 tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             elif isinstance(op, transaction.Withdrawal):
                 if coin != config.FIAT:
@@ -261,7 +254,7 @@ class Taxman:
                         f"from {op.platform} at {op.utc_time}. "
                         "The evaluation might be wrong."
                     )
-                taxation_type = "Withdrawal"
+                taxation_type = "Auszahlung"
                 tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             else:
                 raise NotImplementedError
