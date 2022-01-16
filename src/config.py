@@ -30,10 +30,8 @@ TAX_YEAR = int(config["BASE"].get("TAX_YEAR", "2021"))
 MEAN_MISSING_PRICES = config["BASE"].getboolean("MEAN_MISSING_PRICES")
 CALCULATE_VIRTUAL_SELL = config["BASE"].getboolean("CALCULATE_VIRTUAL_SELL")
 MULTI_DEPOT = config["BASE"].getboolean("MULTI_DEPOT")
-# Include virtual sells in the export
-EXPORT_VIRTUAL_SELL = False
-# Export all events (True) or only taxable events (False)
-EXPORT_ALL_EVENTS = True
+EXPORT_VIRTUAL_SELL = config["BASE"].getboolean("EXPORT_VIRTUAL_SELL")
+EXPORT_ALL_EVENTS = config["BASE"].getboolean("EXPORT_ALL_EVENTS")
 
 # Read in environmental variables.
 if _env_country := environ.get("COUNTRY"):
