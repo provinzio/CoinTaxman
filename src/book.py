@@ -20,7 +20,7 @@ import decimal
 import logging
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import config
 import misc
@@ -460,7 +460,7 @@ class Book:
 
         # Need to track state of duplicate deposit/withdrawal entries
         # All deposits/withdrawals are held back until they occur a second time
-        held_operations = []
+        held_operations: list[dict[str, Any]] = []
 
         with open(file_path, encoding="utf8") as f:
             reader = csv.reader(f)
