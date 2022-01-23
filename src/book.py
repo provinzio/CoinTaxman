@@ -628,7 +628,8 @@ class Book:
                         # withdrawal and append this to the operations list.
                         if refid_idxs:
                             append_operation = True
-                            operation = held_operations[idx]["operation"]
+                            # required for type annotation: convert Optional[str] to str
+                            operation = str(held_operations[idx]["operation"])
                             utc_time = held_operations[idx]["utc_time"]
                             platform = held_operations[idx]["platform"]
                             change = held_operations[idx]["change"]
