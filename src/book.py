@@ -648,6 +648,12 @@ class Book:
                         self.append_operation(
                             "Fee", utc_time, platform, fee, coin, row, file_path
                         )
+                    if operation == "StakingInterest":
+                        # the rewarded coins are added to the staked portfolio
+                        # TODO: directly stake the rewarded coins, not just any coin
+                        self.append_operation(
+                            "Staking", utc_time, platform, change, coin, row, file_path
+                        )
 
     def _read_kraken_ledgers_old(self, file_path: Path) -> None:
 
