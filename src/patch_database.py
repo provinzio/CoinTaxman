@@ -70,7 +70,7 @@ def get_version(db_path: Path) -> int:
 def update_version(db_path: Path, version: int) -> None:
     with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
-        cur.execute("TRUNCATE §version;")
+        cur.execute("DELETE FROM §version;")
         assert isinstance(version, int)
         cur.execute(f"INSERT INTO §version (version) VALUES ({version});")
 
@@ -102,7 +102,7 @@ def __patch_001(db_path: Path) -> None:
         query = "SELECT name,sql FROM sqlite_master WHERE type='table'"
         cur = conn.execute(query)
         for tablename, sql in cur.fetchall():
-            if not sql.lower().contains("price str"):
+            if "price str" not in sql.lower():
                 query = f"""
                 CREATE TABLE "sql_temp_table" (
                 "utc_time" DATETIME PRIMARY KEY,
@@ -127,6 +127,8 @@ def __patch_002(db_path: Path) -> None:
         tablenames = get_tablenames(cur)
         # Iterate over all tables.
         for tablename in tablenames:
+            if tablename == "§version":
+                continue
             base_asset, quote_asset = tablename.split("/")
 
             # Adjust the order, when the symbols aren't ordered alphanumerical.
@@ -137,9 +139,15 @@ def __patch_002(db_path: Path) -> None:
 
                 for _utc_time, _price in list(cur.fetchall()):
                     # Convert the data.
-                    utc_time = datetime.datetime.strptime(
-                        _utc_time, "%Y-%m-%d %H:%M:%S%z"
-                    )
+                    # Try non-fractional seconds first, then fractional seconds
+                    try:
+                        utc_time = datetime.datetime.strptime(
+                            _utc_time, "%Y-%m-%d %H:%M:%S%z"
+                        )
+                    except ValueError:
+                        utc_time = datetime.datetime.strptime(
+                            _utc_time, "%Y-%m-%d %H:%M:%S.%f%z"
+                        )
                     price = decimal.Decimal(_price)
                     set_price_db("", base_asset, quote_asset, utc_time, price, db_path)
                 cur = conn.execute(f"DROP TABLE `{tablename}`;")
@@ -173,5 +181,6 @@ def patch_databases() -> None:
             patch_func(db_path)
 
         # Update version.
-        new_version = get_patch_func_version(patch_func_name)
-        update_version(db_path, new_version)
+        if patch_func_names:
+            new_version = get_patch_func_version(patch_func_name)
+            update_version(db_path, new_version)

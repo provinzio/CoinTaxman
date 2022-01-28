@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import configparser
 from datetime import datetime
 from os import environ
 from pathlib import Path
@@ -22,21 +23,13 @@ from dateutil.relativedelta import relativedelta
 
 import core
 
-# User specific constants (might be overwritten by environmental variables).
-COUNTRY = core.Country.GERMANY
-TAX_YEAR = 2021
-# If the price for a coin is missing, check if there are known prices before
-# and after the specific transaction and use linear regression to estimate
-# the price inbetween.
-# Important: The code must be run twice for this option to take effect.
-MEAN_MISSING_PRICES = False
-# Calculate the (taxed) gains, if the left over coins would be sold right now.
-# This will fetch the current prices and therefore slow down repetitive runs.
-CALCULATE_VIRTUAL_SELL = True
-# Evaluate taxes for each depot/platform separately. This may reduce your
-# taxable gains. Make sure, that this method is accepted by your tax
-# authority.
-MULTI_DEPOT = True
+config = configparser.ConfigParser()
+config.read("config.ini")
+COUNTRY = core.Country[config["BASE"].get("COUNTRY", "GERMANY")]
+TAX_YEAR = int(config["BASE"].get("TAX_YEAR", "2021"))
+MEAN_MISSING_PRICES = config["BASE"].getboolean("MEAN_MISSING_PRICES")
+CALCULATE_VIRTUAL_SELL = config["BASE"].getboolean("CALCULATE_VIRTUAL_SELL")
+MULTI_DEPOT = config["BASE"].getboolean("MULTI_DEPOT")
 
 # Read in environmental variables.
 if _env_country := environ.get("COUNTRY"):
