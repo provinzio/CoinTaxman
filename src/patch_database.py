@@ -85,8 +85,11 @@ def get_patch_func_version(func_name: str) -> int:
     return version
 
 
-def get_tablenames(cur: sqlite3.Cursor) -> list[str]:
-    cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
+def get_tablenames(cur: sqlite3.Cursor, ignore_version_table: bool = True) -> list[str]:
+    query = "SELECT name FROM sqlite_master WHERE type='table'"
+    if ignore_version_table:
+        query += " AND name != '§version'"
+    cur.execute(f"{query};")
     tablenames = [result[0] for result in cur.fetchall()]
     return tablenames
 
@@ -125,8 +128,6 @@ def __patch_002(db_path: Path) -> None:
         tablenames = get_tablenames(cur)
         # Iterate over all tables.
         for tablename in tablenames:
-            if tablename == "§version":
-                continue
             base_asset, quote_asset = tablename.split("/")
 
             # Adjust the order, when the symbols aren't ordered alphanumerical.
