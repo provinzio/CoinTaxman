@@ -1120,7 +1120,6 @@ class Book:
         assert file_path.is_file()
 
         if exchange := self.detect_exchange(file_path):
-            check_database_or_create(exchange)
 
             try:
                 read_file = getattr(self, f"_read_{exchange}")

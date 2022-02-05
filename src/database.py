@@ -167,7 +167,10 @@ def __set_price_db(
         utc_time (datetime.datetime)
         price (decimal.Decimal)
     """
-    assert db_path.exists(), f"db doesn't exist: {db_path}"
+    if not db_path.exists():
+        from patch_database import create_new_database
+
+        create_new_database(db_path)
 
     with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
