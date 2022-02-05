@@ -286,8 +286,9 @@ class PriceData:
             for num_offset in range(num_max_offsets):
                 # if no trades can be found, move 30 min window to the past
                 window_offset = num_offset * t
-                end = utc_time.astimezone(datetime.timezone.utc) \
-                    - datetime.timedelta(minutes=window_offset)
+                end = utc_time.astimezone(datetime.timezone.utc) - datetime.timedelta(
+                    minutes=window_offset
+                )
                 begin = end - datetime.timedelta(minutes=t)
 
                 # https://github.com/python/mypy/issues/3176
@@ -295,8 +296,8 @@ class PriceData:
                     "unit": "MINUTES",
                     "period": t,
                     # convert ISO 8601 format to RFC3339 timestamp
-                    "from": begin.isoformat().replace('+00:00', 'Z'),
-                    "to": end.isoformat().replace('+00:00', 'Z'),
+                    "from": begin.isoformat().replace("+00:00", "Z"),
+                    "to": end.isoformat().replace("+00:00", "Z"),
                 }
                 if num_offset:
                     log.debug(
