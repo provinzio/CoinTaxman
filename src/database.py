@@ -182,7 +182,7 @@ def __set_price_db(
                 create_query = (
                     f"CREATE TABLE `{tablename}`"
                     "(utc_time DATETIME PRIMARY KEY, "
-                    "price STR NOT NULL);"
+                    "price VARCHAR(255) NOT NULL);"
                 )
                 cur.execute(create_query)
                 cur.execute(query, (utc_time, str(price)))
