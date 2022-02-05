@@ -211,12 +211,18 @@ def set_price_db(
         price (decimal.Decimal)
     """
     assert coin != reference_coin
+
     coin_a, coin_b, inverted = _sort_pair(coin, reference_coin)
-    if db_path is None and platform == "":
-        db_path = get_db_path(platform)
     tablename = get_tablename(coin_a, coin_b)
+
     if inverted:
         price = misc.reciprocal(price)
+
+    if db_path is None and platform:
+        db_path = get_db_path(platform)
+
+    assert isinstance(db_path, Path), "no db path given"
+
     try:
         __set_price_db(db_path, tablename, utc_time, price)
     except sqlite3.IntegrityError as e:
