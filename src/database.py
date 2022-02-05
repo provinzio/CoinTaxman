@@ -195,7 +195,7 @@ def set_price_db(
     reference_coin: str,
     utc_time: datetime.datetime,
     price: decimal.Decimal,
-    db_path: Path = None,
+    db_path: Optional[Path] = None,
 ) -> None:
     """Write price to database.
 
