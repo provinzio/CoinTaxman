@@ -742,11 +742,189 @@ class Book:
                     file_path,
                 )
 
+    def _read_bitpanda(self, file_path: Path) -> None:
+        """Reads a trade statement from Bitpanda.
+
+        Args:
+            file_path (Path): Path to Bitpanda trade history.
+        """
+
+        platform = "bitpanda"
+
+        operation_mapping = {
+            "deposit": "Deposit",
+            "withdrawal": "Withdrawal",
+            "buy": "Buy",
+            "sell": "Sell",
+        }
+
+        with open(file_path, encoding="utf8") as f:
+            reader = csv.reader(f)
+            line = next(reader)
+
+            # skip header, there are multiple lines
+            while line != [
+                "Transaction ID",
+                "Timestamp",
+                "Transaction Type",
+                "In/Out",
+                "Amount Fiat",
+                "Fiat",
+                "Amount Asset",
+                "Asset",
+                "Asset market price",
+                "Asset market price currency",
+                "Asset class",
+                "Product ID",
+                "Fee",
+                "Fee asset",
+                "Spread",
+                "Spread Currency",
+            ]:
+                try:
+                    line = next(reader)
+                except StopIteration:
+                    log.error(f"Expected header not found in file {file_path}")
+                    raise RuntimeError
+
+            for (
+                _tx_id,
+                csv_utc_time,
+                operation,
+                _inout,
+                amount_fiat,
+                fiat,
+                amount_asset,
+                asset,
+                asset_price,
+                asset_price_currency,
+                asset_class,
+                _product_id,
+                fee,
+                fee_currency,
+                _spread,
+                _spread_currency,
+            ) in reader:
+                row = reader.line_num
+
+                # make RFC3339 timestamp ISO 8601 parseable
+                if csv_utc_time[-1] == "Z":
+                    csv_utc_time = csv_utc_time[:-1] + "+00:00"
+
+                # timezone information is already taken care of with this
+                utc_time = datetime.datetime.fromisoformat(csv_utc_time)
+
+                # transfer ops seem to be akin to airdrops. In my case I got a
+                # CocaCola transfer, which I don't want to track. Would need to
+                # be implemented if need be.
+                if operation == "transfer":
+                    log.warning(
+                        f"'Transfer' operations are not "
+                        f"implemented, skipping row {row} of file {file_path}"
+                    )
+                    continue
+
+                # fail for unknown ops
+                try:
+                    operation = operation_mapping[operation]
+                except KeyError:
+                    log.error(
+                        f"Unsupported operation '{operation}' "
+                        f"in row {row} of file {file_path}"
+                    )
+                    raise RuntimeError
+
+                if operation in ["Deposit", "Withdrawal"]:
+                    if asset_class == "Fiat":
+                        change = misc.force_decimal(amount_fiat)
+                        if fiat != asset:
+                            log.error(
+                                f"Asset {asset} should be {fiat} in "
+                                f"row {row} of file {file_path}"
+                            )
+                            raise RuntimeError
+                    elif asset_class == "Cryptocurrency":
+                        change = misc.force_decimal(amount_asset)
+                    else:
+                        log.error(
+                            f"Unknown asset class {asset_class}: Should be 'Fiat' or "
+                            f"'Cryptocurrency' in row {row} of file {file_path}"
+                        )
+                        raise RuntimeError
+                elif operation in ["Buy", "Sell"]:
+                    if asset_price_currency != config.FIAT:
+                        log.error(
+                            f"Only {config.FIAT.upper()} is supported as "
+                            "'Asset market price currency', since price fetching for "
+                            "fiat currencies is not fully implemented yet."
+                        )
+                        raise RuntimeError
+                    change = misc.force_decimal(amount_asset)
+                    change_fiat = misc.force_decimal(amount_fiat)
+                    # Save price in our local database for later.
+                    price = misc.force_decimal(asset_price)
+                    self.price_data.set_price_db(
+                        platform, asset, config.FIAT.upper(), utc_time, price
+                    )
+
+                if change < 0:
+                    log.error(
+                        f"Unexpected value for the amount '{change}' of this "
+                        f"{operation} in row {row} of file {file_path}"
+                    )
+                    raise RuntimeError
+
+                self.append_operation(
+                    operation, utc_time, platform, change, asset, row, file_path
+                )
+
+                # add buy / sell operation for fiat currency
+                if operation == "Buy":
+                    self.append_operation(
+                        "Sell",
+                        utc_time,
+                        platform,
+                        change_fiat,
+                        config.FIAT.upper(),
+                        row,
+                        file_path,
+                    )
+                elif operation == "Sell":
+                    self.append_operation(
+                        "Buy",
+                        utc_time,
+                        platform,
+                        change_fiat,
+                        config.FIAT.upper(),
+                        row,
+                        file_path,
+                    )
+
+                if fee != "-":
+                    self.append_operation(
+                        "Fee",
+                        utc_time,
+                        platform,
+                        misc.force_decimal(fee),
+                        fee_currency,
+                        row,
+                        file_path,
+                    )
+
     def detect_exchange(self, file_path: Path) -> Optional[str]:
         if file_path.suffix == ".csv":
-            with open(file_path, encoding="utf8") as f:
-                reader = csv.reader(f)
-                header = next(reader, None)
+
+            expected_header_row = {
+                "binance": 1,
+                "binance_v2": 1,
+                "coinbase": 1,
+                "coinbase_pro": 1,
+                "kraken_ledgers_old": 1,
+                "kraken_ledgers": 1,
+                "kraken_trades": 1,
+                "bitpanda_pro_trades": 4,
+                "bitpanda": 7,
+            }
 
             expected_headers = {
                 "binance": [
@@ -825,13 +1003,49 @@ class Book:
                     "ledgers",
                 ],
                 "bitpanda_pro_trades": [
-                    "Disclaimer: All data is without guarantee,"
-                    " errors and changes are reserved."
+                    "Order ID",
+                    "Trade ID",
+                    "Type",
+                    "Market",
+                    "Amount",
+                    "Amount Currency",
+                    "Price",
+                    "Price Currency",
+                    "Fee",
+                    "Fee Currency",
+                    "Time (UTC)",
+                ],
+                "bitpanda": [
+                    "Transaction ID",
+                    "Timestamp",
+                    "Transaction Type",
+                    "In/Out",
+                    "Amount Fiat",
+                    "Fiat",
+                    "Amount Asset",
+                    "Asset",
+                    "Asset market price",
+                    "Asset market price currency",
+                    "Asset class",
+                    "Product ID",
+                    "Fee",
+                    "Fee asset",
+                    "Spread",
+                    "Spread Currency",
                 ],
             }
-            for exchange, expected in expected_headers.items():
-                if header == expected:
-                    return exchange
+            with open(file_path, encoding="utf8") as f:
+                reader = csv.reader(f)
+                # check all potential headers at their expected header row
+                for exchange, expected in expected_headers.items():
+                    header_row_num = expected_header_row[exchange]
+                    # iterate since header row may appear earlier
+                    for _ in range(header_row_num):
+                        header = next(reader, None)
+                        if header == expected:
+                            return exchange
+                    # rewind the file after each header check
+                    f.seek(0)
 
         return None
 
@@ -901,7 +1115,7 @@ class Book:
         warning, if the detecting or reading functionality is not implemented.
 
         Args:
-            file_path (Path): Path to account statment.
+            file_path (Path): Path to account statement.
         """
         assert file_path.is_file()
 
@@ -939,7 +1153,7 @@ class Book:
 
         if statements_dir.is_dir():
             for file_path in statements_dir.iterdir():
-                # Ignore .gitkeep and temporary exel files.
+                # Ignore .gitkeep and temporary excel files.
                 filename = file_path.stem
                 if filename == ".gitkeep" or filename.startswith("~$"):
                     continue
