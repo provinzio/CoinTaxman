@@ -1096,7 +1096,7 @@ class Book:
                 price = decimal.Decimal(selltr.change / buytr.change)
 
                 logging.debug(
-                    f"Added {buytr.coin}/{selltr.coin} price from CSV: "
+                    f"Adding {buytr.coin}/{selltr.coin} price from CSV: "
                     f"{price} for {platform} at {timestamp}"
                 )
 
