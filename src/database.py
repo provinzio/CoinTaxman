@@ -7,7 +7,6 @@ from typing import Optional, Tuple
 
 import config
 import misc
-from patch_database import create_new_database
 
 log = logging.getLogger(__name__)
 
@@ -272,6 +271,8 @@ def get_db_path(platform: str) -> Path:
 
 
 def check_database_or_create(platform: str) -> None:
+    from patch_database import create_new_database
+
     db_path = get_db_path(platform)
     if not db_path.exists():
         create_new_database(db_path)
