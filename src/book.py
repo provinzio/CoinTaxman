@@ -26,7 +26,7 @@ import config
 import misc
 import transaction as tr
 from core import kraken_asset_map
-from database import check_database_or_create, set_price_db
+from database import set_price_db
 from price_data import PriceData
 
 log = logging.getLogger(__name__)
@@ -863,9 +863,7 @@ class Book:
                     change_fiat = misc.force_decimal(amount_fiat)
                     # Save price in our local database for later.
                     price = misc.force_decimal(asset_price)
-                    self.price_data.set_price_db(
-                        platform, asset, config.FIAT.upper(), utc_time, price
-                    )
+                    set_price_db(platform, asset, config.FIAT.upper(), utc_time, price)
 
                 if change < 0:
                     log.error(
