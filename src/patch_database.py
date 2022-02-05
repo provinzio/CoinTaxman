@@ -193,7 +193,10 @@ def patch_databases() -> None:
     for db_path in database_paths:
         # Read version from database.
         current_version = get_version(db_path)
+
         patch_func_names = get_sorted_patch_func_names(current_version=current_version)
+        if not patch_func_names:
+            continue
 
         # Run the patch functions.
         for patch_func_name in patch_func_names:
@@ -202,6 +205,5 @@ def patch_databases() -> None:
             patch_func(db_path)
 
         # Update version.
-        if patch_func_names:
             new_version = get_patch_func_version(patch_func_name)
             update_version(db_path, new_version)
