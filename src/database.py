@@ -230,8 +230,8 @@ def set_price_db(
             if price != price_db:
                 log.warning(
                     "Tried to write price to database, "
-                    "but a different price exists already."
-                    f"({platform=}, {tablename=}, {utc_time=}, {price=})"
+                    "but a different price exists already: "
+                    f"{platform=}, {tablename=}, {utc_time=}, {price=}"
                 )
         else:
             raise e
