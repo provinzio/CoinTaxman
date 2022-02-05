@@ -167,9 +167,8 @@ def __set_price_db(
         utc_time (datetime.datetime)
         price (decimal.Decimal)
     """
-    # TODO if db_path doesn't exists. Create db with §version table and
-    #      newest version number. It would be nicer, if this could be done
-    #      as a preprocessing step. see book.py
+    assert db_path.exists(), f"db doesn't exist: {db_path}"
+    
     with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
         query = f"INSERT INTO `{tablename}`" "('utc_time', 'price') VALUES (?, ?);"
