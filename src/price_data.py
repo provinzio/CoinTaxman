@@ -496,6 +496,7 @@ class PriceData:
 
         # Check if price exists already in our database.
         if (price := get_price_db(db_path, tablename, utc_time)) is None:
+            # Price doesn't exists. Fetch price from platform.
             try:
                 get_price = getattr(self, f"_get_price_{platform}")
             except AttributeError:
