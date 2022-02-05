@@ -177,36 +177,29 @@ class Taxman:
                     taxation_type = "Kauf"
                     cost = self.price_data.get_cost(op)
                     price = self.price_data.get_price(
-                        op.platform,
-                        op.coin,
-                        op.utc_time,
-                        config.FIAT
+                        op.platform, op.coin, op.utc_time, config.FIAT
                     )
                     remark = (
                         f"Kosten {cost} {config.FIAT}, "
                         f"Preis {price} {config.FIAT}/{op.coin}"
                     )
                     tx = transaction.TaxEvent(
-                        taxation_type,
-                        decimal.Decimal(),
-                        op,
-                        False,
-                        remark=remark
+                        taxation_type, decimal.Decimal(), op, False, remark=remark
                     )
             elif isinstance(op, transaction.Sell):
                 if op.coin.casefold() == config.FIAT.casefold():
                     continue
-                if not (tx := evaluate_sell(op)):
+                tx_ = evaluate_sell(op)
+                if tx_ is None:
                     if self.in_tax_year(op):
                         taxation_type = "Verkauf (nicht steuerbar)"
-                    else:    
+                    else:
                         taxation_type = "Verkauf (außerhalb des Steuerjahres)"
                     tx = transaction.TaxEvent(
-                        taxation_type,
-                        decimal.Decimal(),
-                        op,
-                        False
+                        taxation_type, decimal.Decimal(), op, False
                     )
+                else:
+                    tx = tx_
             elif isinstance(
                 op, (transaction.CoinLendInterest, transaction.StakingInterest)
             ):
