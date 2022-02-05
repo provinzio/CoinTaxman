@@ -7,6 +7,7 @@ from typing import Optional, Tuple
 
 import config
 import misc
+from patch_database import create_new_database
 
 log = logging.getLogger(__name__)
 
@@ -268,3 +269,9 @@ def get_tablenames_from_db(cur: sqlite3.Cursor) -> list[str]:
 
 def get_db_path(platform: str) -> Path:
     return Path(config.DATA_PATH, f"{platform}.db")
+
+
+def check_database_or_create(platform: str) -> None:
+    db_path = get_db_path(platform)
+    if not db_path.exists():
+        create_new_database(db_path)

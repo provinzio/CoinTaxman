@@ -76,6 +76,12 @@ def update_version(db_path: Path, version: int) -> None:
         cur.execute(f"INSERT INTO §version (version) VALUES ({version});")
 
 
+def create_new_database(db_path: Path) -> None:
+    assert not db_path.exists()
+    version = get_latest_version()
+    update_version(db_path, version)
+
+
 def get_patch_func_version(func_name: str) -> int:
     assert func_name.startswith(
         FUNC_PREFIX
@@ -108,8 +114,8 @@ def __patch_001(db_path: Path) -> None:
             if "price str" not in sql.lower():
                 query = f"""
                 CREATE TABLE "sql_temp_table" (
-                "utc_time" DATETIME PRIMARY KEY,
-                "price"	STR NOT NULL
+                    "utc_time" DATETIME PRIMARY KEY,
+                    "price"	STR NOT NULL
                 );
                 INSERT INTO "sql_temp_table" ("price","utc_time")
                 SELECT "price","utc_time" FROM "{tablename}";
@@ -205,5 +211,5 @@ def patch_databases() -> None:
             patch_func(db_path)
 
         # Update version.
-            new_version = get_patch_func_version(patch_func_name)
-            update_version(db_path, new_version)
+        new_version = get_patch_func_version(patch_func_name)
+        update_version(db_path, new_version)

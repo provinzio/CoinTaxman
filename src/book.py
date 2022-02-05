@@ -26,7 +26,7 @@ import config
 import misc
 import transaction as tr
 from core import kraken_asset_map
-from database import set_price_db
+from database import check_database_or_create, set_price_db
 from price_data import PriceData
 
 log = logging.getLogger(__name__)
@@ -906,8 +906,8 @@ class Book:
         assert file_path.is_file()
 
         if exchange := self.detect_exchange(file_path):
-            # TODO check that database file exists. if missing, add file with
-            #      highest version number (highest patch number)
+            check_database_or_create(exchange)
+
             try:
                 read_file = getattr(self, f"_read_{exchange}")
             except AttributeError:
