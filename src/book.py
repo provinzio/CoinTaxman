@@ -26,6 +26,7 @@ import config
 import misc
 import transaction as tr
 from core import kraken_asset_map
+from database import set_price_db
 from price_data import PriceData
 
 log = logging.getLogger(__name__)
@@ -284,7 +285,7 @@ class Book:
                 assert _currency_spot == "EUR"
 
                 # Save price in our local database for later.
-                self.price_data.set_price_db(platform, coin, "EUR", utc_time, eur_spot)
+                set_price_db(platform, coin, "EUR", utc_time, eur_spot)
 
                 if operation == "Convert":
                     # Parse change + coin from remark, which is
@@ -317,7 +318,7 @@ class Book:
                     )
 
                     # Save convert price in local database, too.
-                    self.price_data.set_price_db(
+                    set_price_db(
                         platform, convert_coin, "EUR", utc_time, convert_eur_spot
                     )
                 else:
@@ -721,9 +722,9 @@ class Book:
 
                 # Save price in our local database for later.
                 price = misc.force_decimal(_price)
-                self.price_data.set_price_db(platform, coin, "EUR", utc_time, price)
+                set_price_db(platform, coin, "EUR", utc_time, price)
                 if best_price:
-                    self.price_data.set_price_db(
+                    set_price_db(
                         platform,
                         "BEST",
                         "EUR",
@@ -862,9 +863,7 @@ class Book:
                     change_fiat = misc.force_decimal(amount_fiat)
                     # Save price in our local database for later.
                     price = misc.force_decimal(asset_price)
-                    self.price_data.set_price_db(
-                        platform, asset, config.FIAT.upper(), utc_time, price
-                    )
+                    set_price_db(platform, asset, config.FIAT.upper(), utc_time, price)
 
                 if change < 0:
                     log.error(
@@ -1048,6 +1047,66 @@ class Book:
 
         return None
 
+    def get_price_from_csv(self) -> None:
+        """Calculate coin prices from buy/sell operations in CSV files.
+
+        When exactly one buy and sell happend at the exact same time,
+        these two operations might belong together and we can calculate
+        the paid price for this transaction.
+        """
+        # Group operations by platform.
+        for platform, platform_operations in misc.group_by(
+            self.operations, "platform"
+        ).items():
+            # Group operations by time.
+            # Look at all operations which happend at the same time.
+            for timestamp, time_operations in misc.group_by(
+                platform_operations, "utc_time"
+            ).items():
+                buytr = selltr = None
+                buycount = sellcount = 0
+
+                # Extract the buy and sell operation.
+                for operation in time_operations:
+                    if isinstance(operation, tr.Buy):
+                        buytr = operation
+                        buycount += 1
+                    elif isinstance(operation, tr.Sell):
+                        selltr = operation
+                        sellcount += 1
+
+                # Skip the operations of this timestamp when there aren't
+                # exactly one buy and one sell operation.
+                # We can only match the buy and sell operations, when there
+                # are exactly one buy and one sell operation.
+                if not (buycount == 1 and sellcount == 1):
+                    continue
+
+                assert isinstance(timestamp, datetime.datetime)
+                assert isinstance(buytr, tr.Buy)
+                assert isinstance(selltr, tr.Sell)
+
+                # Price definition example for buying BTC with EUR:
+                # Symbol: BTCEUR
+                # coin: BTC (buytr.coin)
+                # reference coin: EUR (selltr.coin)
+                # price = traded EUR / traded BTC
+                price = decimal.Decimal(selltr.change / buytr.change)
+
+                logging.debug(
+                    f"Adding {buytr.coin}/{selltr.coin} price from CSV: "
+                    f"{price} for {platform} at {timestamp}"
+                )
+
+                set_price_db(
+                    platform,
+                    buytr.coin,
+                    selltr.coin,
+                    timestamp,
+                    price,
+                    overwrite=True,
+                )
+
     def read_file(self, file_path: Path) -> None:
         """Import transactions form an account statement.
 
@@ -1060,6 +1119,7 @@ class Book:
         assert file_path.is_file()
 
         if exchange := self.detect_exchange(file_path):
+
             try:
                 read_file = getattr(self, f"_read_{exchange}")
             except AttributeError:
