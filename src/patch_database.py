@@ -21,6 +21,7 @@ import sqlite3
 import sys
 from inspect import getmembers, isfunction
 from pathlib import Path
+from typing import Iterator, Optional
 
 import config
 from database import set_price_db
@@ -152,6 +153,36 @@ def __patch_002(db_path: Path) -> None:
                 cur = conn.execute(f"DROP TABLE `{tablename}`;")
 
 
+def _get_patch_func_names() -> Iterator[str]:
+    func_names = (
+        f[0]
+        for f in getmembers(sys.modules[__name__], isfunction)
+        if f[0].startswith(FUNC_PREFIX)
+    )
+    return func_names
+
+
+def _get_patch_func_versions() -> Iterator[int]:
+    func_names = _get_patch_func_names()
+    func_version = map(get_patch_func_version, func_names)
+    return func_version
+
+
+def get_sorted_patch_func_names(current_version: Optional[int] = None) -> list[str]:
+    func_names = (
+        f
+        for f in _get_patch_func_names()
+        if current_version is None or get_patch_func_version(f) > current_version
+    )
+    # Sort patch functions chronological.
+    return sorted(func_names, key=get_patch_func_version)
+
+
+def get_latest_version() -> int:
+    func_versions = _get_patch_func_versions()
+    return max(func_versions)
+
+
 def patch_databases() -> None:
     # Check if any database paths exist.
     database_paths = [p for p in Path(config.DATA_PATH).glob("*.db") if p.is_file()]
@@ -162,17 +193,7 @@ def patch_databases() -> None:
     for db_path in database_paths:
         # Read version from database.
         current_version = get_version(db_path)
-
-        # Determine all necessary patch functions.
-        patch_func_names = [
-            func[0]
-            for func in getmembers(sys.modules[__name__], isfunction)
-            if func[0].startswith(FUNC_PREFIX)
-            if get_patch_func_version(func[0]) > current_version
-        ]
-
-        # Sort patch functions chronological.
-        patch_func_names.sort(key=get_patch_func_version)
+        patch_func_names = get_sorted_patch_func_names(current_version=current_version)
 
         # Run the patch functions.
         for patch_func_name in patch_func_names:
