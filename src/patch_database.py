@@ -97,7 +97,6 @@ def __patch_001(db_path: Path) -> None:
     Args:
         db_path (Path): [description]
     """
-    logging.info("applying patch 001")
     with sqlite3.connect(db_path) as conn:
         query = "SELECT name,sql FROM sqlite_master WHERE type='table'"
         cur = conn.execute(query)
@@ -121,7 +120,6 @@ def __patch_002(db_path: Path) -> None:
     Args:
         db_path (Path)
     """
-    logging.info("applying patch 002")
     with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
         tablenames = get_tablenames(cur)
@@ -177,6 +175,7 @@ def patch_databases() -> None:
 
         # Run the patch functions.
         for patch_func_name in patch_func_names:
+            logging.info("applying patch %s", patch_func_name.removeprefix(FUNC_PREFIX))
             patch_func = eval(patch_func_name)
             patch_func(db_path)
 
