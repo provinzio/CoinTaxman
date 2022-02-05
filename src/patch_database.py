@@ -52,8 +52,7 @@ def get_version(db_path: Path) -> int:
         except sqlite3.OperationalError as e:
             if str(e) == "no such table: §version":
                 # The §version table doesn't exist. Create one.
-                cur.execute("CREATE TABLE §version(version INT);")
-                cur.execute("INSERT INTO §version (version) VALUES (0);")
+                update_version(db_path, 0)
                 return 0
             else:
                 raise e
@@ -71,7 +70,15 @@ def get_version(db_path: Path) -> int:
 def update_version(db_path: Path, version: int) -> None:
     with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
-        cur.execute("DELETE FROM §version;")
+
+        try:
+            cur.execute("DELETE FROM §version;")
+        except sqlite3.OperationalError as e:
+            if str(e) == "no such table: §version":
+                cur.execute("CREATE TABLE §version(version INT);")
+            else:
+                raise e
+
         assert isinstance(version, int)
         cur.execute(f"INSERT INTO §version (version) VALUES ({version});")
 
