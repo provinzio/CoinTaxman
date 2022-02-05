@@ -231,6 +231,12 @@ class PriceData:
         return decimal.Decimal()
 
     @misc.delayed
+    def _get_price_bitpanda(
+        self, base_asset: str, utc_time: datetime.datetime, quote_asset: str
+    ) -> decimal.Decimal:
+        return self._get_price_bitpanda_pro(base_asset, utc_time, quote_asset)
+
+    @misc.delayed
     def _get_price_bitpanda_pro(
         self, base_asset: str, utc_time: datetime.datetime, quote_asset: str
     ) -> decimal.Decimal:
@@ -241,8 +247,6 @@ class PriceData:
 
         Timeframe ends at the requested time.
 
-        Currently, only BEST_EUR is tested.
-
         Args:
             base_asset (str): The currency to get the price for.
             utc_time (datetime.datetime): Time of the trade to fetch the price for.
@@ -252,48 +256,84 @@ class PriceData:
             decimal.Decimal: Price of the asset pair.
         """
 
-        # other combination should not occur, since I enter them within the trade
-        # other pairs need to be tested. Also, they might need different behavior,
-        # if there isn't a matching endpoint
-        assert (
-            base_asset == "BEST" and quote_asset == "EUR"
-        ), f"{base_asset}_{quote_asset}"
-        baseurl = "https://api.exchange.bitpanda.com/public/v1/candlesticks/BEST_EUR"
+        baseurl = (
+            f"https://api.exchange.bitpanda.com/public/v1/"
+            f"candlesticks/{base_asset}_{quote_asset}"
+        )
 
         # Bitpanda Pro only supports distinctive arguments for this, *not arbitrary*
         timeframes = [1, 5, 15, 30]
 
-        # get the smallest timeframe possible
-        # if there were no trades in the requested time frame, the
-        # returned data will be empty
+        # Try to find the price in the most detailed timeframe, to get the best matching
+        # price for the transaction. If we can not find the price in a timeframe, use
+        # the next bigger frame and try again. If we reached the highest timeframe, move
+        # the fetched time window into the past, to get the latest transaction from the
+        # API. If there were no trades in the requested time frame, the returned data
+        # will be empty
         for t in timeframes:
-            end = utc_time
-            begin = utc_time - datetime.timedelta(minutes=t)
+            # Maximum number of allowed offsets into the past to find a valid price
+            # before we throw an error. We do not offset the time window as long as we
+            # can choose a bigger timeframe instead. num_max_offsets has been determined
+            # empirically and may be changed.
+            num_max_offsets = 12 if t == timeframes[-1] else 1
+            for num_offset in range(num_max_offsets):
+                # if no trades can be found, move 30 min window to the past
+                window_offset = num_offset * t
+                end = utc_time.astimezone(datetime.timezone.utc) \
+                    - datetime.timedelta(minutes=window_offset)
+                begin = end - datetime.timedelta(minutes=t)
 
-            # https://github.com/python/mypy/issues/3176
-            params: dict[str, Union[int, str]] = {
-                "unit": "MINUTES",
-                "period": t,
-                "from": begin.isoformat(),
-                "to": end.isoformat(),
-            }
-            r = requests.get(baseurl, params=params)
+                # https://github.com/python/mypy/issues/3176
+                params: dict[str, Union[int, str]] = {
+                    "unit": "MINUTES",
+                    "period": t,
+                    # convert ISO 8601 format to RFC3339 timestamp
+                    "from": begin.isoformat().replace('+00:00', 'Z'),
+                    "to": end.isoformat().replace('+00:00', 'Z'),
+                }
+                if num_offset:
+                    log.debug(
+                        f"Calling Bitpanda API for {base_asset} / {quote_asset} price "
+                        f"for {t} minute timeframe ending at {end} "
+                        f"(includes {window_offset} minutes offset)"
+                    )
+                else:
+                    log.debug(
+                        f"Calling Bitpanda API for {base_asset} / {quote_asset} price "
+                        f"for {t} minute timeframe ending at {end}"
+                    )
+                r = requests.get(baseurl, params=params)
 
-            assert r.status_code == 200
+                assert r.status_code == 200, "No valid response from Bitpanda API"
+                data = r.json()
 
-            data = r.json()
+                # exit loop if data is valid
+                if data:
+                    break
+
+                # issue warning if time window is moved to the past
+                if num_offset < num_max_offsets - 1:
+                    log.warning(
+                        f"No price data found for {base_asset} / {quote_asset} "
+                        f"at {end}, moving {t} minutes window to the past."
+                    )
+
+            # exit loop if data is valid
             if data:
                 break
+        else:
+            log.error(
+                f"No price data found for {base_asset} / {quote_asset} at {end}. "
+                f"You can try to increase num_max_offsets to obtain older price data."
+            )
+            raise RuntimeError
 
-        # if we didn't get data for the 30 minute frame, give up?
-        assert data
-        # There actually shouldn't be more than one entry if period and granularity are
-        # the same?
-        assert len(data) == 1
+        # this should never be triggered, but just in case assert received data
+        assert data, f"No valid price data for {base_asset} / {quote_asset} at {end}"
 
-        # simply take the average
-        high = misc.force_decimal(data[0]["high"])
-        low = misc.force_decimal(data[0]["low"])
+        # simply take the average of the latest data element
+        high = misc.force_decimal(data[-1]["high"])
+        low = misc.force_decimal(data[-1]["low"])
 
         # if spread is greater than 3%
         if (high - low) / high > 0.03:
