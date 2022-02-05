@@ -98,7 +98,7 @@ def __patch_001(db_path: Path) -> None:
     """Convert prices from float to string
 
     Args:
-        db_path (Path): [description]
+        db_path (Path)
     """
     with sqlite3.connect(db_path) as conn:
         query = "SELECT name,sql FROM sqlite_master WHERE type='table'"

@@ -204,11 +204,11 @@ def set_price_db(
     A warning will be raised, if there is already a different price.
 
     Args:
-        platform (str): [description]
-        coin (str): [description]
-        reference_coin (str): [description]
-        utc_time (datetime.datetime): [description]
-        price (decimal.Decimal): [description]
+        platform (str)
+        coin (str)
+        reference_coin (str)
+        utc_time (datetime.datetime)
+        price (decimal.Decimal)
     """
     assert coin != reference_coin
     coin_a, coin_b, inverted = _sort_pair(coin, reference_coin)
