@@ -1106,6 +1106,7 @@ class Book:
                     selltr.coin,
                     timestamp,
                     price,
+                    overwrite=True,
                 )
 
     def read_file(self, file_path: Path) -> None:

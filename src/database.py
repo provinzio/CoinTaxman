@@ -151,6 +151,26 @@ def mean_price_db(
     return decimal.Decimal()
 
 
+def __delete_price_db(
+    db_path: Path,
+    tablename: str,
+    utc_time: datetime.datetime,
+) -> None:
+    """Delete price from database
+
+    Args:
+        db_path (Path)
+        tablename (str)
+        utc_time (datetime.datetime)
+    """
+
+    with sqlite3.connect(db_path) as conn:
+        cur = conn.cursor()
+        query = f"DELETE FROM `{tablename}` WHERE utc_time=?;"
+        cur.execute(query, (utc_time,))
+        conn.commit()
+
+
 def __set_price_db(
     db_path: Path,
     tablename: str,
@@ -198,6 +218,7 @@ def set_price_db(
     utc_time: datetime.datetime,
     price: decimal.Decimal,
     db_path: Optional[Path] = None,
+    overwrite: bool = False,
 ) -> None:
     """Write price to database.
 
@@ -229,13 +250,24 @@ def set_price_db(
         __set_price_db(db_path, tablename, utc_time, price)
     except sqlite3.IntegrityError as e:
         if str(e) == f"UNIQUE constraint failed: {tablename}.utc_time":
-            price_db = get_price_db(db_path, tablename, utc_time)
-            if price != price_db:
-                log.warning(
-                    "Tried to write price to database, "
-                    "but a different price exists already: "
-                    f"{platform=}, {tablename=}, {utc_time=}, {price=} != {price_db=}"
+            # Trying to add an already existing price in db.
+            if overwrite:
+                # Overwrite price.
+                log.debug(
+                    "Overwriting price information for "
+                    f"{platform=}, {tablename=} at {utc_time=}"
                 )
+                __delete_price_db(db_path, tablename, utc_time)
+                __set_price_db(db_path, tablename, utc_time, price)
+            else:
+                # Check price from db and issue warning, if prices do not match.
+                price_db = get_price_db(db_path, tablename, utc_time)
+                if price != price_db:
+                    log.warning(
+                        "Tried to write price to database, "
+                        "but a different price exists already: "
+                        f"{platform=}, {tablename=}, {utc_time=}, {price=} != {price_db=}"
+                    )
         else:
             raise e
 
