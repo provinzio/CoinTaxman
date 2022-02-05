@@ -577,7 +577,8 @@ class Book:
                 if operation in ["Deposit", "Withdrawal"]:
                     # search for refid in refids list
                     refid_idxs = [
-                        idx for idx, op in enumerate(held_operations)
+                        idx
+                        for idx, op in enumerate(held_operations)
                         if op["refid"] == refid
                     ]
                     # refid should not exist more than once in list
@@ -605,17 +606,19 @@ class Book:
                             )
                             raise RuntimeError
                     # add all entries to refid list and held operations list
-                    held_operations.append({
-                        "refid": refid,
-                        "operation": operation,
-                        "utc_time": utc_time,
-                        "platform": platform,
-                        "change": change,
-                        "coin": coin,
-                        "row": row,
-                        "file_path": file_path,
-                        "fee": fee,
-                    })
+                    held_operations.append(
+                        {
+                            "refid": refid,
+                            "operation": operation,
+                            "utc_time": utc_time,
+                            "platform": platform,
+                            "change": change,
+                            "coin": coin,
+                            "row": row,
+                            "file_path": file_path,
+                            "fee": fee,
+                        }
+                    )
 
                     if operation == "Deposit":
                         # append only the second deposit to the operations list
