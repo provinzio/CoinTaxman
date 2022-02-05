@@ -80,6 +80,7 @@ def update_version(db_path: Path, version: int) -> None:
                 raise e
 
         assert isinstance(version, int)
+        log.debug(f"Updating version of {db_path} to {version}")
         cur.execute(f"INSERT INTO §version (version) VALUES ({version});")
 
 
