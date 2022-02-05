@@ -592,13 +592,15 @@ class Book:
                     if refid_idxs:
                         idx = refid_idxs[0]
                         try:
-                            assert operation == held_operations[idx]["operation"]
-                            assert change == held_operations[idx]["change"]
-                            assert coin == held_operations[idx]["coin"]
-                        except AssertionError:
+                            assert (
+                                operation == held_operations[idx]["operation"]
+                            ), "operation"
+                            assert change == held_operations[idx]["change"], "change"
+                            assert coin == held_operations[idx]["coin"], "coin"
+                        except AssertionError as e:
                             log.error(
                                 f"{file_path} row {row}: Parameters for refid {refid} "
-                                f"({operation}) do not agree. "
+                                f"({operation}) do not agree: {e} "
                                 "Please create an Issue or PR."
                             )
                             raise RuntimeError
