@@ -1132,6 +1132,9 @@ class Book:
             log.info("Reading file from exchange %s at %s", exchange, file_path)
             read_file(file_path)
 
+            # Check whether the given exchange is "supported" by our ccxt
+            # implementation, by comparing the platform with the listed
+            # ccxt exchanges in our config.
             ccxt_mapping = {
                 "binance": "binance",
                 "binance_v2": "binance",
@@ -1143,8 +1146,12 @@ class Book:
                 "bitpanda_pro_trades": "bitpanda",
             }
             api = ccxt_mapping.get(exchange)
-
-            if api not in config.EXCHANGES:
+            if api is None:
+                log.warning(
+                    f"The exchange {exchange} is not mapped to a ccxt exchange. "
+                    "Please add the exchange to the ccxt_mapping dictionary."
+                )
+            elif api not in config.EXCHANGES:
                 log.warning(
                     f"Exchange `{api}` not found in EXCHANGES API list in config.ini. "
                     "Consider adding it to obtain more accurate price data."
