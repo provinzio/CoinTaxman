@@ -622,10 +622,7 @@ class Book:
 
                     if operation == "Deposit":
                         # append only the second deposit to the operations list
-                        if refid_idxs:
-                            append_operation = True
-                        else:
-                            append_operation = False
+                        append_operation = len(refid_idxs) == 1
                     elif operation == "Withdrawal":
                         # Append the first withdrawal to the operations list as soon
                         # as the second withdrawal occurs. Therefore, for the second
@@ -654,8 +651,10 @@ class Book:
                             "Fee", utc_time, platform, fee, coin, row, file_path
                         )
                     if operation == "StakingInterest":
-                        # the rewarded coins are added to the staked portfolio
-                        # TODO: directly stake the rewarded coins, not just any coin
+                        # For Kraken, the rewarded coins are added to the staked
+                        # portfolio. TODO (for MULTI_DEPOT only): Directly add the
+                        # rewarded coins to the staking depot (not like here with the
+                        # detour of adding it to spot and then staking the same amount)
                         self.append_operation(
                             "Staking", utc_time, platform, change, coin, row, file_path
                         )
