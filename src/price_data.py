@@ -18,7 +18,6 @@ import bisect
 import datetime
 import decimal
 import json
-import logging
 import math
 import sqlite3
 import time
@@ -30,6 +29,7 @@ import requests
 
 import config
 import graph
+import log_config
 import misc
 import transaction
 from core import kraken_pair_map
@@ -41,7 +41,7 @@ from database import (
     set_price_db,
 )
 
-log = logging.getLogger(__name__)
+log = log_config.getLogger(__name__)
 
 
 # TODO Keep database connection open?
@@ -644,7 +644,7 @@ class PriceData:
             candles = exchange.fetch_ohlcv(symbol, "1m", since, limit)
         except ccxt.RateLimitExceeded:
             # sometimes the ratelimit gets exceeded for kraken dunno why
-            logging.warning("Ratelimit exceeded sleeping 10 seconds and retrying")
+            log.warning("Ratelimit exceeded sleeping 10 seconds and retrying")
             time.sleep(10)
             self.path.RateLimit.limit(exchange)
             candles = exchange.fetch_ohlcv(symbol, "1m", since, limit)

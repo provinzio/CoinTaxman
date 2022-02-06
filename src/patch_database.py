@@ -16,7 +16,6 @@
 
 import datetime
 import decimal
-import logging
 import sqlite3
 import sys
 from inspect import getmembers, isfunction
@@ -24,10 +23,11 @@ from pathlib import Path
 from typing import Iterator, Optional
 
 import config
+import log_config
 from database import set_price_db
 
 FUNC_PREFIX = "__patch_"
-log = logging.getLogger(__name__)
+log = log_config.getLogger(__name__)
 
 
 def get_version(db_path: Path) -> int:
@@ -214,7 +214,7 @@ def patch_databases() -> None:
 
         # Run the patch functions.
         for patch_func_name in patch_func_names:
-            logging.info("applying patch %s", patch_func_name.removeprefix(FUNC_PREFIX))
+            log.info("applying patch %s", patch_func_name.removeprefix(FUNC_PREFIX))
             patch_func = eval(patch_func_name)
             patch_func(db_path)
 

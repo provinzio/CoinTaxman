@@ -19,11 +19,12 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import decimal
-import logging
 import typing
 from pathlib import Path
 
-log = logging.getLogger(__name__)
+import log_config
+
+log = log_config.getLogger(__name__)
 
 
 @dataclasses.dataclass

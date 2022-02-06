@@ -17,19 +17,19 @@
 import csv
 import datetime
 import decimal
-import logging
 import re
 from pathlib import Path
 from typing import Optional
 
 import config
+import log_config
 import misc
 import transaction as tr
 from core import kraken_asset_map
 from database import set_price_db
 from price_data import PriceData
 
-log = logging.getLogger(__name__)
+log = log_config.getLogger(__name__)
 
 
 class Book:
@@ -1093,7 +1093,7 @@ class Book:
                 # price = traded EUR / traded BTC
                 price = decimal.Decimal(selltr.change / buytr.change)
 
-                logging.debug(
+                log.debug(
                     f"Adding {buytr.coin}/{selltr.coin} price from CSV: "
                     f"{price} for {platform} at {timestamp}"
                 )

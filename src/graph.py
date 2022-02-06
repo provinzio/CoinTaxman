@@ -1,13 +1,13 @@
 import collections
-import logging
 import time
 from typing import Optional
 
 import ccxt
 
 import config
+import log_config
 
-log = logging.getLogger(__name__)
+log = log_config.getLogger(__name__)
 
 
 class RateLimit:
@@ -67,7 +67,7 @@ class PricePath:
                 for pair in toadd:
                     allpairs.add(pair)
             else:
-                logging.warning(
+                log.warning(
                     f"{exchange.name} does not support fetch ohlcv. "
                     f"Ignoring exchange and {len(markets)} pairs."
                 )
