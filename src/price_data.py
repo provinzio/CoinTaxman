@@ -18,7 +18,6 @@ import bisect
 import datetime
 import decimal
 import json
-import logging
 import sqlite3
 import time
 from pathlib import Path
@@ -27,6 +26,7 @@ from typing import Any, Union
 import requests
 
 import config
+import log_config
 import misc
 import transaction
 from core import kraken_pair_map
@@ -38,7 +38,7 @@ from database import (
     set_price_db,
 )
 
-log = logging.getLogger(__name__)
+log = log_config.getLogger(__name__)
 
 
 # TODO Keep database connection open?

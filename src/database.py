@@ -1,14 +1,14 @@
 import datetime
 import decimal
-import logging
 import sqlite3
 from pathlib import Path
 from typing import Optional, Tuple
 
 import config
+import log_config
 import misc
 
-log = logging.getLogger(__name__)
+log = log_config.getLogger(__name__)
 
 
 def get_version(db_path: Path) -> int:

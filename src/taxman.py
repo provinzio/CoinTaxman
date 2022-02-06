@@ -17,19 +17,19 @@
 import csv
 import datetime
 import decimal
-import logging
 from pathlib import Path
 from typing import Optional, Type
 
 import balance_queue
 import config
 import core
+import log_config
 import misc
 import transaction
 from book import Book
 from price_data import PriceData
 
-log = logging.getLogger(__name__)
+log = log_config.getLogger(__name__)
 
 
 class Taxman:

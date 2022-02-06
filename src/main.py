@@ -14,15 +14,13 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import logging
-
-import log_config  # noqa: F401
+import log_config
 from book import Book
 from patch_database import patch_databases
 from price_data import PriceData
 from taxman import Taxman
 
-log = logging.getLogger(__name__)
+log = log_config.getLogger(__name__)
 
 
 def main() -> None:

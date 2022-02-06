@@ -15,9 +15,10 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import logging
+from logging import getLogger
 
 logging.basicConfig(level=logging.DEBUG)
-log = logging.getLogger(None)
+log = getLogger(None)
 
 # Entferne die handler des basic loggers.
 for handler in log.handlers:
@@ -34,4 +35,4 @@ ch.setFormatter(formatter)
 log.addHandler(ch)
 
 # Disable urllib debug messages
-logging.getLogger("urllib3").propagate = False
+getLogger("urllib3").propagate = False
