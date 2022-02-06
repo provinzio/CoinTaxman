@@ -54,7 +54,6 @@ install-dev: install
 	pip -r requirements-dev.txt
 
 # Setup virtual environment
-
 venv:
 	python3 -m venv .pyenv
 ifdef OS # Windows

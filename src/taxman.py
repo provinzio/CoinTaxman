@@ -261,16 +261,16 @@ class Taxman:
                 self.price_data.preload_prices(s_operations, coin, plat)
                 counter += len(coin_operations)
                 log.info(
-                    "{:6.2f} % done, {:6d} out of {:d} operations processed".
-                    format(counter / total_operations * 100, counter, total_operations)
+                    "{:6.2f} % done, {:6d} out of {:d} operations processed".format(
+                        counter / total_operations * 100, counter, total_operations
+                    )
                 )
 
         if config.MULTI_DEPOT:
             # Evaluate taxation separated by platforms and coins.
-            for _platform, operations in misc.group_by(
+            for _, operations in misc.group_by(
                 self.book.operations, "platform"
             ).items():
-
                 self._evaluate_taxation_per_coin(operations)
         else:
             # Evaluate taxation separated by coins in a single virtual depot.

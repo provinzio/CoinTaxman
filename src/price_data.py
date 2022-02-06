@@ -33,6 +33,13 @@ import graph
 import misc
 import transaction
 from core import kraken_pair_map
+from database import (
+    get_db_path,
+    get_price_db,
+    get_tablename,
+    mean_price_db,
+    set_price_db,
+)
 
 log = logging.getLogger(__name__)
 
@@ -237,6 +244,12 @@ class PriceData:
         return decimal.Decimal()
 
     @misc.delayed
+    def _get_price_bitpanda(
+        self, base_asset: str, utc_time: datetime.datetime, quote_asset: str
+    ) -> decimal.Decimal:
+        return self._get_price_bitpanda_pro(base_asset, utc_time, quote_asset)
+
+    @misc.delayed
     def _get_price_bitpanda_pro(
         self, base_asset: str, utc_time: datetime.datetime, quote_asset: str
     ) -> decimal.Decimal:
@@ -247,8 +260,6 @@ class PriceData:
 
         Timeframe ends at the requested time.
 
-        Currently, only BEST_EUR is tested.
-
         Args:
             base_asset (str): The currency to get the price for.
             utc_time (datetime.datetime): Time of the trade to fetch the price for.
@@ -258,48 +269,85 @@ class PriceData:
             decimal.Decimal: Price of the asset pair.
         """
 
-        # other combination should not occur, since I enter them within the trade
-        # other pairs need to be tested. Also, they might need different behavior,
-        # if there isn't a matching endpoint
-        assert (
-            base_asset == "BEST" and quote_asset == "EUR"
-        ), f"{base_asset}_{quote_asset}"
-        baseurl = "https://api.exchange.bitpanda.com/public/v1/candlesticks/BEST_EUR"
+        baseurl = (
+            f"https://api.exchange.bitpanda.com/public/v1/"
+            f"candlesticks/{base_asset}_{quote_asset}"
+        )
 
         # Bitpanda Pro only supports distinctive arguments for this, *not arbitrary*
         timeframes = [1, 5, 15, 30]
 
-        # get the smallest timeframe possible
-        # if there were no trades in the requested time frame, the
-        # returned data will be empty
+        # Try to find the price in the most detailed timeframe, to get the best matching
+        # price for the transaction. If we can not find the price in a timeframe, use
+        # the next bigger frame and try again. If we reached the highest timeframe, move
+        # the fetched time window into the past, to get the latest transaction from the
+        # API. If there were no trades in the requested time frame, the returned data
+        # will be empty
         for t in timeframes:
-            end = utc_time
-            begin = utc_time - datetime.timedelta(minutes=t)
+            # Maximum number of allowed offsets into the past to find a valid price
+            # before we throw an error. We do not offset the time window as long as we
+            # can choose a bigger timeframe instead. num_max_offsets has been determined
+            # empirically and may be changed.
+            num_max_offsets = 12 if t == timeframes[-1] else 1
+            for num_offset in range(num_max_offsets):
+                # if no trades can be found, move 30 min window to the past
+                window_offset = num_offset * t
+                end = utc_time.astimezone(datetime.timezone.utc) - datetime.timedelta(
+                    minutes=window_offset
+                )
+                begin = end - datetime.timedelta(minutes=t)
 
-            # https://github.com/python/mypy/issues/3176
-            params: dict[str, Union[int, str]] = {
-                "unit": "MINUTES",
-                "period": t,
-                "from": begin.isoformat(),
-                "to": end.isoformat(),
-            }
-            r = requests.get(baseurl, params=params)
+                # https://github.com/python/mypy/issues/3176
+                params: dict[str, Union[int, str]] = {
+                    "unit": "MINUTES",
+                    "period": t,
+                    # convert ISO 8601 format to RFC3339 timestamp
+                    "from": begin.isoformat().replace("+00:00", "Z"),
+                    "to": end.isoformat().replace("+00:00", "Z"),
+                }
+                if num_offset:
+                    log.debug(
+                        f"Calling Bitpanda API for {base_asset} / {quote_asset} price "
+                        f"for {t} minute timeframe ending at {end} "
+                        f"(includes {window_offset} minutes offset)"
+                    )
+                else:
+                    log.debug(
+                        f"Calling Bitpanda API for {base_asset} / {quote_asset} price "
+                        f"for {t} minute timeframe ending at {end}"
+                    )
+                r = requests.get(baseurl, params=params)
 
-            assert r.status_code == 200
+                assert r.status_code == 200, "No valid response from Bitpanda API"
+                data = r.json()
 
-            data = r.json()
+                # exit loop if data is valid
+                if data:
+                    break
+
+                # issue warning if time window is moved to the past
+                if num_offset < num_max_offsets - 1:
+                    log.warning(
+                        f"No price data found for {base_asset} / {quote_asset} "
+                        f"at {end}, moving {t} minutes window to the past."
+                    )
+
+            # exit loop if data is valid
             if data:
                 break
+        else:
+            log.error(
+                f"No price data found for {base_asset} / {quote_asset} at {end}. "
+                f"You can try to increase num_max_offsets to obtain older price data."
+            )
+            raise RuntimeError
 
-        # if we didn't get data for the 30 minute frame, give up?
-        assert data
-        # There actually shouldn't be more than one entry if period and granularity are
-        # the same?
-        assert len(data) == 1
+        # this should never be triggered, but just in case assert received data
+        assert data, f"No valid price data for {base_asset} / {quote_asset} at {end}"
 
-        # simply take the average
-        high = misc.force_decimal(data[0]["high"])
-        low = misc.force_decimal(data[0]["low"])
+        # simply take the average of the latest data element
+        high = misc.force_decimal(data[-1]["high"])
+        low = misc.force_decimal(data[-1]["low"])
 
         # if spread is greater than 3%
         if (high - low) / high > 0.03:
@@ -423,189 +471,6 @@ class PriceData:
         )
         return decimal.Decimal()
 
-    def __get_price_db(
-        self,
-        db_path: Path,
-        tablename: str,
-        utc_time: datetime.datetime,
-    ) -> Optional[decimal.Decimal]:
-        """Try to retrieve the price from our local database.
-
-        Args:
-            db_path (Path)
-            tablename (str)
-            utc_time (datetime.datetime)
-
-        Returns:
-            Optional[decimal.Decimal]: Price.
-        """
-        if db_path.is_file():
-            with sqlite3.connect(db_path) as conn:
-                cur = conn.cursor()
-                query = f"SELECT price FROM `{tablename}` WHERE utc_time=?;"
-
-                try:
-                    cur.execute(query, (utc_time,))
-                except sqlite3.OperationalError as e:
-                    if str(e) == f"no such table: {tablename}":
-                        return None
-                    raise e
-
-                if prices := cur.fetchone():
-                    return misc.force_decimal(prices[0])
-
-        return None
-
-    def __mean_price_db(
-        self,
-        db_path: Path,
-        tablename: str,
-        utc_time: datetime.datetime,
-    ) -> decimal.Decimal:
-        """Try to retrieve the price right before and after `utc_time`
-        from our local database.
-
-        Return 0 if the price could not be estimated.
-        The function does not check, if a price for `utc_time` exists.
-
-        Args:
-            db_path (Path)
-            tablename (str)
-            utc_time (datetime.datetime)
-
-        Returns:
-            decimal.Decimal: Price.
-        """
-        if db_path.is_file():
-            with sqlite3.connect(db_path) as conn:
-                cur = conn.cursor()
-
-                before_query = (
-                    f"SELECT utc_time, price FROM `{tablename}` "
-                    f"WHERE utc_time<? AND price > 0 "
-                    "ORDER BY utc_time DESC "
-                    "LIMIT 1"
-                )
-                try:
-                    cur.execute(before_query, (utc_time,))
-                except sqlite3.OperationalError as e:
-                    if str(e) == f"no such table: {tablename}":
-                        return decimal.Decimal()
-                    raise e
-                if result := cur.fetchone():
-                    before_time = misc.parse_iso_timestamp_to_decimal_timestamp(
-                        result[0]
-                    )
-                    before_price = misc.force_decimal(result[1])
-                else:
-                    return decimal.Decimal()
-
-                after_query = (
-                    f"SELECT utc_time, price FROM `{tablename}` "
-                    f"WHERE utc_time>? AND price > 0 "
-                    "ORDER BY utc_time ASC "
-                    "LIMIT 1"
-                )
-                try:
-                    cur.execute(after_query, (utc_time,))
-                except sqlite3.OperationalError as e:
-                    if str(e) == f"no such table: {tablename}":
-                        return decimal.Decimal()
-                    raise e
-                if result := cur.fetchone():
-                    after_time = misc.parse_iso_timestamp_to_decimal_timestamp(
-                        result[0]
-                    )
-                    after_price = misc.force_decimal(result[1])
-                else:
-                    return decimal.Decimal()
-
-                if before_price and after_price:
-                    d_utc_time = misc.to_decimal_timestamp(utc_time)
-                    # Linear gradiant between the neighbored transactions.
-                    m = (after_price - before_price) / (after_time - before_time)
-                    price = before_price + (d_utc_time - before_time) * m
-                    return price
-
-        return decimal.Decimal()
-
-    def __set_price_db(
-        self,
-        db_path: Path,
-        tablename: str,
-        utc_time: datetime.datetime,
-        price: decimal.Decimal,
-    ) -> None:
-        """Write price to database.
-
-        Create database/table if necessary.
-
-        Args:
-            db_path (Path)
-            tablename (str)
-            utc_time (datetime.datetime)
-            price (decimal.Decimal)
-        """
-        with sqlite3.connect(db_path) as conn:
-            cur = conn.cursor()
-            query = f"INSERT INTO `{tablename}`" "('utc_time', 'price') VALUES (?, ?);"
-            try:
-                cur.execute(query, (utc_time, str(price)))
-            except sqlite3.OperationalError as e:
-                if str(e) == f"no such table: {tablename}":
-                    create_query = (
-                        f"CREATE TABLE `{tablename}`"
-                        "(utc_time DATETIME PRIMARY KEY, "
-                        "price FLOAT NOT NULL);"
-                    )
-                    cur.execute(create_query)
-                    cur.execute(query, (utc_time, str(price)))
-                else:
-                    raise e
-            conn.commit()
-
-    def set_price_db(
-        self,
-        platform: str,
-        coin: str,
-        reference_coin: str,
-        utc_time: datetime.datetime,
-        price: decimal.Decimal,
-    ) -> None:
-        """Write price to database.
-
-        Tries to insert a historical price into the local database.
-
-        A warning will be raised, if there is already a different price.
-
-        Args:
-            platform (str): [description]
-            coin (str): [description]
-            reference_coin (str): [description]
-            utc_time (datetime.datetime): [description]
-            price (decimal.Decimal): [description]
-        """
-        assert coin != reference_coin
-        db_path = self.get_db_path(platform)
-        tablename = self.get_tablename(coin, reference_coin)
-        try:
-            self.__set_price_db(db_path, tablename, utc_time, price)
-        except sqlite3.IntegrityError as e:
-            if str(e) == f"UNIQUE constraint failed: {tablename}.utc_time":
-                price_db = self.get_price(platform, coin, utc_time, reference_coin)
-                if price != price_db:
-                    rel_error = abs(price - price_db) / price * 100
-                    log.warning(
-                        f"Tried to write {tablename} price to database, but a "
-                        f"different price exists already ({platform} @ {utc_time})"
-                    )
-                    log.warning(
-                        f"price: {price}, database price: {price_db}, "
-                        f"relative error: %.6f %%", rel_error
-                    )
-            else:
-                raise e
-
     def get_price(
         self,
         platform: str,
@@ -615,32 +480,29 @@ class PriceData:
         **kwargs: Any,
     ) -> decimal.Decimal:
         """Get the price of a coin pair from a specific `platform` at `utc_time`.
-
         The function tries to retrieve the price from the local database first.
         If the price does not exist, its gathered from a platform specific
         function and saved to our local database for future access.
-
         Args:
             platform (str)
             coin (str)
             utc_time (datetime.datetime)
             reference_coin (str, optional): Defaults to config.FIAT.
-
         Raises:
             NotImplementedError: Platform specific GET function is not
-                                 implemented.
-
+                                    implemented.
         Returns:
             decimal.Decimal: Price of the coin pair.
         """
         if coin == reference_coin:
             return decimal.Decimal("1")
 
-        db_path = self.get_db_path(platform)
-        tablename = self.get_tablename(coin, reference_coin)
+        db_path = get_db_path(platform)
+        tablename = get_tablename(coin, reference_coin)
 
         # Check if price exists already in our database.
-        if (price := self.__get_price_db(db_path, tablename, utc_time)) is None:
+        if (price := get_price_db(db_path, tablename, utc_time)) is None:
+            # Price doesn't exists. Fetch price from platform.
             try:
                 get_price = getattr(self, f"_get_price_{platform}")
             except AttributeError:
@@ -648,13 +510,15 @@ class PriceData:
 
             price = get_price(coin, utc_time, reference_coin, **kwargs)
             assert isinstance(price, decimal.Decimal)
-            self.__set_price_db(db_path, tablename, utc_time, price)
+            set_price_db(
+                platform, coin, reference_coin, utc_time, price, db_path=db_path
+            )
 
         if config.MEAN_MISSING_PRICES and price <= 0.0:
             # The price is missing. Check for prices before and after the
             # transaction and estimate the price.
             # Do not save price in database.
-            price = self.__mean_price_db(db_path, tablename, utc_time)
+            price = mean_price_db(db_path, tablename, utc_time)
 
         return price
 
@@ -968,7 +832,7 @@ class PriceData:
 
             # TODO Use bulk insert to write all prices at once into the database.
             for p in data:
-                self.set_price_db(platform, coin, reference_coin, p[0], p[1])
+                set_price_db(platform, coin, reference_coin, p[0], p[1])
 
     def check_database(self):
         stats = {}
