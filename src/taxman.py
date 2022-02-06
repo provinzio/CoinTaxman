@@ -251,6 +251,20 @@ class Taxman:
     def evaluate_taxation(self) -> None:
         """Evaluate the taxation using country specific function."""
         log.debug("Starting evaluation...")
+        counter = 0
+        total_operations = len(self.book.operations)
+        for plat, _ops in misc.group_by(self.book.operations, "platform").items():
+            for coin, coin_operations in misc.group_by(_ops, "coin").items():
+                s_operations = transaction.sort_operations(
+                    coin_operations, ["utc_time"]
+                )
+                self.price_data.preload_prices(s_operations, coin, plat)
+                counter += len(coin_operations)
+                log.info(
+                    "{:6.2f} % done, {:6d} out of {:d} operations processed".format(
+                        counter / total_operations * 100, counter, total_operations
+                    )
+                )
 
         if config.MULTI_DEPOT:
             # Evaluate taxation separated by platforms and coins.

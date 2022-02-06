@@ -142,6 +142,66 @@ class TaxEvent:
     remark: str = ""
 
 
+# Functions
+
+
+def time_batches(
+    operations: list[Operation],
+    max_difference: typing.Optional[int],
+    max_size: typing.Optional[int] = None,
+) -> typing.Iterable[list[datetime.datetime]]:
+    """Return timestamps of operations in batches.
+
+    The batches are clustered such that the batches time difference
+    from first to last operation is lesser than `max_difference` minutes and the
+    batches have a maximum size of `max_size`.
+
+    TODO Solve the clustering optimally. (It's already optimal, if max_size is None.)
+
+    Args:
+        operations (list[Operation]): List of operations.
+        max_difference (Optional[int], optional):
+            Maximal time difference in batch (in minutes).
+            Defaults to None (unlimited time difference).
+        limax_sizemit (Optional[int], optional):
+            Maximum size of batch.
+            Defaults to None (unlimited size).
+
+    Yields:
+        Generator[None, list[datetime.datetime], None]: Yield the timestamp clusters.
+    """
+    assert max_difference is None or max_difference >= 0
+    assert max_size is None or max_size > 0
+
+    batch: list[datetime.datetime] = []
+
+    if not operations:
+        # Nothing to cluster, return empty list.
+        return batch
+
+    # Calculate the latest time which is allowed to be in this cluster.
+    if max_difference:
+        max_time = operations[0].utc_time + datetime.timedelta(minutes=max_difference)
+    else:
+        max_time = datetime.datetime.max
+
+    for op in operations:
+        timestamp = op.utc_time
+
+        # Check if timestamp is before max_time and
+        # that our cluster isn't to large already.
+        if timestamp < max_time and (not max_size or len(batch) < max_size):
+            batch.append(timestamp)
+        else:
+            yield batch
+
+            batch = [timestamp]
+
+            if max_difference:
+                max_time = timestamp + datetime.timedelta(minutes=max_difference)
+    yield batch  # fixes bug where last batch ist not yielded
+
+
 gain_operations = [
     CoinLendEnd,
     StakingEnd,

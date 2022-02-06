@@ -18,14 +18,17 @@ import bisect
 import datetime
 import decimal
 import json
+import math
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Union
+from typing import Any, Optional, Union
 
+import ccxt
 import requests
 
 import config
+import graph
 import log_config
 import misc
 import transaction
@@ -48,6 +51,9 @@ log = log_config.getLogger(__name__)
 
 
 class PriceData:
+    def __init__(self):
+        self.path = graph.PricePath()
+
     def get_db_path(self, platform: str) -> Path:
         return Path(config.DATA_PATH, f"{platform}.db")
 
@@ -516,6 +522,70 @@ class PriceData:
 
         return price
 
+    def get_missing_price_operations(
+        self,
+        operations: list[transaction.Operation],
+        coin: str,
+        platform: str,
+        reference_coin: str = config.FIAT,
+    ) -> list[transaction.Operation]:
+        """Return operations for which no price was found in the database.
+
+        Requires the `operations` to have the same `coin` and `platform`.
+
+        Args:
+            operations (list[transaction.Operation])
+            coin (str)
+            platform (str)
+            reference_coin (str): Defaults to `config.FIAT`.
+
+        Returns:
+            list[transaction.Operation]
+        """
+        assert all(op.coin == coin for op in operations)
+        assert all(op.platform == platform for op in operations)
+
+        # We do not have to calculate the price, if there are no operations or the
+        # coin is the same as the reference coin.
+        if not operations or coin == reference_coin:
+            return []
+
+        db_path = self.get_db_path(platform)
+        # If the price database does not exist, we need to query all prices.
+        if not db_path.is_file():
+            return operations
+
+        tablename = self.get_tablename(coin, reference_coin)
+        utc_time_values = ",".join(f"('{op.utc_time}')" for op in operations)
+
+        with sqlite3.connect(db_path) as conn:
+            cur = conn.cursor()
+            # The query returns a list with 0 and 1's.
+            # - 0: a price exists.
+            # - 1: the price is missing.
+            query = (
+                "SELECT t.utc_time IS NULL "
+                f"FROM (VALUES {utc_time_values}) "
+                f"LEFT JOIN `{tablename}` t ON t.utc_time = COLUMN1;"
+            )
+
+            # Execute the query.
+            try:
+                cur.execute(query)
+            except sqlite3.OperationalError as e:
+                if str(e) == f"no such table: {tablename}":
+                    # The corresponding price table does not exist yet.
+                    # We need to query all prices.
+                    return operations
+                raise e
+
+            # Evaluate the result.
+            result = (bool(is_missing) for is_missing, in cur.fetchall())
+            missing_prices_operations = [
+                op for op, is_missing in zip(operations, result) if is_missing
+            ]
+            return missing_prices_operations
+
     def get_cost(
         self,
         tr: Union[transaction.Operation, transaction.SoldCoin],
@@ -528,6 +598,241 @@ class PriceData:
         if isinstance(tr, transaction.SoldCoin):
             return price * tr.sold
         raise NotImplementedError
+
+    def get_candles(
+        self, start: int, stop: int, symbol: str, exchange_id: str
+    ) -> list[tuple[int, float, float, float, float, float]]:
+        """Return list with candles starting 2 minutes before start.
+
+        Args:
+            start (int): Start time in milliseconds since epoch.
+            stop (int): End time in milliseconds since epoch.
+            symbol (str)
+            exchange_id (str)
+
+        Returns:
+            list: List of OHLCV candles gathered from ccxt containing:
+
+                timestamp (int): Timestamp of candle in milliseconds since epoch.
+                open_price (float)
+                lowest_price (float)
+                highest_price (float)
+                close_price (float)
+                volume (float)
+        """
+        assert stop >= start, f"`stop` must be after `start` {stop} !>= {start}."
+
+        exchange_class = getattr(ccxt, exchange_id)
+        exchange = exchange_class()
+        assert isinstance(exchange, ccxt.Exchange)
+
+        # Technically impossible. Unsupported exchanges should be detected earlier.
+        assert exchange.has["fetchOHLCV"]
+
+        # time.sleep wants seconds
+        self.path.RateLimit.limit(exchange)
+
+        # Get candles 2 min before and after start/stop.
+        since = start - 2 * 60 * 1000
+        # `fetch_ohlcv` has no stop value but only a limit (amount of candles fetched).
+        # Calculate the amount of candles in the 1 min timeframe,
+        # so that we get enough candles.
+        # Most exchange have an upper limit (e.g. binance 1000, coinbasepro 300).
+        # `ccxt` throws an error if we exceed this limit.
+        limit = math.ceil((stop - start) / (1000 * 60)) + 2
+        try:
+            candles = exchange.fetch_ohlcv(symbol, "1m", since, limit)
+        except ccxt.RateLimitExceeded:
+            # sometimes the ratelimit gets exceeded for kraken dunno why
+            log.warning("Ratelimit exceeded sleeping 10 seconds and retrying")
+            time.sleep(10)
+            self.path.RateLimit.limit(exchange)
+            candles = exchange.fetch_ohlcv(symbol, "1m", since, limit)
+
+        assert isinstance(candles, list)
+        return candles
+
+    def get_avg_candle_prices(
+        self, start: int, stop: int, symbol: str, exchange_id: str, invert: bool = False
+    ) -> list[tuple[int, decimal.Decimal]]:
+        """Return average price from ohlcv candles.
+
+        The average price of the candle is calculated as the average from the
+        open and close price.
+
+        Further information about candle-function can be found in `get_candles`.
+
+        Args:
+            start (int)
+            stop (int)
+            symbol (str)
+            exchange_id (str)
+            invert (bool, optional): Defaults to False.
+
+        Returns:
+            list: Timestamp and average prices of candles containing:
+
+                timestamp (int): Timestamp of candle in milliseconds since epoch.
+                avg_price (decimal.Decimal): Average price of candle.
+        """
+        avg_candle_prices = []
+        candle_prices = self.get_candles(start, stop, symbol, exchange_id)
+
+        for timestamp_ms, _open, _high, _low, _close, _volume in candle_prices:
+            open = misc.force_decimal(_open)
+            close = misc.force_decimal(_close)
+
+            avg_price = (open + close) / 2
+
+            if invert and avg_price != 0:
+                avg_price = 1 / avg_price
+
+            avg_candle_prices.append((timestamp_ms, avg_price))
+        return avg_candle_prices
+
+    # TODO preferredexchange default is only for debug purposes and should be
+    #      removed later on.
+    def _get_bulk_pair_data_path(
+        self,
+        operations: list,
+        coin: str,
+        reference_coin: str,
+        preferredexchange: str = "binance",
+    ) -> list:
+        def merge_prices(a: list, b: Optional[list] = None) -> list:
+            if not b:
+                return a
+
+            prices = []
+            for i in a:
+                factor = next(j[1] for j in b if i[0] == j[0])
+                prices.append((i[0], i[1] * factor))
+
+            return prices
+
+        # TODO Set `max_difference` to the platform specific ohlcv-limit.
+        max_difference = 300  # coinbasepro
+        # TODO Set `max_size` to the platform specific ohlcv-limit.
+        max_size = 300  # coinbasepro
+        time_batches = transaction.time_batches(
+            operations, max_difference=max_difference, max_size=max_size
+        )
+
+        datacomb = []
+
+        for batch in time_batches:
+            # ccxt works with timestamps in milliseconds
+            first = misc.to_ms_timestamp(batch[0])
+            last = misc.to_ms_timestamp(batch[-1])
+            firststr = batch[0].strftime("%d-%b-%Y (%H:%M)")
+            laststr = batch[-1].strftime("%d-%b-%Y (%H:%M)")
+            log.info(
+                f"getting data from {str(firststr)} to {str(laststr)} for {str(coin)}"
+            )
+            path = self.path.get_path(
+                coin, reference_coin, first, last, preferredexchange=preferredexchange
+            )
+            # Todo Move the path calculation out of the for loop
+            # and only filter after time
+            for p in path:
+                tempdatalis: list = []
+                printstr = [f"{a[1]['symbol']} ({a[1]['exchange']})" for a in p[1]]
+                log.debug(f"found path over {' -> '.join(printstr)}")
+                for i in range(len(p[1])):
+                    tempdatalis.append([])
+                    symbol = p[1][i][1]["symbol"]
+                    exchange = p[1][i][1]["exchange"]
+                    invert = p[1][i][1]["inverted"]
+
+                    if tempdata := self.get_avg_candle_prices(
+                        first, last, symbol, exchange, invert
+                    ):
+                        for operation in batch:
+                            # TODO discuss which candle is picked
+                            # current is closest to original date
+                            # (often off by about 1-20s, but can be after the Trade)
+                            # times do not always line up perfectly so take one nearest
+                            ts = list(
+                                map(
+                                    lambda x: (
+                                        abs(misc.to_ms_timestamp(operation) - x[0]),
+                                        x,
+                                    ),
+                                    tempdata,
+                                )
+                            )
+                            tempdatalis[i].append(
+                                (operation, min(ts, key=lambda x: x[0])[1][1])
+                            )
+                    else:
+                        tempdatalis = []
+                        # do not try already failed again
+                        self.path.change_prio(printstr, 0.2)
+                        break
+                if tempdatalis:
+                    wantedlen = len(tempdatalis[0])
+                    for li in tempdatalis:
+                        if not len(li) == wantedlen:
+                            self.path.change_prio(printstr, 0.2)
+                            break
+                    else:
+                        prices: list = []
+                        for d in tempdatalis:
+                            prices = merge_prices(d, prices)
+                        datacomb.extend(prices)
+                        break
+                log.debug("path failed trying new path")
+
+        return datacomb
+
+    def preload_prices(
+        self,
+        operations: list[transaction.Operation],
+        coin: str,
+        platform: str,
+        reference_coin: str = config.FIAT,
+    ) -> None:
+        """Preload price data.
+
+        Requires the operations to have the same `coin` and `exchange`.
+
+        Args:
+            operations (list[transaction.Operation])
+            coin (str)
+            platform (str)
+            reference_coin (str): Defaults to `config.FIAT`.
+        """
+        assert all(op.coin == coin for op in operations)
+        assert all(op.platform == platform for op in operations)
+
+        # We do not have to preload prices, if there are no operations or the coin is
+        # the same as the reference coin.
+        if not operations or coin == reference_coin:
+            return
+
+        if platform == "kraken":
+            log.warning(
+                f"Will not preload prices for {platform}, reverting to default API."
+            )
+            return
+
+        # Only consider the operations for which we have no prices in the database.
+        missing_prices_operations = self.get_missing_price_operations(
+            operations, coin, platform, reference_coin
+        )
+
+        # Preload the prices.
+        if missing_prices_operations:
+            data = self._get_bulk_pair_data_path(
+                missing_prices_operations,
+                coin,
+                reference_coin,
+                preferredexchange=platform,
+            )
+
+            # TODO Use bulk insert to write all prices at once into the database.
+            for p in data:
+                set_price_db(platform, coin, reference_coin, p[0], p[1])
 
     def check_database(self):
         stats = {}

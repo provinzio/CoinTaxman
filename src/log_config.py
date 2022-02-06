@@ -36,3 +36,4 @@ log.addHandler(ch)
 
 # Disable urllib debug messages
 getLogger("urllib3").propagate = False
+getLogger("ccxt").propagate = False

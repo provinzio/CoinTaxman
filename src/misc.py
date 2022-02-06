@@ -28,7 +28,6 @@ from typing import (
     Optional,
     SupportsFloat,
     SupportsInt,
-    Tuple,
     TypeVar,
     Union,
     cast,
@@ -122,7 +121,7 @@ def to_decimal_timestamp(d: datetime.datetime) -> decimal.Decimal:
 def get_offset_timestamps(
     utc_time: datetime.datetime,
     offset: datetime.timedelta,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """Return timestamps in milliseconds `offset/2` before/after `utc_time`.
 
     Args:
@@ -130,7 +129,7 @@ def get_offset_timestamps(
         offset (datetime.timedelta)
 
     Returns:
-        Tuple[int, int]: Timestamps in milliseconds.
+        tuple[int, int]: Timestamps in milliseconds.
     """
     start = utc_time - offset / 2
     end = utc_time + offset / 2
