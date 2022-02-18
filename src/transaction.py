@@ -35,6 +35,7 @@ class Operation:
     coin: str
     line: int
     file_path: Path
+    buy_platform: typing.Optional[str] = None
 
     def __post_init__(self):
         assert self.validate_types()

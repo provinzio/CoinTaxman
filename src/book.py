@@ -1107,6 +1107,31 @@ class Book:
                     overwrite=True,
                 )
 
+    def resolve_deposits(self) -> bool:
+        """ Matches withdrawals and deposits
+
+        Returns:
+            bool: Return True if everything went as expected.
+        """
+        paths = self.get_file_paths(config.WD_MATCHING_PATH)
+
+        if not paths:
+            log.warning(
+                "No matching files for withdrawals/deposits located in %s.",
+                config.WD_MATCHING_PATH,
+            )
+            return False
+
+        for file_path in paths:
+            #TODO match withdrawals/deposits
+            pass
+
+        if not bool(self):
+            log.warning("Unable to import any data.")
+            return False
+
+        return True
+
     def read_file(self, file_path: Path) -> None:
         """Import transactions form an account statement.
 

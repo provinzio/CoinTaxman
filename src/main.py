@@ -40,8 +40,8 @@ def main() -> None:
     # 1) Find matching withdrawal and deposit or raise a warning
     # 2) Withdraw deposits from one exchange with FIFO/LIFO principle
     #    to the other exchange
-    # log.debug("Resolve withdrawals and deposits between exchanges...")
-    # book.resolve_deposits()
+    log.debug("Resolve withdrawals and deposits between exchanges...")
+    book.resolve_deposits()
     book.get_price_from_csv()
     taxman.evaluate_taxation()
     taxman.export_evaluation_as_csv()
