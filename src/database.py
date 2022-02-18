@@ -49,7 +49,7 @@ def get_version(db_path: Path) -> int:
             )
 
 
-def get_price_db(
+def __get_price_db(
     db_path: Path,
     tablename: str,
     utc_time: datetime.datetime,
@@ -81,6 +81,39 @@ def get_price_db(
 
     return None
 
+def get_price_db(
+    platform: str,
+    coin: str,
+    reference_coin: str,
+    utc_time: datetime.datetime,
+    db_path: Optional[Path] = None,
+) -> None:
+    """Try to retrieve the price from our local database.
+
+    Tries to insert a historical price into the local database.
+
+    A warning will be raised, if there is already a different price.
+
+    Args:
+        platform (str)
+        coin (str)
+        reference_coin (str)
+        utc_time (datetime.datetime)
+    """
+    coin_a, coin_b, inverted = _sort_pair(coin, reference_coin)
+    tablename = get_tablename(coin_a, coin_b)
+
+    if db_path is None and platform:
+        db_path = get_db_path(platform)
+
+    assert isinstance(db_path, Path), "Given DB path is not path"
+
+    price = __get_price_db(db_path, tablename, utc_time)
+
+    if inverted:
+        return misc.reciprocal(price)
+    else:
+        return price
 
 def mean_price_db(
     db_path: Path,
@@ -252,7 +285,7 @@ def set_price_db(
         if str(e) == f"UNIQUE constraint failed: {tablename}.utc_time":
             # Trying to add an already existing price in db.
             # Check price from db and issue warning, if prices do not match.
-            price_db = get_price_db(db_path, tablename, utc_time)
+            price_db = __get_price_db(db_path, tablename, utc_time)
             rel_error = abs(price - price_db) / price * 100
             if price != price_db:
                 log.warning(
