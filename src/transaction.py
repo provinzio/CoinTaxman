@@ -19,11 +19,12 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import decimal
-import logging
 import typing
 from pathlib import Path
 
-log = logging.getLogger(__name__)
+import log_config
+
+log = log_config.getLogger(__name__)
 
 
 @dataclasses.dataclass
@@ -137,6 +138,7 @@ class TaxEvent:
     taxed_gain: decimal.Decimal
     op: Operation
     sell_price: decimal.Decimal = decimal.Decimal()
+    real_gain: decimal.Decimal = decimal.Decimal()
     remark: str = ""
 
 

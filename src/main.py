@@ -14,17 +14,18 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import logging
-
-import log_config  # noqa: F401
+import log_config
 from book import Book
+from patch_database import patch_databases
 from price_data import PriceData
 from taxman import Taxman
 
-log = logging.getLogger(__name__)
+log = log_config.getLogger(__name__)
 
 
 def main() -> None:
+    patch_databases()
+
     price_data = PriceData()
     book = Book(price_data)
     taxman = Taxman(book, price_data)
@@ -41,7 +42,7 @@ def main() -> None:
     #    to the other exchange
     # log.debug("Resolve withdrawals and deposits between exchanges...")
     # book.resolve_deposits()
-
+    book.get_price_from_csv()
     taxman.evaluate_taxation()
     taxman.export_evaluation_as_csv()
     taxman.print_evaluation()
