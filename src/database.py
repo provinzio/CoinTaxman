@@ -251,23 +251,26 @@ def set_price_db(
     except sqlite3.IntegrityError as e:
         if str(e) == f"UNIQUE constraint failed: {tablename}.utc_time":
             # Trying to add an already existing price in db.
-            if overwrite:
-                # Overwrite price.
-                log.debug(
-                    "Overwriting price information for "
-                    f"{platform=}, {tablename=} at {utc_time=}"
+            # Check price from db and issue warning, if prices do not match.
+            price_db = get_price_db(db_path, tablename, utc_time)
+            rel_error = abs(price - price_db) / price * 100
+            if price != price_db:
+                log.warning(
+                    f"Tried to write {tablename} price to database, but a "
+                    f"different price exists already ({platform} @ {utc_time})"
                 )
-                __delete_price_db(db_path, tablename, utc_time)
-                __set_price_db(db_path, tablename, utc_time, price)
-            else:
-                # Check price from db and issue warning, if prices do not match.
-                price_db = get_price_db(db_path, tablename, utc_time)
-                if price != price_db:
+                if overwrite:
+                    # Overwrite price.
                     log.warning(
-                        "Tried to write price to database, "
-                        "but a different price exists already: "
-                        f"{platform=}, {tablename=}, {utc_time=}, "
-                        f"{price=} != {price_db=}"
+                        f"Relative error: %.6f %%, using new price: {price}, "
+                        f"overwriting database price: {price_db}", rel_error
+                    )
+                    __delete_price_db(db_path, tablename, utc_time)
+                    __set_price_db(db_path, tablename, utc_time, price)
+                else:
+                    log.warning(
+                        f"Relative error: %.6f %%, discarding new price: {price}, "
+                        f"using database price: {price_db}", rel_error
                     )
         else:
             raise e
