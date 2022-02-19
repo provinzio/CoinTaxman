@@ -19,6 +19,7 @@ import datetime
 import decimal
 import logging
 import re
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Optional
 
@@ -32,6 +33,12 @@ log = logging.getLogger(__name__)
 
 
 class Book:
+    # Need to track state of duplicate deposit/withdrawal entries
+    # All deposits/withdrawals are held back until they occur a second time
+    # Initialize non-existing fields with None once they're called
+    kraken_held_ops: defaultdict[str, defaultdict[str, Any]] = \
+        defaultdict(lambda: defaultdict(lambda: None))
+
     def __init__(self, price_data: PriceData) -> None:
         self.price_data = price_data
 
@@ -458,10 +465,6 @@ class Book:
             "withdrawal": "Withdrawal",
         }
 
-        # Need to track state of duplicate deposit/withdrawal entries
-        # All deposits/withdrawals are held back until they occur a second time
-        held_operations: list[dict[str, Any]] = []
-
         with open(file_path, encoding="utf8") as f:
             reader = csv.reader(f)
 
@@ -574,73 +577,79 @@ class Book:
                 # in the public trade history and are skipped.
                 # For staking / unstaking / staking reward actions, deposits /
                 # withdrawals only occur once and will be ignored.
+                # The "appended" flag stores if an operation for a given refid has
+                # already been appended to the operations list:
+                # == None: Initial value, this is the first occurence
+                # == False: No operation has been appended, this is the second occurene
+                # == True: Operation has already been appended, this should not happen
                 if operation in ["Deposit", "Withdrawal"]:
-                    # search for refid in refids list
-                    refid_idxs = [
-                        idx
-                        for idx, op in enumerate(held_operations)
-                        if op["refid"] == refid
-                    ]
-                    # refid should not exist more than once in list
-                    if len(refid_idxs) > 1:
+                    # If this is the first occurence, set the "appended" flag to false
+                    # and don't append the operation to the list. Instead, store the
+                    # data for verifying or appending it later.
+                    if self.kraken_held_ops[refid]["appended"] is None:
+                        append_operation = False
+                        self.kraken_held_ops[refid]["appended"] = False
+                        self.kraken_held_ops[refid]["operation"] = operation
+                        self.kraken_held_ops[refid]["utc_time"] = utc_time
+                        self.kraken_held_ops[refid]["platform"] = platform
+                        self.kraken_held_ops[refid]["change"] = change
+                        self.kraken_held_ops[refid]["coin"] = coin
+                        self.kraken_held_ops[refid]["row"] = row
+                        self.kraken_held_ops[refid]["file_path"] = file_path
+                        self.kraken_held_ops[refid]["fee"] = fee
+                    # If this is the second occurence, append a new operation, set the
+                    # "appended" flag to True and assert that the data of this operation
+                    # agrees with the data of the first occurence.
+                    elif self.kraken_held_ops[refid]["appended"] is False:
+                        append_operation = True
+                        self.kraken_held_ops[refid]["appended"] = True
+                        try:
+                            assert (
+                                operation == self.kraken_held_ops[refid]["operation"]
+                            ), "operation"
+                            assert (
+                                change == self.kraken_held_ops[refid]["change"]
+                            ), "change"
+                            assert coin == self.kraken_held_ops[refid]["coin"], "coin"
+                        except AssertionError as e:
+                            log.error(
+                                f"{file_path} row {row}: Parameters for refid {refid} "
+                                f"({operation}) do not agree: {e}. "
+                                "Please create an Issue or PR."
+                            )
+                            raise RuntimeError
+                    # If an operation with the same refid has been already appended,
+                    # this is the third occurence. Throw an error if this happens.
+                    elif self.kraken_held_ops[refid]["appended"] is True:
                         log.error(
                             f"{file_path} row {row}: More than two entries with refid "
                             f"{refid} should not exist ({operation}). "
                             "Please create an Issue or PR."
                         )
                         raise RuntimeError
-                    # if refid already exists, assert that data of operations agree
-                    if refid_idxs:
-                        idx = refid_idxs[0]
-                        try:
-                            assert (
-                                operation == held_operations[idx]["operation"]
-                            ), "operation"
-                            assert change == held_operations[idx]["change"], "change"
-                            assert coin == held_operations[idx]["coin"], "coin"
-                        except AssertionError as e:
-                            log.error(
-                                f"{file_path} row {row}: Parameters for refid {refid} "
-                                f"({operation}) do not agree: {e} "
-                                "Please create an Issue or PR."
-                            )
-                            raise RuntimeError
-                    # add all entries to refid list and held operations list
-                    held_operations.append(
-                        {
-                            "refid": refid,
-                            "operation": operation,
-                            "utc_time": utc_time,
-                            "platform": platform,
-                            "change": change,
-                            "coin": coin,
-                            "row": row,
-                            "file_path": file_path,
-                            "fee": fee,
-                        }
-                    )
+                    # This should never happen
+                    else:
+                        log.error(
+                            f"{file_path} row {row}: Unknown value for appended "
+                            f"operation flag {self.kraken_held_ops[refid]['appended']}."
+                            "Please create an Issue or PR."
+                        )
+                        raise RuntimeError
 
-                    if operation == "Deposit":
-                        # append only the second deposit to the operations list
-                        append_operation = len(refid_idxs) == 1
-                    elif operation == "Withdrawal":
-                        # Append the first withdrawal to the operations list as soon
-                        # as the second withdrawal occurs. Therefore, for the second
-                        # withdrawal, overwrite the variables with the data of the first
-                        # withdrawal and append this to the operations list.
-                        if refid_idxs:
-                            append_operation = True
-                            # required for type annotation: convert Optional[str] to str
-                            operation = str(held_operations[idx]["operation"])
-                            utc_time = held_operations[idx]["utc_time"]
-                            platform = held_operations[idx]["platform"]
-                            change = held_operations[idx]["change"]
-                            coin = held_operations[idx]["coin"]
-                            row = held_operations[idx]["row"]
-                            file_path = held_operations[idx]["file_path"]
-                            fee = held_operations[idx]["fee"]
-                        else:
-                            append_operation = False
+                    # For deposits, this is all we need to do.
+                    # For withdrawals, we need to append the first withdrawal as soon as
+                    # the second withdrawal occurs. Therefore, overwrite the variables
+                    # with the data of the first withdrawal and append it.
+                    if append_operation and operation == "Withdrawal":
+                        # required for type annotation: convert Optional[str] to str
+                        operation = str(self.kraken_held_ops[refid]["operation"])
+                        utc_time = self.kraken_held_ops[refid]["utc_time"]
+                        platform = self.kraken_held_ops[refid]["platform"]
+                        change = self.kraken_held_ops[refid]["change"]
+                        coin = self.kraken_held_ops[refid]["coin"]
+                        row = self.kraken_held_ops[refid]["row"]
+                        file_path = self.kraken_held_ops[refid]["file_path"]
+                        fee = self.kraken_held_ops[refid]["fee"]
 
                 if append_operation:
                     self.append_operation(
