@@ -81,24 +81,24 @@ def __get_price_db(
 
     return None
 
+
 def get_price_db(
     platform: str,
     coin: str,
     reference_coin: str,
     utc_time: datetime.datetime,
     db_path: Optional[Path] = None,
-) -> None:
+) -> Optional[decimal.Decimal]:
     """Try to retrieve the price from our local database.
-
-    Tries to insert a historical price into the local database.
-
-    A warning will be raised, if there is already a different price.
 
     Args:
         platform (str)
         coin (str)
         reference_coin (str)
         utc_time (datetime.datetime)
+
+    Returns:
+        Optional[decimal.Decimal]: Price.
     """
     coin_a, coin_b, inverted = _sort_pair(coin, reference_coin)
     tablename = get_tablename(coin_a, coin_b)
@@ -106,14 +106,16 @@ def get_price_db(
     if db_path is None and platform:
         db_path = get_db_path(platform)
 
-    assert isinstance(db_path, Path), "Given DB path is not path"
+    assert isinstance(db_path, Path), "DB path is no valid path"
 
     price = __get_price_db(db_path, tablename, utc_time)
 
-    if inverted:
-        return misc.reciprocal(price)
+    if not price:
+        return None
+    elif inverted:
+        return misc.reciprocal(misc.force_decimal(price))
     else:
-        return price
+        return misc.force_decimal(price)
 
 
 def __mean_price_db(
@@ -316,7 +318,7 @@ def set_price_db(
     if db_path is None and platform:
         db_path = get_db_path(platform)
 
-    assert isinstance(db_path, Path), "no db path given"
+    assert isinstance(db_path, Path), "DB path is no valid path"
 
     try:
         __set_price_db(db_path, tablename, utc_time, price)
@@ -324,7 +326,7 @@ def set_price_db(
         if str(e) == f"UNIQUE constraint failed: {tablename}.utc_time":
             # Trying to add an already existing price in db.
             # Check price from db and issue warning, if prices do not match.
-            price_db = __get_price_db(db_path, tablename, utc_time)
+            price_db = misc.force_decimal(__get_price_db(db_path, tablename, utc_time))
             rel_error = abs(price - price_db) / price * 100
             if price != price_db:
                 log.warning(

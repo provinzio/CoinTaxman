@@ -783,7 +783,7 @@ class Book:
                 fiat,
                 amount_asset,
                 asset,
-                asset_price,
+                _asset_price,
                 asset_price_currency,
                 asset_class,
                 _product_id,

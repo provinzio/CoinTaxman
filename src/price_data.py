@@ -30,11 +30,7 @@ import log_config
 import misc
 import transaction
 from core import kraken_pair_map
-from database import (
-    get_price_db,
-    mean_price_db,
-    set_price_db,
-)
+from database import get_price_db, mean_price_db, set_price_db
 
 log = log_config.getLogger(__name__)
 
@@ -155,7 +151,9 @@ class PriceData:
         quote_asset: str,
         minutes_step: int = 5,
     ) -> decimal.Decimal:
-        return self._get_price_coinbase_pro(base_asset, utc_time, quote_asset, minutes_step)
+        return self._get_price_coinbase_pro(
+            base_asset, utc_time, quote_asset, minutes_step
+        )
 
     @misc.delayed
     def _get_price_coinbase_pro(
@@ -197,7 +195,6 @@ class PriceData:
             params = f"start={start}&end={end}&granularity=60"
             url = f"{root_url}/products/{pair}/candles?{params}"
 
-            log.debug("Calling %s", url)
             log.debug(
                 f"Querying Coinbase Pro candles for {pair} at {utc_time} "
                 f"(offset={minutes_offset}m): Calling %s",
@@ -507,7 +504,7 @@ class PriceData:
             price = get_price(coin, utc_time, reference_coin, **kwargs)
             assert isinstance(price, decimal.Decimal)
             set_price_db(
-                platform, coin, reference_coin, utc_time, price, db_path=db_path
+                platform, coin, reference_coin, utc_time, price
             )
 
         if config.MEAN_MISSING_PRICES and price <= 0.0:
