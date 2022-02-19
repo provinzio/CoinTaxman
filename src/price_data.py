@@ -41,6 +41,9 @@ log = logging.getLogger(__name__)
 
 
 class PriceData:
+    # list of Kraken pairs that returned invalid arguments error
+    kraken_invalid_pairs: list[str] = []
+
     def get_db_path(self, platform: str) -> Path:
         return Path(config.DATA_PATH, f"{platform}.db")
 
@@ -352,6 +355,21 @@ class PriceData:
             while num_retries:
                 pair = base_asset + quote_asset
                 pair = kraken_pair_map.get(pair, pair)
+
+                # if the pair is invalid, invert it
+                if pair in self.kraken_invalid_pairs:
+                    inverse = not inverse
+                    base_asset, quote_asset = quote_asset, base_asset
+                    pair = base_asset + quote_asset
+                    pair = kraken_pair_map.get(pair, pair)
+                    # if inverted pair is also invalid, throw error
+                    if pair in self.kraken_invalid_pairs:
+                        log.error(
+                            f"Could not retrieve trades for {pair} or inverse pair, "
+                            "invalid arguments error. Please create an Issue or PR."
+                        )
+                        raise RuntimeError
+
                 url = f"{root_url}?{pair=:}&{since=:}"
 
                 log.debug(
@@ -366,23 +384,14 @@ class PriceData:
                 if not data["error"]:
                     break
                 elif data["error"] == ['EGeneral:Invalid arguments']:
-                    # try inverse pair
-                    if not inverse:
-                        log.warning(
-                            f"Invalid arguments error for {pair} at {utc_time} "
-                            f"(offset={minutes_offset}m): "
-                            f"Trying inverse coin pair ..."
-                        )
-                        inverse = not inverse
-                        base_asset, quote_asset = quote_asset, base_asset
-                    # cancel if inverse pair has been tried
-                    else:
-                        log.error(
-                            f"Could not retrieve trades for {pair} or inverse pair at "
-                            f"{utc_time} (offset={minutes_offset}m): "
-                            "Invalid arguments error. Please create an Issue or PR."
-                        )
-                        raise RuntimeError
+                    # add pair to invalid pairs list
+                    # leads to inversion of pair next time
+                    log.warning(
+                        f"Invalid arguments error for {pair} at {utc_time} "
+                        f"(offset={minutes_offset}m): "
+                        f"Blocking pair and trying inverse coin pair ..."
+                    )
+                    self.kraken_invalid_pairs.append(pair)
                 else:
                     num_retries -= 1
                     sleep_duration = 2 ** (10 - num_retries)
