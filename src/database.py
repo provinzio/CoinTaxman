@@ -115,7 +115,8 @@ def get_price_db(
     else:
         return price
 
-def mean_price_db(
+
+def __mean_price_db(
     db_path: Path,
     tablename: str,
     utc_time: datetime.datetime,
@@ -182,6 +183,44 @@ def mean_price_db(
                 return price
 
     return decimal.Decimal()
+
+
+def mean_price_db(
+    platform: str,
+    coin: str,
+    reference_coin: str,
+    utc_time: datetime.datetime,
+    db_path: Optional[Path] = None,
+) -> decimal.Decimal:
+    """Try to retrieve the price right before and after `utc_time`
+    from our local database.
+
+    Return 0 if the price could not be estimated.
+    The function does not check, if a price for `utc_time` exists.
+
+    Args:
+        platform (str)
+        coin (str)
+        reference_coin (str)
+        utc_time (datetime.datetime)
+
+    Returns:
+        decimal.Decimal: Price.
+    """
+    coin_a, coin_b, inverted = _sort_pair(coin, reference_coin)
+    tablename = get_tablename(coin_a, coin_b)
+
+    if db_path is None and platform:
+        db_path = get_db_path(platform)
+
+    assert isinstance(db_path, Path), "DB path is no valid path"
+
+    price = __mean_price_db(db_path, tablename, utc_time)
+
+    if inverted:
+        return misc.reciprocal(price)
+    else:
+        return price
 
 
 def __delete_price_db(

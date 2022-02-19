@@ -514,7 +514,7 @@ class PriceData:
             # The price is missing. Check for prices before and after the
             # transaction and estimate the price.
             # Do not save price in database.
-            price = mean_price_db(db_path, tablename, utc_time)
+            price = mean_price_db(platform, coin, reference_coin, utc_time)
 
         return price
 
