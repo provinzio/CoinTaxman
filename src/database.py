@@ -96,6 +96,7 @@ def get_price_db(
         coin (str)
         reference_coin (str)
         utc_time (datetime.datetime)
+        db_path (Optional[Path])
 
     Returns:
         Optional[decimal.Decimal]: Price.
@@ -205,6 +206,7 @@ def mean_price_db(
         coin (str)
         reference_coin (str)
         utc_time (datetime.datetime)
+        db_path (Optional[Path])
 
     Returns:
         decimal.Decimal: Price.
@@ -306,6 +308,8 @@ def set_price_db(
         reference_coin (str)
         utc_time (datetime.datetime)
         price (decimal.Decimal)
+        db_path (Optional[Path])
+        overwrite (bool)
     """
     assert coin != reference_coin
 
