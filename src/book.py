@@ -56,23 +56,25 @@ class Book:
         coin: str,
         row: int,
         file_path: Path,
-    ) -> Optional[tr.Operation]:
+    ) -> tr.Operation:
 
         try:
             Op = getattr(tr, operation)
         except AttributeError:
-            log.warning(
+            log.error(
                 "Could not recognize operation `%s` in  %s file `%s:%i`.",
                 operation,
                 platform,
                 file_path,
                 row,
             )
-            return None
+            raise RuntimeError
 
-        return Op(utc_time, platform, change, coin, row, file_path)
+        op = Op(utc_time, platform, change, coin, row, file_path)
+        assert isinstance(op, tr.Operation)
+        return op
 
-    def append_created_operation(
+    def _append_operation(
         self,
         operation: tr.Operation,
     ) -> None:
@@ -90,20 +92,17 @@ class Book:
         file_path: Path,
     ) -> None:
 
-        try:
-            Op = getattr(tr, operation)
-        except AttributeError:
-            log.warning(
-                "Could not recognize operation `%s` in  %s file `%s:%i`.",
-                operation,
-                platform,
-                file_path,
-                row,
-            )
-            return
+        op = self.create_operation(
+            operation,
+            utc_time,
+            platform,
+            change,
+            coin,
+            row,
+            file_path,
+        )
 
-        o = Op(utc_time, platform, change, coin, row, file_path)
-        self.operations.append(o)
+        self._append_operation(op)
 
     def _read_binance(self, file_path: Path, version: int = 1) -> None:
         platform = "binance"
@@ -635,17 +634,16 @@ class Book:
                         try:
                             assert (
                                 isinstance(
-                                    type(op),
-                                    type(self.kraken_held_ops[refid]["operation"])
+                                    op, type(self.kraken_held_ops[refid]["operation"])
                                 )
                             ), "operation"
                             assert (
-                                op.change == \
-                                self.kraken_held_ops[refid]["operation"].change
+                                op.change
+                                == self.kraken_held_ops[refid]["operation"].change
                             ), "change"
                             assert (
-                                op.coin == \
-                                self.kraken_held_ops[refid]["operation"].coin
+                                op.coin
+                                == self.kraken_held_ops[refid]["operation"].coin
                             ), "coin"
                         except AssertionError as e:
                             log.error(
@@ -663,11 +661,11 @@ class Book:
                             op_fee = self.kraken_held_ops[refid]["operation_fee"]
                         # Finally, append the operations and delete the stored
                         # operations to reduce memory consumption
-                        self.append_created_operation(op)
+                        self._append_operation(op)
                         if op_fee:
-                            self.append_created_operation(op_fee)
-                        self.kraken_held_ops[refid]["operation"] = None
-                        self.kraken_held_ops[refid]["operation_fee"] = None
+                            self._append_operation(op_fee)
+                        del(self.kraken_held_ops[refid]["operation"])
+                        del(self.kraken_held_ops[refid]["operation_fee"])
                     # If an operation with the same refid has been already appended,
                     # this is the third occurence. Throw an error if this happens.
                     elif self.kraken_held_ops[refid]["appended"] is True:
