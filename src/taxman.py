@@ -71,9 +71,12 @@ class Taxman:
     ) -> None:
         balance = self.BalanceType()
 
-        def evaluate_sell(op: transaction.Operation) -> Optional[transaction.TaxEvent]:
+        def evaluate_sell(
+            op: transaction.Operation
+        ) -> Optional[list[transaction.TaxEvent]]:
             # Remove coins from queue.
             sold_coins, unsold_coins = balance.sell(op.change)
+            tx_list = []
 
             if coin == config.FIAT:
                 # Not taxable.
@@ -133,19 +136,41 @@ class Taxman:
                         taxed_gain += gain
                     if config.CALCULATE_VIRTUAL_SELL:
                         real_gain += gain
-            remark = ", ".join(
-                f"{sc.sold} von {sc.op.utc_time} " f"({sc.op.__class__.__name__})"
-                for sc in sold_coins
-            )
-            return transaction.TaxEvent(
-                taxation_type,
-                taxed_gain,
-                op,
-                is_taxable,
-                sell_value,
-                real_gain,
-                remark,
-            )
+                # For the detailed export with all events, split all sold coins into
+                # multiple tax events. Else combine all in one tax event after the loop.
+                if config.EXPORT_ALL_EVENTS:
+                    remark = (
+                        f"{sc.sold} von {sc.op.utc_time} "
+                        f"({sc.op.__class__.__name__})"
+                    )
+                    tx_list.append(
+                        transaction.TaxEvent(
+                            taxation_type,
+                            taxed_gain,
+                            op,
+                            is_taxable,
+                            sell_value,
+                            real_gain,
+                            remark,
+                        )
+                    )
+            if not config.EXPORT_ALL_EVENTS:
+                remark = ", ".join(
+                    f"{sc.sold} von {sc.op.utc_time} " f"({sc.op.__class__.__name__})"
+                    for sc in sold_coins
+                )
+                tx_list.append(
+                    transaction.TaxEvent(
+                        taxation_type,
+                        taxed_gain,
+                        op,
+                        is_taxable,
+                        sell_value,
+                        real_gain,
+                        remark,
+                    )
+                )
+            return tx_list
 
         for op in operations:
             if isinstance(op, transaction.Fee):
@@ -253,7 +278,11 @@ class Taxman:
                 raise NotImplementedError
 
             # for all valid cases, add tax event to list
-            if tx:
+            if not tx:
+                continue
+            elif isinstance(tx, list):
+                self.tax_events.extend(tx)
+            else:
                 self.tax_events.append(tx)
 
         # Check that all relevant positions were considered.
