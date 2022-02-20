@@ -47,6 +47,38 @@ class Book:
     def __bool__(self) -> bool:
         return bool(self.operations)
 
+    def create_operation(
+        self,
+        operation: str,
+        utc_time: datetime.datetime,
+        platform: str,
+        change: decimal.Decimal,
+        coin: str,
+        row: int,
+        file_path: Path,
+    ) -> Optional[tr.Operation]:
+
+        try:
+            Op = getattr(tr, operation)
+        except AttributeError:
+            log.warning(
+                "Could not recognize operation `%s` in  %s file `%s:%i`.",
+                operation,
+                platform,
+                file_path,
+                row,
+            )
+            return None
+
+        return Op(utc_time, platform, change, coin, row, file_path)
+
+    def append_created_operation(
+        self,
+        operation: tr.Operation,
+    ) -> None:
+
+        self.operations.append(operation)
+
     def append_operation(
         self,
         operation: str,
