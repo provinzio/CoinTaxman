@@ -596,10 +596,6 @@ class Book:
                 assert coin
                 assert change
 
-                # append all operations to main list per default
-                # will be overwritten for deposits / withdrawals
-                append_operation = True
-
                 # Skip duplicate entries for deposits / withdrawals and additional
                 # deposit / withdrawal lines for staking / unstaking / staking reward
                 # actions.
@@ -612,37 +608,45 @@ class Book:
                 # The "appended" flag stores if an operation for a given refid has
                 # already been appended to the operations list:
                 # == None: Initial value, this is the first occurence
-                # == False: No operation has been appended, this is the second occurene
+                # == False: No operation has been appended, this is the second occurence
                 # == True: Operation has already been appended, this should not happen
                 if operation in ["Deposit", "Withdrawal"]:
+                    # First, create the operations
+                    op = self.create_operation(
+                        operation, utc_time, platform, change, coin, row, file_path
+                    )
+                    op_fee = None
+                    if fee != 0:
+                        op_fee = self.create_operation(
+                            "Fee", utc_time, platform, fee, coin, row, file_path
+                        )
                     # If this is the first occurence, set the "appended" flag to false
                     # and don't append the operation to the list. Instead, store the
                     # data for verifying or appending it later.
                     if self.kraken_held_ops[refid]["appended"] is None:
-                        append_operation = False
                         self.kraken_held_ops[refid]["appended"] = False
-                        self.kraken_held_ops[refid]["operation"] = operation
-                        self.kraken_held_ops[refid]["utc_time"] = utc_time
-                        self.kraken_held_ops[refid]["platform"] = platform
-                        self.kraken_held_ops[refid]["change"] = change
-                        self.kraken_held_ops[refid]["coin"] = coin
-                        self.kraken_held_ops[refid]["row"] = row
-                        self.kraken_held_ops[refid]["file_path"] = file_path
-                        self.kraken_held_ops[refid]["fee"] = fee
+                        self.kraken_held_ops[refid]["operation"] = op
+                        self.kraken_held_ops[refid]["operation_fee"] = op_fee
                     # If this is the second occurence, append a new operation, set the
                     # "appended" flag to True and assert that the data of this operation
                     # agrees with the data of the first occurence.
                     elif self.kraken_held_ops[refid]["appended"] is False:
-                        append_operation = True
                         self.kraken_held_ops[refid]["appended"] = True
                         try:
                             assert (
-                                operation == self.kraken_held_ops[refid]["operation"]
+                                isinstance(
+                                    type(op),
+                                    type(self.kraken_held_ops[refid]["operation"])
+                                )
                             ), "operation"
                             assert (
-                                change == self.kraken_held_ops[refid]["change"]
+                                op.change == \
+                                self.kraken_held_ops[refid]["operation"].change
                             ), "change"
-                            assert coin == self.kraken_held_ops[refid]["coin"], "coin"
+                            assert (
+                                op.coin == \
+                                self.kraken_held_ops[refid]["operation"].coin
+                            ), "coin"
                         except AssertionError as e:
                             log.error(
                                 f"{file_path} row {row}: Parameters for refid {refid} "
@@ -650,6 +654,20 @@ class Book:
                                 "Please create an Issue or PR."
                             )
                             raise RuntimeError
+                        # For deposits, this is all we need to do before appending the
+                        # operation. For withdrawals, we need to append the first
+                        # withdrawal as soon as the second withdrawal occurs. Therefore,
+                        # overwrite the operation with the stored first withdrawal.
+                        if operation == "Withdrawal":
+                            op = self.kraken_held_ops[refid]["operation"]
+                            op_fee = self.kraken_held_ops[refid]["operation_fee"]
+                        # Finally, append the operations and delete the stored
+                        # operations to reduce memory consumption
+                        self.append_created_operation(op)
+                        if op_fee:
+                            self.append_created_operation(op_fee)
+                        self.kraken_held_ops[refid]["operation"] = None
+                        self.kraken_held_ops[refid]["operation_fee"] = None
                     # If an operation with the same refid has been already appended,
                     # this is the third occurence. Throw an error if this happens.
                     elif self.kraken_held_ops[refid]["appended"] is True:
@@ -668,22 +686,8 @@ class Book:
                         )
                         raise RuntimeError
 
-                    # For deposits, this is all we need to do.
-                    # For withdrawals, we need to append the first withdrawal as soon as
-                    # the second withdrawal occurs. Therefore, overwrite the variables
-                    # with the data of the first withdrawal and append it.
-                    if append_operation and operation == "Withdrawal":
-                        # required for type annotation: convert Optional[str] to str
-                        operation = str(self.kraken_held_ops[refid]["operation"])
-                        utc_time = self.kraken_held_ops[refid]["utc_time"]
-                        platform = self.kraken_held_ops[refid]["platform"]
-                        change = self.kraken_held_ops[refid]["change"]
-                        coin = self.kraken_held_ops[refid]["coin"]
-                        row = self.kraken_held_ops[refid]["row"]
-                        file_path = self.kraken_held_ops[refid]["file_path"]
-                        fee = self.kraken_held_ops[refid]["fee"]
-
-                if append_operation:
+                # for all other operation types
+                else:
                     self.append_operation(
                         operation, utc_time, platform, change, coin, row, file_path
                     )
