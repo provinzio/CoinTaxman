@@ -19,7 +19,7 @@ import datetime
 import decimal
 import logging
 from pathlib import Path
-from typing import Optional, Type
+from typing import Optional, Type, Union
 
 import balance_queue
 import config
@@ -173,6 +173,7 @@ class Taxman:
             return tx_list
 
         for op in operations:
+            tx: Union[transaction.TaxEvent, list, None] = None
             if isinstance(op, transaction.Fee):
                 balance.remove_fee(op.change)
                 # fees reduce taxed gain in the corresponding tax period
@@ -308,7 +309,10 @@ class Taxman:
                 Path(""),
             )
             if tx_ := evaluate_sell(virtual_sell):
-                self.virtual_tax_events.append(tx_)
+                if isinstance(tx_, list):
+                    self.tax_events.extend(tx_)
+                elif isinstance(tx_, transaction.TaxEvent):
+                    self.tax_events.append(tx_)
 
     def _evaluate_taxation_per_coin(
         self,
