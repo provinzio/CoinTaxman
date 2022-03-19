@@ -15,7 +15,10 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import logging
-from logging import getLogger
+from logging import getLogger, shutdown
+from pathlib import Path
+
+from config import TMP_LOG_FILEPATH
 
 logging.basicConfig(level=logging.DEBUG)
 log = getLogger(None)
@@ -26,13 +29,15 @@ for handler in log.handlers:
 
 # Handler
 ch = logging.StreamHandler()
+fh = logging.FileHandler(TMP_LOG_FILEPATH, "w")
 
 # Formatter
 formatter = logging.Formatter("%(asctime)s %(name)-12s %(levelname)-8s %(message)s")
 
-ch.setLevel(logging.DEBUG)
-ch.setFormatter(formatter)
-log.addHandler(ch)
+for handler in (ch, fh):
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(formatter)
+    log.addHandler(handler)
 
 # Disable urllib debug messages
 getLogger("urllib3").propagate = False
