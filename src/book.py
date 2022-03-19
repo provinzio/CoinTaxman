@@ -36,8 +36,9 @@ class Book:
     # Need to track state of duplicate deposit/withdrawal entries
     # All deposits/withdrawals are held back until they occur a second time
     # Initialize non-existing fields with None once they're called
-    kraken_held_ops: defaultdict[str, defaultdict[str, Any]] = \
-        defaultdict(lambda: defaultdict(lambda: None))
+    kraken_held_ops: defaultdict[str, defaultdict[str, Any]] = defaultdict(
+        lambda: defaultdict(lambda: None)
+    )
 
     def __init__(self, price_data: PriceData) -> None:
         self.price_data = price_data
@@ -632,18 +633,15 @@ class Book:
                     elif self.kraken_held_ops[refid]["appended"] is False:
                         self.kraken_held_ops[refid]["appended"] = True
                         try:
-                            assert (
-                                isinstance(
-                                    op, type(self.kraken_held_ops[refid]["operation"])
-                                )
+                            assert isinstance(
+                                op, type(self.kraken_held_ops[refid]["operation"])
                             ), "operation"
                             assert (
                                 op.change
                                 == self.kraken_held_ops[refid]["operation"].change
                             ), "change"
                             assert (
-                                op.coin
-                                == self.kraken_held_ops[refid]["operation"].coin
+                                op.coin == self.kraken_held_ops[refid]["operation"].coin
                             ), "coin"
                         except AssertionError as e:
                             log.error(
@@ -664,8 +662,8 @@ class Book:
                         self._append_operation(op)
                         if op_fee:
                             self._append_operation(op_fee)
-                        del(self.kraken_held_ops[refid]["operation"])
-                        del(self.kraken_held_ops[refid]["operation_fee"])
+                        del self.kraken_held_ops[refid]["operation"]
+                        del self.kraken_held_ops[refid]["operation_fee"]
                     # If an operation with the same refid has been already appended,
                     # this is the third occurence. Throw an error if this happens.
                     elif self.kraken_held_ops[refid]["appended"] is True:
