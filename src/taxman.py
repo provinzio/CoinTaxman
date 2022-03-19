@@ -205,7 +205,7 @@ class Taxman:
                     price = self.price_data.get_price(op.platform, op.coin, op.utc_time)
                     remark = (
                         f"Kosten {cost} {config.FIAT}, "
-                        f"Preis {price} {config.FIAT}/{op.coin}"
+                        f"Preis {price} {op.coin}/{config.FIAT}"
                     )
                     tx = transaction.TaxEvent(
                         taxation_type, decimal.Decimal(), op, False, remark=remark
