@@ -607,8 +607,8 @@ class Book:
                 # withdrawals only occur once and will be ignored.
                 # The "appended" flag stores if an operation for a given refid has
                 # already been appended to the operations list:
-                # == None: Initial value, this is the first occurrence
-                # == False: No operation has been appended, this is the second occurrence
+                # == None: Initial value (first occurrence)
+                # == False: No operation has been appended (second occurrence)
                 # == True: Operation has already been appended, this should not happen
                 if operation in ["Deposit", "Withdrawal"]:
                     # First, create the operations
