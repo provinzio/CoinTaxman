@@ -252,7 +252,7 @@ def set_price_db(
         if str(e) == f"UNIQUE constraint failed: {tablename}.utc_time":
             # Trying to add an already existing price in db.
             old_price = get_price_db(db_path, tablename, utc_time)
-            assert old_price
+            assert isinstance(old_price, decimal.Decimal)
             if overwrite:
                 if abs(old_price - price) / price > decimal.Decimal("1E-16"):
                     # Overwrite price.
