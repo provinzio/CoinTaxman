@@ -680,7 +680,7 @@ class Book:
                             f"operation flag {self.kraken_held_ops[refid]['appended']}."
                             "Please create an Issue or PR."
                         )
-                        raise RuntimeError
+                        raise TypeError
 
                 # for all other operation types
                 else:
