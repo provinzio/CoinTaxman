@@ -245,7 +245,10 @@ class Taxman:
             elif isinstance(op, transaction.Airdrop):
                 balance.put(op)
                 taxation_type = "Airdrop"
-                tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
+                real_gain = self.price_data.get_cost(op)
+                tx = transaction.TaxEvent(
+                    taxation_type, decimal.Decimal(), op, False, real_gain=real_gain
+                )
             elif isinstance(op, transaction.Commission):
                 balance.put(op)
                 is_taxable = self.in_tax_year(op)
