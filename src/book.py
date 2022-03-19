@@ -722,7 +722,7 @@ class Book:
 
                 # Save price in our local database for later.
                 price = misc.force_decimal(_price)
-                set_price_db(platform, coin, "EUR", utc_time, price)
+                set_price_db(platform, coin, price_currency, utc_time, price)
                 if best_price:
                     set_price_db(
                         platform,
