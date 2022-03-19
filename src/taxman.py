@@ -109,6 +109,7 @@ class Taxman:
             sell_value = self.price_data.get_cost(op)
             taxed_gain = decimal.Decimal()
             real_gain = decimal.Decimal()
+            any_sc_is_taxable = False
             # Coins which are older than (in this case) one year or
             # which come from an Airdrop, CoinLend or Commission (in an
             # foreign currency) will not be taxed.
@@ -127,6 +128,7 @@ class Taxman:
                     )
                     and not sc.op.coin == config.FIAT
                 )
+                any_sc_is_taxable |= is_taxable
                 # Only calculate the gains if necessary.
                 if is_taxable or config.CALCULATE_VIRTUAL_SELL:
                     partial_sell_value = (sc.sold / op.change) * sell_value
@@ -164,7 +166,7 @@ class Taxman:
                         taxation_type,
                         taxed_gain,
                         op,
-                        is_taxable,
+                        any_sc_is_taxable,
                         sell_value,
                         real_gain,
                         remark,
