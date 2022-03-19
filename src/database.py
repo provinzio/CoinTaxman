@@ -251,14 +251,17 @@ def set_price_db(
     except sqlite3.IntegrityError as e:
         if str(e) == f"UNIQUE constraint failed: {tablename}.utc_time":
             # Trying to add an already existing price in db.
+            old_price = get_price_db(db_path, tablename, utc_time)
+            assert old_price
             if overwrite:
-                # Overwrite price.
-                log.debug(
-                    "Overwriting price information for "
-                    f"{platform=}, {tablename=} at {utc_time=}"
-                )
-                __delete_price_db(db_path, tablename, utc_time)
-                __set_price_db(db_path, tablename, utc_time, price)
+                if abs(old_price - price) / price > decimal.Decimal("1E-16"):
+                    # Overwrite price.
+                    log.debug(
+                        f"Overwriting price information {old_price=} for "
+                        f"{platform=}, {tablename=} at {utc_time=} with {price=}"
+                    )
+                    __delete_price_db(db_path, tablename, utc_time)
+                    __set_price_db(db_path, tablename, utc_time, price)
             else:
                 # Check price from db and issue warning, if prices do not match.
                 price_db = get_price_db(db_path, tablename, utc_time)
