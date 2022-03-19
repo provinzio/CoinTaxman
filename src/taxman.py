@@ -140,7 +140,7 @@ class Taxman:
                 # multiple tax events. Else combine all in one tax event after the loop.
                 if config.EXPORT_ALL_EVENTS:
                     remark = (
-                        f"{sc.sold} von {sc.op.utc_time} "
+                        f"{sc.sold} vom {sc.op.utc_time} "
                         f"({sc.op.__class__.__name__})"
                     )
                     tx_list.append(
@@ -156,7 +156,7 @@ class Taxman:
                     )
             if not config.EXPORT_ALL_EVENTS:
                 remark = ", ".join(
-                    f"{sc.sold} von {sc.op.utc_time} " f"({sc.op.__class__.__name__})"
+                    f"{sc.sold} vom {sc.op.utc_time} " f"({sc.op.__class__.__name__})"
                     for sc in sold_coins
                 )
                 tx_list.append(
