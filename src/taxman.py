@@ -328,8 +328,8 @@ class Taxman:
             writer.writerow(
                 ["# software", "CoinTaxman <https://github.com/provinzio/CoinTaxman>"]
             )
-            if commit_hash := misc.get_current_commit_hash():
-                writer.writerow(["# commit", commit_hash])
+            commit_hash = misc.get_current_commit_hash(default="undetermined")
+            writer.writerow(["# commit", commit_hash])
             writer.writerow(["# updated", datetime.date.today().strftime("%x")])
 
             header = [
