@@ -17,19 +17,19 @@
 import csv
 import datetime
 import decimal
-import logging
 from pathlib import Path
 from typing import Optional, Type, Union
 
 import balance_queue
 import config
 import core
+import log_config
 import misc
 import transaction
 from book import Book
 from price_data import PriceData
 
-log = logging.getLogger(__name__)
+log = log_config.getLogger(__name__)
 
 
 class Taxman:
@@ -343,19 +343,20 @@ class Taxman:
 
     def print_evaluation(self) -> None:
         """Print short summary of evaluation to stdout."""
+        eval_str = "Evaluation:\n\n"
+
         # Summarize the tax evaluation.
         if self.tax_events:
-            print()
-            print(f"Your tax evaluation for {config.TAX_YEAR}:")
+            eval_str += f"Your tax evaluation for {config.TAX_YEAR}:\n"
             for taxation_type, tax_events in misc.group_by(
                 self.tax_events, "taxation_type"
             ).items():
                 taxed_gains = sum(tx.taxed_gain for tx in tax_events)
-                print(f"{taxation_type}: {taxed_gains:.2f} {config.FIAT}")
+                eval_str += f"{taxation_type}: {taxed_gains:.2f} {config.FIAT}\n"
         else:
-            print(
+            eval_str += (
                 "Either the evaluation has not run or there are no tax events "
-                f"for {config.TAX_YEAR}."
+                f"for {config.TAX_YEAR}.\n"
             )
 
         # Summarize the virtual sell, if all left over coins would be sold right now.
@@ -364,26 +365,29 @@ class Taxman:
             invested = sum(tx.sell_value for tx in self.virtual_tax_events)
             real_gains = sum(tx.real_gain for tx in self.virtual_tax_events)
             taxed_gains = sum(tx.taxed_gain for tx in self.virtual_tax_events)
-            print()
-            print(
+            eval_str += "\n"
+            eval_str += (
                 f"You are currently invested with {invested:.2f} {config.FIAT}.\n"
                 f"If you would sell everything right now, "
                 f"you would realize {real_gains:.2f} {config.FIAT} gains "
-                f"({taxed_gains:.2f} {config.FIAT} taxed gain)."
+                f"({taxed_gains:.2f} {config.FIAT} taxed gain).\n"
             )
-            print()
-            print("Your current portfolio should be:")
+
+            eval_str += "\n"
+            eval_str += "Your current portfolio should be:\n"
             for tx in sorted(
                 self.virtual_tax_events,
                 key=lambda tx: tx.sell_value,
                 reverse=True,
             ):
-                print(
+                eval_str += (
                     f"{tx.op.platform}: "
                     f"{tx.op.change:.6f} {tx.op.coin} > "
                     f"{tx.sell_value:.2f} {config.FIAT} "
-                    f"({tx.real_gain:.2f} gain, {tx.taxed_gain:.2f} taxed gain)"
+                    f"({tx.real_gain:.2f} gain, {tx.taxed_gain:.2f} taxed gain)\n"
                 )
+
+        log.info(eval_str)
 
     def export_evaluation_as_csv(self) -> Path:
         """Export detailed summary of all tax events to CSV.
@@ -407,8 +411,8 @@ class Taxman:
             writer.writerow(
                 ["# software", "CoinTaxman <https://github.com/provinzio/CoinTaxman>"]
             )
-            if commit_hash := misc.get_current_commit_hash():
-                writer.writerow(["# commit", commit_hash])
+            commit_hash = misc.get_current_commit_hash(default="undetermined")
+            writer.writerow(["# commit", commit_hash])
             writer.writerow(["# updated", datetime.date.today().strftime("%x")])
 
             header = [

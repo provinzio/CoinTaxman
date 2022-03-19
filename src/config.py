@@ -61,4 +61,5 @@ BASE_PATH = Path(__file__).parent.parent.absolute()
 ACCOUNT_STATMENTS_PATH = Path(BASE_PATH, "account_statements")
 DATA_PATH = Path(BASE_PATH, "data")
 EXPORT_PATH = Path(BASE_PATH, "export")
+TMP_LOG_FILEPATH = Path(EXPORT_PATH, "tmp.log")
 FIAT = FIAT_CLASS.name  # Convert to string.

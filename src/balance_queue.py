@@ -18,12 +18,12 @@ import abc
 import collections
 import dataclasses
 import decimal
-import logging
 from typing import Union
 
+import log_config
 import transaction
 
-log = logging.getLogger(__name__)
+log = log_config.getLogger(__name__)
 
 
 @dataclasses.dataclass
