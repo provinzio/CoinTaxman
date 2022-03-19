@@ -15,8 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import logging
-from logging import getLogger, shutdown
-from pathlib import Path
+from logging import getLogger, shutdown  # noqa: F401
 
 from config import TMP_LOG_FILEPATH
 
