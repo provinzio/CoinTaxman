@@ -18,8 +18,9 @@ import csv
 import datetime
 import decimal
 import re
+from collections import defaultdict
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import config
 import log_config
@@ -33,6 +34,13 @@ log = log_config.getLogger(__name__)
 
 
 class Book:
+    # Need to track state of duplicate deposit/withdrawal entries
+    # All deposits/withdrawals are held back until they occur a second time
+    # Initialize non-existing fields with None once they're called
+    kraken_held_ops: defaultdict[str, defaultdict[str, Any]] = defaultdict(
+        lambda: defaultdict(lambda: None)
+    )
+
     def __init__(self, price_data: PriceData) -> None:
         self.price_data = price_data
 
@@ -40,6 +48,40 @@ class Book:
 
     def __bool__(self) -> bool:
         return bool(self.operations)
+
+    def create_operation(
+        self,
+        operation: str,
+        utc_time: datetime.datetime,
+        platform: str,
+        change: decimal.Decimal,
+        coin: str,
+        row: int,
+        file_path: Path,
+    ) -> tr.Operation:
+
+        try:
+            Op = getattr(tr, operation)
+        except AttributeError:
+            log.error(
+                "Could not recognize operation `%s` in  %s file `%s:%i`.",
+                operation,
+                platform,
+                file_path,
+                row,
+            )
+            raise RuntimeError
+
+        op = Op(utc_time, platform, change, coin, row, file_path)
+        assert isinstance(op, tr.Operation)
+        return op
+
+    def _append_operation(
+        self,
+        operation: tr.Operation,
+    ) -> None:
+
+        self.operations.append(operation)
 
     def append_operation(
         self,
@@ -52,20 +94,17 @@ class Book:
         file_path: Path,
     ) -> None:
 
-        try:
-            Op = getattr(tr, operation)
-        except AttributeError:
-            log.warning(
-                "Could not recognize operation `%s` in  %s file `%s:%i`.",
-                operation,
-                platform,
-                file_path,
-                row,
-            )
-            return
+        op = self.create_operation(
+            operation,
+            utc_time,
+            platform,
+            change,
+            coin,
+            row,
+            file_path,
+        )
 
-        o = Op(utc_time, platform, change, coin, row, file_path)
-        self.operations.append(o)
+        self._append_operation(op)
 
     def _read_binance(self, file_path: Path, version: int = 1) -> None:
         platform = "binance"
@@ -453,30 +492,11 @@ class Book:
         operation_mapping = {
             "spend": "Sell",  # Sell ordered via 'Buy Crypto' button
             "receive": "Buy",  # Buy ordered via 'Buy Crypto' button
-            "transfer": "Airdrop",
             "reward": "StakingInterest",
+            "staking": "StakingInterest",
             "deposit": "Deposit",
             "withdrawal": "Withdrawal",
         }
-
-        # Need to track state of "duplicate entries"
-        # for deposits / withdrawals;
-        # the second deposit and the first withdrawal entry
-        # need to be skipped.
-        #   dup_state["deposit"] == 0:
-        #       Deposit is broadcast to blockchain
-        #       > Taxable event (is in public trade history)
-        #   dup_state["deposit"] == 1:
-        #       Deposit is credited to Kraken account
-        #       > Skipped
-        #   dup_state["withdrawal"] == 0:
-        #       Withdrawal is requested in Kraken account
-        #       > Skipped
-        #   dup_state["withdrawal"] == 1:
-        #       Withdrawal is broadcast to blockchain
-        #       > Taxable event (is in public trade history)
-        dup_state = {"deposit": 0, "withdrawal": 0}
-        dup_skip = {"deposit": 1, "withdrawal": 0}
 
         with open(file_path, encoding="utf8") as f:
             reader = csv.reader(f)
@@ -516,42 +536,58 @@ class Book:
                         balance,
                     ) = columns
                 else:
-                    raise RuntimeError(
-                        "Unknown Kraken ledgers format: "
+                    log.error(
+                        "{file_path}: Unknown Kraken ledgers format: "
                         "Number of rows do not match known versions."
                     )
+                    raise RuntimeError
 
                 row = reader.line_num
-
-                # Skip "duplicate entries" for deposits / withdrawals
-                if _type in dup_state.keys():
-                    skip = dup_state[_type] == dup_skip[_type]
-                    dup_state[_type] = (dup_state[_type] + 1) % 2
-                    if skip:
-                        continue
 
                 # Parse data.
                 utc_time = datetime.datetime.strptime(_utc_time, "%Y-%m-%d %H:%M:%S")
                 utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
                 change = misc.force_decimal(_amount)
+                # remove the appended .S for staked assets
+                _asset = _asset.removesuffix(".S")
                 coin = kraken_asset_map.get(_asset, _asset)
                 fee = misc.force_decimal(_fee)
                 operation = operation_mapping.get(_type)
                 if operation is None:
                     if _type == "trade":
                         operation = "Sell" if change < 0 else "Buy"
-                    elif _type in ["margin trade", "rollover", "settled"]:
+                    elif _type in ["margin trade", "rollover", "settled", "margin"]:
                         log.error(
-                            f"{file_path}: {row}: Margin trading is "
-                            "currently not supported. "
-                            "Please create an Issue or PR."
+                            f"{file_path} row {row}: Margin trading is currently not "
+                            "supported. Please create an Issue or PR."
                         )
                         raise RuntimeError
+                    elif _type == "transfer":
+                        if num_columns == 9:
+                            # for backwards compatibility assume Airdrop for staking
+                            log.warning(
+                                f"{file_path} row {row}: Staking is not supported for"
+                                "old Kraken ledger formats. "
+                                "Please create an Issue or PR."
+                            )
+                            operation = "Airdrop"
+                        elif subtype == "stakingfromspot":
+                            operation = "Staking"
+                        elif subtype == "stakingtospot":
+                            operation = "StakingEnd"
+                        elif subtype in ["spottostaking", "spotfromstaking"]:
+                            # duplicate entries for staking actions
+                            continue
+                        else:
+                            log.error(
+                                f"{file_path} row {row}: Order subtype '{subtype}' is "
+                                "currently not supported. Please create an Issue or PR."
+                            )
+                            raise RuntimeError
                     else:
                         log.error(
-                            f"{file_path}: {row}: Other order type '{_type}' "
-                            "is currently not supported. "
-                            "Please create an Issue or PR."
+                            f"{file_path} row {row}: Other order type '{_type}' is "
+                            "currently not supported. Please create an Issue or PR."
                         )
                         raise RuntimeError
                 change = abs(change)
@@ -561,22 +597,109 @@ class Book:
                 assert coin
                 assert change
 
-                self.append_operation(
-                    operation, utc_time, platform, change, coin, row, file_path
-                )
-
-                if fee != 0:
-                    self.append_operation(
-                        "Fee", utc_time, platform, fee, coin, row, file_path
+                # Skip duplicate entries for deposits / withdrawals and additional
+                # deposit / withdrawal lines for staking / unstaking / staking reward
+                # actions.
+                # The second deposit and the first withdrawal need to be considered,
+                # since these are the points in time where the user actually has the
+                # assets at their disposal. The first deposit and second withdrawal are
+                # in the public trade history and are skipped.
+                # For staking / unstaking / staking reward actions, deposits /
+                # withdrawals only occur once and will be ignored.
+                # The "appended" flag stores if an operation for a given refid has
+                # already been appended to the operations list:
+                # == None: Initial value (first occurrence)
+                # == False: No operation has been appended (second occurrence)
+                # == True: Operation has already been appended, this should not happen
+                if operation in ["Deposit", "Withdrawal"]:
+                    # First, create the operations
+                    op = self.create_operation(
+                        operation, utc_time, platform, change, coin, row, file_path
                     )
+                    op_fee = None
+                    if fee != 0:
+                        op_fee = self.create_operation(
+                            "Fee", utc_time, platform, fee, coin, row, file_path
+                        )
+                    # If this is the first occurrence, set the "appended" flag to false
+                    # and don't append the operation to the list. Instead, store the
+                    # data for verifying or appending it later.
+                    if self.kraken_held_ops[refid]["appended"] is None:
+                        self.kraken_held_ops[refid]["appended"] = False
+                        self.kraken_held_ops[refid]["operation"] = op
+                        self.kraken_held_ops[refid]["operation_fee"] = op_fee
+                    # If this is the second occurrence, append a new operation, set the
+                    # "appended" flag to True and assert that the data of this operation
+                    # agrees with the data of the first occurrence.
+                    elif self.kraken_held_ops[refid]["appended"] is False:
+                        self.kraken_held_ops[refid]["appended"] = True
+                        try:
+                            assert isinstance(
+                                op, type(self.kraken_held_ops[refid]["operation"])
+                            ), "operation"
+                            assert (
+                                op.change
+                                == self.kraken_held_ops[refid]["operation"].change
+                            ), "change"
+                            assert (
+                                op.coin == self.kraken_held_ops[refid]["operation"].coin
+                            ), "coin"
+                        except AssertionError as e:
+                            log.error(
+                                f"{file_path} row {row}: Parameters for refid {refid} "
+                                f"({operation}) do not agree: {e}. "
+                                "Please create an Issue or PR."
+                            )
+                            raise RuntimeError
+                        # For deposits, this is all we need to do before appending the
+                        # operation. For withdrawals, we need to append the first
+                        # withdrawal as soon as the second withdrawal occurs. Therefore,
+                        # overwrite the operation with the stored first withdrawal.
+                        if operation == "Withdrawal":
+                            op = self.kraken_held_ops[refid]["operation"]
+                            op_fee = self.kraken_held_ops[refid]["operation_fee"]
+                        # Finally, append the operations and delete the stored
+                        # operations to reduce memory consumption
+                        self._append_operation(op)
+                        if op_fee:
+                            self._append_operation(op_fee)
+                        del self.kraken_held_ops[refid]["operation"]
+                        del self.kraken_held_ops[refid]["operation_fee"]
+                    # If an operation with the same refid has been already appended,
+                    # this is the third occurrence. Throw an error if this happens.
+                    elif self.kraken_held_ops[refid]["appended"] is True:
+                        log.error(
+                            f"{file_path} row {row}: More than two entries with refid "
+                            f"{refid} should not exist ({operation}). "
+                            "Please create an Issue or PR."
+                        )
+                        raise RuntimeError
+                    # This should never happen
+                    else:
+                        log.error(
+                            f"{file_path} row {row}: Unknown value for appended "
+                            f"operation flag {self.kraken_held_ops[refid]['appended']}."
+                            "Please create an Issue or PR."
+                        )
+                        raise TypeError
 
-        assert dup_state["deposit"] == 0, (
-            "Orphaned deposit. (Must always come in pairs). " "Is your file corrupted?"
-        )
-        assert dup_state["withdrawal"] == 0, (
-            "Orphaned withdrawal. (Must always come in pairs). "
-            "Is your file corrupted?"
-        )
+                # for all other operation types
+                else:
+                    self.append_operation(
+                        operation, utc_time, platform, change, coin, row, file_path
+                    )
+                    if fee != 0:
+                        self.append_operation(
+                            "Fee", utc_time, platform, fee, coin, row, file_path
+                        )
+                    if operation == "StakingInterest":
+                        # For Kraken, the rewarded coins are added to the staked
+                        # portfolio. TODO (for MULTI_DEPOT only): Directly add the
+                        # rewarded coins to the staking depot (not like here with the
+                        # detour of adding it to spot and then staking the same amount)
+                        self.append_operation(
+                            "Staking", utc_time, platform, change, coin, row, file_path
+                        )
 
     def _read_kraken_ledgers_old(self, file_path: Path) -> None:
 
