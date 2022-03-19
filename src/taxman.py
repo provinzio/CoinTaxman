@@ -72,7 +72,7 @@ class Taxman:
         balance = self.BalanceType()
 
         def evaluate_sell(
-            op: transaction.Operation
+            op: transaction.Operation,
         ) -> Optional[list[transaction.TaxEvent]]:
             # Remove coins from queue.
             sold_coins, unsold_coins = balance.sell(op.change)
@@ -197,14 +197,12 @@ class Taxman:
                 tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             elif isinstance(op, transaction.Buy):
                 balance.put(op)
-                if op.coin.casefold() == config.FIAT.casefold():
+                if op.coin == config.FIAT:
                     continue
                 else:
                     taxation_type = "Kauf"
                     cost = self.price_data.get_cost(op)
-                    price = self.price_data.get_price(
-                        op.platform, op.coin, op.utc_time, config.FIAT
-                    )
+                    price = self.price_data.get_price(op.platform, op.coin, op.utc_time)
                     remark = (
                         f"Kosten {cost} {config.FIAT}, "
                         f"Preis {price} {config.FIAT}/{op.coin}"
@@ -213,10 +211,9 @@ class Taxman:
                         taxation_type, decimal.Decimal(), op, False, remark=remark
                     )
             elif isinstance(op, transaction.Sell):
-                if op.coin.casefold() == config.FIAT.casefold():
+                if op.coin == config.FIAT:
                     continue
-                tx_ = evaluate_sell(op)
-                if tx_ is None:
+                if (tx := evaluate_sell(op)) is None:
                     if self.in_tax_year(op):
                         taxation_type = "Verkauf (nicht steuerbar)"
                     else:
@@ -224,8 +221,6 @@ class Taxman:
                     tx = transaction.TaxEvent(
                         taxation_type, decimal.Decimal(), op, False
                     )
-                else:
-                    tx = tx_
             elif isinstance(
                 op, (transaction.CoinLendInterest, transaction.StakingInterest)
             ):
@@ -279,12 +274,14 @@ class Taxman:
                 raise NotImplementedError
 
             # for all valid cases, add tax event to list
-            if not tx:
+            if tx is None:
                 continue
             elif isinstance(tx, list):
                 self.tax_events.extend(tx)
-            else:
+            elif isinstance(tx, transaction.TaxEvent):
                 self.tax_events.append(tx)
+            else:
+                raise TypeError
 
         # Check that all relevant positions were considered.
         if balance.buffer_fee:
@@ -313,6 +310,8 @@ class Taxman:
                     self.tax_events.extend(tx_)
                 elif isinstance(tx_, transaction.TaxEvent):
                     self.tax_events.append(tx_)
+                else:
+                    raise TypeError
 
     def _evaluate_taxation_per_coin(
         self,
