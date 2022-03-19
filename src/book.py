@@ -607,8 +607,8 @@ class Book:
                 # withdrawals only occur once and will be ignored.
                 # The "appended" flag stores if an operation for a given refid has
                 # already been appended to the operations list:
-                # == None: Initial value, this is the first occurence
-                # == False: No operation has been appended, this is the second occurence
+                # == None: Initial value, this is the first occurrence
+                # == False: No operation has been appended, this is the second occurrence
                 # == True: Operation has already been appended, this should not happen
                 if operation in ["Deposit", "Withdrawal"]:
                     # First, create the operations
@@ -620,16 +620,16 @@ class Book:
                         op_fee = self.create_operation(
                             "Fee", utc_time, platform, fee, coin, row, file_path
                         )
-                    # If this is the first occurence, set the "appended" flag to false
+                    # If this is the first occurrence, set the "appended" flag to false
                     # and don't append the operation to the list. Instead, store the
                     # data for verifying or appending it later.
                     if self.kraken_held_ops[refid]["appended"] is None:
                         self.kraken_held_ops[refid]["appended"] = False
                         self.kraken_held_ops[refid]["operation"] = op
                         self.kraken_held_ops[refid]["operation_fee"] = op_fee
-                    # If this is the second occurence, append a new operation, set the
+                    # If this is the second occurrence, append a new operation, set the
                     # "appended" flag to True and assert that the data of this operation
-                    # agrees with the data of the first occurence.
+                    # agrees with the data of the first occurrence.
                     elif self.kraken_held_ops[refid]["appended"] is False:
                         self.kraken_held_ops[refid]["appended"] = True
                         try:
@@ -665,7 +665,7 @@ class Book:
                         del self.kraken_held_ops[refid]["operation"]
                         del self.kraken_held_ops[refid]["operation_fee"]
                     # If an operation with the same refid has been already appended,
-                    # this is the third occurence. Throw an error if this happens.
+                    # this is the third occurrence. Throw an error if this happens.
                     elif self.kraken_held_ops[refid]["appended"] is True:
                         log.error(
                             f"{file_path} row {row}: More than two entries with refid "
