@@ -717,8 +717,7 @@ class Book:
             reader = csv.reader(f)
 
             # skip header
-            line = next(reader)
-
+            next(reader)
             line = next(reader)
 
             transaction_file_warn = (

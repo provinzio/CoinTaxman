@@ -164,7 +164,7 @@ def __patch_002(db_path: Path) -> None:
                         )
                     price = decimal.Decimal(_price)
                     set_price_db("", base_asset, quote_asset, utc_time, price, db_path)
-                cur = conn.execute(f"DROP TABLE `{tablename}`;")
+                conn.execute(f"DROP TABLE `{tablename}`;")
 
 
 def _get_patch_func_names() -> Iterator[str]:
