@@ -116,6 +116,7 @@ class Book:
             "Commission History": "Commission",
             "Commission Fee Shared With You": "Commission",
             "Referrer rebates": "Commission",
+            "Referral Kickback": "Commission",
             "Launchpool Interest": "StakingInterest",
             "Cash Voucher distribution": "Airdrop",
             "Super BNB Mining": "StakingInterest",
