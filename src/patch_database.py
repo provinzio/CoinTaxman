@@ -119,17 +119,19 @@ def __patch_001(db_path: Path) -> None:
         query = "SELECT name,sql FROM sqlite_master WHERE type='table'"
         cur = conn.execute(query)
         for tablename, sql in cur.fetchall():
-            if "price str" not in sql.lower():
-                query = f"""
-                CREATE TABLE "sql_temp_table" (
+            if "price str" not in sql.lower() and not tablename.startswith("§"):
+                conn.execute(
+                    """CREATE TABLE "sql_temp_table" (
                     "utc_time" DATETIME PRIMARY KEY,
-                    "price"	STR NOT NULL
-                );
-                INSERT INTO "sql_temp_table" ("price","utc_time")
-                SELECT "price","utc_time" FROM "{tablename}";
-                DROP TABLE "{tablename}";
-                ALTER TABLE "sql_temp_table" "{tablename}";
-                """
+                    "price"	VARCHAR(255) NOT NULL
+                );"""
+                )
+                conn.execute(
+                    f"""INSERT INTO "sql_temp_table" ("utc_time","price")
+                SELECT "utc_time",cast("price" as text) FROM "{tablename}";"""
+                )
+                conn.execute(f'DROP TABLE "{tablename}";')
+                conn.execute(f'ALTER TABLE "sql_temp_table" RENAME TO "{tablename}";')
 
 
 def __patch_002(db_path: Path) -> None:
@@ -164,7 +166,18 @@ def __patch_002(db_path: Path) -> None:
                         )
                     price = decimal.Decimal(_price)
                     set_price_db("", base_asset, quote_asset, utc_time, price, db_path)
-                cur = conn.execute(f"DROP TABLE `{tablename}`;")
+                conn.execute(f"DROP TABLE `{tablename}`;")
+
+
+def __patch_003(db_path: Path) -> None:
+    """Patch 001 did not converted the prices from float to varchar previously.
+    Run the fixed patch again. So that every user has a correct database with
+    prices as strings.
+
+    Args:
+        db_path (Path)
+    """
+    __patch_001(db_path)
 
 
 def _get_patch_func_names() -> Iterator[str]:

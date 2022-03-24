@@ -257,11 +257,13 @@ def get_next_file_path(path: Path, base_filename: str, extension: str) -> Path:
     return file_path
 
 
-def get_current_commit_hash() -> Optional[str]:
+def get_current_commit_hash(default: Optional[str] = None) -> str:
     try:
         output = subprocess.check_output(["git", "rev-parse", "HEAD"])
         commit = output.decode()
         commit = commit.strip()
         return commit
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        return None
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        if default is None:
+            raise RuntimeError("Unable to determine commit hash") from e
+        return default

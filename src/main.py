@@ -14,8 +14,11 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import os
+
 import log_config
 from book import Book
+from config import TMP_LOG_FILEPATH
 from patch_database import patch_databases
 from price_data import PriceData
 from taxman import Taxman
@@ -38,8 +41,13 @@ def main() -> None:
 
     book.get_price_from_csv()
     taxman.evaluate_taxation()
-    taxman.export_evaluation_as_csv()
+    evaluation_file_path = taxman.export_evaluation_as_csv()
     taxman.print_evaluation()
+
+    # Save log
+    log_file_path = evaluation_file_path.with_suffix(".log")
+    log_config.shutdown()
+    os.rename(TMP_LOG_FILEPATH, log_file_path)
 
 
 if __name__ == "__main__":

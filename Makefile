@@ -62,4 +62,7 @@ else # Linux
 	source .pyenv/bin/activate && make install
 endif
 
-.PHONY: flake8 mypy check-isort lint isort black format build run run-container clean cleanrun check-db install install-dev venv
+archive:
+	python src/archive_evaluation.py
+
+.PHONY: flake8 mypy check-isort lint isort black format build run run-container clean cleanrun check-db install install-dev venv archive
