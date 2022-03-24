@@ -332,7 +332,7 @@ def set_price_db(
             # Check price from db and issue warning, if prices do not match.
             price_db = misc.force_decimal(__get_price_db(db_path, tablename, utc_time))
             rel_error = abs(price - price_db) / price * 100
-            if price != price_db:
+            if abs(rel_error) > decimal.Decimal("1E-16"):
                 log.warning(
                     f"Tried to write {tablename} price to database, but a "
                     f"different price exists already ({platform} @ {utc_time})"
