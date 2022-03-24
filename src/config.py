@@ -25,7 +25,14 @@ import core
 
 config = configparser.ConfigParser()
 config.read("config.ini")
-COUNTRY = core.Country[config["BASE"].get("COUNTRY", "GERMANY")]
+
+try:
+    COUNTRY = core.Country[config["BASE"].get("COUNTRY", "GERMANY")]
+except KeyError as e:
+    raise NotImplementedError(
+        f"Your country {e} is currently not supported. " "Please create an Issue or PR."
+    )
+
 TAX_YEAR = int(config["BASE"].get("TAX_YEAR", "2021"))
 MEAN_MISSING_PRICES = config["BASE"].getboolean("MEAN_MISSING_PRICES")
 CALCULATE_VIRTUAL_SELL = config["BASE"].getboolean("CALCULATE_VIRTUAL_SELL")
@@ -52,9 +59,11 @@ if COUNTRY == core.Country.GERMANY:
     def IS_LONG_TERM(buy: datetime, sell: datetime) -> bool:
         return buy + relativedelta(years=1) < sell
 
-
 else:
-    raise NotImplementedError(f"Your country {COUNTRY} is not supported.")
+    raise NotImplementedError(
+        f"Your country {COUNTRY} is currently not supported. "
+        "Please create an Issue or PR."
+    )
 
 # Program specific constants.
 BASE_PATH = Path(__file__).parent.parent.absolute()
