@@ -394,6 +394,9 @@ class Book:
                             "Fee", utc_time, platform, eur_fee, "EUR", row, file_path
                         )
 
+    def _read_coinbase_v2(self, file_path: Path) -> None:
+        self._read_coinbase(file_path=file_path)
+
     def _read_coinbase_pro(self, file_path: Path) -> None:
         platform = "coinbase_pro"
         operation_mapping = {
@@ -1039,6 +1042,7 @@ class Book:
                 "binance": 1,
                 "binance_v2": 1,
                 "coinbase": 1,
+                "coinbase_v2": 1,
                 "coinbase_pro": 1,
                 "kraken_ledgers_old": 1,
                 "kraken_ledgers": 1,
@@ -1071,6 +1075,13 @@ class Book:
                     "Converts, and Rewards Income, and Coinbase Earn "
                     "transactions are taxable events. For final tax "
                     "obligations, please consult your tax advisor."
+                ],
+                "coinbase_v2": [
+                    "You can use this transaction report to inform your "
+                    "likely tax obligations. For US customers, Sells, "
+                    "Converts, Rewards Income, Coinbase Earn "
+                    "transactions, and Donations are taxable events. "
+                    "For final tax obligations, please consult your tax advisor."
                 ],
                 "coinbase_pro": [
                     "portfolio",
