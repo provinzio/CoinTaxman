@@ -338,7 +338,6 @@ def set_price_db(
                     f"different price exists already ({platform} @ {utc_time})"
                 )
                 if overwrite:
-                if abs(old_price - price) / price > decimal.Decimal("1E-16"):
                     # Overwrite price.
                     log.warning(
                         f"Relative error: %.6f %%, using new price: {price}, "
