@@ -34,7 +34,6 @@ from typing import (
     cast,
 )
 
-import config
 import core
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -220,18 +219,6 @@ def is_fiat(symbol: Union[str, core.Fiat]) -> bool:
         bool: True if `symbol` is a fiat currency. False otherwise.
     """
     return isinstance(symbol, core.Fiat) or symbol in core.Fiat.__members__
-
-
-def is_config_fiat(symbol: Union[str, core.Fiat]) -> bool:
-    """Check if `symbol` is the configured fiat currency for taxation.
-
-    Args:
-        fiat (str): Currency Symbol.
-
-    Returns:
-        bool: True if `symbol` is the configured fiat currency. False otherwise.
-    """
-    return symbol.casefold() == config.FIAT.casefold()
 
 
 def get_next_file_path(path: Path, base_filename: str, extension: str) -> Path:

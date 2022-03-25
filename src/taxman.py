@@ -78,7 +78,7 @@ class Taxman:
             sold_coins, unsold_coins = balance.sell(op.change)
             tx_list = []
 
-            if misc.is_config_fiat(coin):
+            if coin == config.FIAT:
                 # Not taxable.
                 return None
 
@@ -199,7 +199,7 @@ class Taxman:
                 tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             elif isinstance(op, transaction.Buy):
                 balance.put(op)
-                if misc.is_config_fiat(op.coin):
+                if op.coin == config.FIAT:
                     continue
                 else:
                     taxation_type = "Kauf"
@@ -213,7 +213,7 @@ class Taxman:
                         taxation_type, decimal.Decimal(), op, False, remark=remark
                     )
             elif isinstance(op, transaction.Sell):
-                if misc.is_config_fiat(op.coin):
+                if op.coin == config.FIAT:
                     continue
                 if (tx := evaluate_sell(op)) is None:
                     if self.in_tax_year(op):
@@ -258,7 +258,7 @@ class Taxman:
                 taxed_gain = self.price_data.get_cost(op)
                 tx = transaction.TaxEvent(taxation_type, taxed_gain, op, is_taxable)
             elif isinstance(op, transaction.Deposit):
-                if not misc.is_config_fiat(coin):
+                if coin != config.FIAT:
                     log.warning(
                         f"Unresolved deposit of {op.change} {coin} "
                         f"on {op.platform} at {op.utc_time}. "
@@ -267,7 +267,7 @@ class Taxman:
                 taxation_type = "Einzahlung"
                 tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             elif isinstance(op, transaction.Withdrawal):
-                if not misc.is_config_fiat(coin):
+                if coin != config.FIAT:
                     log.warning(
                         f"Unresolved withdrawal of {op.change} {coin} "
                         f"from {op.platform} at {op.utc_time}. "

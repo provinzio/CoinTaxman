@@ -71,4 +71,17 @@ ACCOUNT_STATMENTS_PATH = Path(BASE_PATH, "account_statements")
 DATA_PATH = Path(BASE_PATH, "data")
 EXPORT_PATH = Path(BASE_PATH, "export")
 TMP_LOG_FILEPATH = Path(EXPORT_PATH, "tmp.log")
-FIAT = FIAT_CLASS.name  # Convert to string.
+
+# Class for simplified casefold string comparison with configured fiat currency
+class Fiat(str):
+    def __init__(self, name):
+        self.name = name
+
+    def __eq__(self, fiat):
+        if isinstance(fiat, str):
+            return self.name.casefold() == fiat.casefold()
+        else:
+            raise TypeError(f"Unsupported operand for ==: {type(fiat)}")
+
+
+FIAT = Fiat(FIAT_CLASS.name)

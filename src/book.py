@@ -852,7 +852,7 @@ class Book:
                         )
                         raise RuntimeError
                 elif operation in ["Buy", "Sell"]:
-                    if not misc.is_config_fiat(asset_price_currency):
+                    if asset_price_currency != config.FIAT:
                         log.error(
                             f"Only {config.FIAT} is supported as "
                             "'Asset market price currency', since price fetching for "
@@ -883,7 +883,7 @@ class Book:
                         utc_time,
                         platform,
                         change_fiat,
-                        config.FIAT.upper(),
+                        config.FIAT,
                         row,
                         file_path,
                     )
@@ -893,7 +893,7 @@ class Book:
                         utc_time,
                         platform,
                         change_fiat,
-                        config.FIAT.upper(),
+                        config.FIAT,
                         row,
                         file_path,
                     )
