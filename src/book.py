@@ -1299,12 +1299,12 @@ class Book:
         Returns:
             bool: Return True if everything went as expected.
         """
-        paths = self.get_account_statement_paths(config.ACCOUNT_STATMENTS_PATH)
+        paths = self.get_account_statement_paths(config.ACCOUNT_STATEMENTS_PATH)
 
         if not paths:
             log.warning(
                 "No account statement files located in %s.",
-                config.ACCOUNT_STATMENTS_PATH,
+                config.ACCOUNT_STATEMENTS_PATH,
             )
             return False
 
