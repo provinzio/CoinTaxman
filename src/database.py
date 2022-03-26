@@ -327,11 +327,11 @@ def set_price_db(
     try:
         __set_price_db(db_path, tablename, utc_time, price)
     except sqlite3.IntegrityError as e:
-        if str(e) == f"UNIQUE constraint failed: {tablename}.utc_time":
+        if f"UNIQUE constraint failed: {tablename}.utc_time" in str(e):
             # Trying to add an already existing price in db.
             # Check price from db and issue warning, if prices do not match.
             price_db = misc.force_decimal(__get_price_db(db_path, tablename, utc_time))
-            rel_error = abs(price - price_db) / price * 100
+            rel_error = abs(price - price_db) / price * 100 if price != 0 else 100
             if abs(rel_error) > decimal.Decimal("1E-16"):
                 log.warning(
                     f"Tried to write {tablename} price to database, but a "
