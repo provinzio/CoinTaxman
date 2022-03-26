@@ -45,6 +45,8 @@ class Book:
         self.price_data = price_data
 
         self.operations: list[tr.Operation] = []
+        # list of airdrops with user-configured taxation
+        self.airdrop_configs: list[tr.Airdrop] = []
 
     def __bool__(self) -> bool:
         return bool(self.operations)
@@ -1271,20 +1273,20 @@ class Book:
                 "Skipping file."
             )
 
-    def get_account_statement_paths(self, statements_dir: Path) -> list[Path]:
-        """Return file paths of all account statements in `statements_dir`.
+    def get_file_paths(self, folder_dir: Path) -> list[Path]:
+        """Return file paths of all input files in `folder_dir`.
+        For example, this function can return all account statement file paths.
 
         Args:
-            statements_dir (str): Folder in which account statements
-                                  will be searched.
+            folder_dir (str): Folder in input files will be searched.
 
         Returns:
-            list[Path]: List of account statement file paths.
+            list[Path]: List of input file paths.
         """
         file_paths: list[Path] = []
 
-        if statements_dir.is_dir():
-            for file_path in statements_dir.iterdir():
+        if folder_dir.is_dir():
+            for file_path in folder_dir.iterdir():
                 # Ignore .gitkeep and temporary excel files.
                 filename = file_path.stem
                 if filename == ".gitkeep" or filename.startswith("~$"):
@@ -1299,12 +1301,12 @@ class Book:
         Returns:
             bool: Return True if everything went as expected.
         """
-        paths = self.get_account_statement_paths(config.ACCOUNT_STATMENTS_PATH)
+        paths = self.get_file_paths(config.ACCOUNT_STATEMENTS_PATH)
 
         if not paths:
             log.warning(
                 "No account statement files located in %s.",
-                config.ACCOUNT_STATMENTS_PATH,
+                config.ACCOUNT_STATEMENTS_PATH,
             )
             return False
 
@@ -1314,5 +1316,71 @@ class Book:
         if not bool(self):
             log.warning("Unable to import any data.")
             return False
+
+        return True
+
+    def get_airdrops(self) -> bool:
+        """Read all airdrop configurations from the folder specified in the config.
+        This allows the user to configure the taxation of each airdrop individually.
+
+        Returns:
+            bool: Return True if everything went as expected.
+        """
+        paths = self.get_file_paths(config.AIRDROP_STATEMENTS_PATH)
+
+        if not paths:
+            log.debug(
+                "No airdrop configuration files located in %s.",
+                config.AIRDROP_STATEMENTS_PATH,
+            )
+            return False
+
+        for file_path in paths:
+            with open(file_path, encoding="utf8") as f:
+                reader = csv.reader(f)
+                line = next(reader)
+
+                if line == ["platform", "utc_time", "coin", "value", "taxable"]:
+                    log.info(f"Reading airdrop configurations from {file_path}")
+                else:
+                    log.error(
+                        f"Airdrop configuration header is not correct in {file_path}"
+                    )
+                    raise RuntimeError
+
+                for (
+                    platform,
+                    csv_utc_time,
+                    coin,
+                    csv_change,
+                    csv_taxable,
+                ) in reader:
+                    row = reader.line_num
+
+                    utc_time = datetime.datetime.fromisoformat(csv_utc_time)
+                    change = misc.force_decimal(csv_change)
+
+                    airdrop = tr.Airdrop(
+                        utc_time,
+                        platform,
+                        change,
+                        coin,
+                        row,
+                        file_path,
+                    )
+
+                    if csv_taxable.lower() == "true":
+                        taxable = True
+                    elif csv_taxable.lower() == "false":
+                        taxable = False
+                    else:
+                        log.error(
+                            f"Unkown taxable parameter '{csv_taxable}' in row {row} "
+                            f"of {file_path}: Should be 'true' or 'false'"
+                        )
+                        raise RuntimeError
+                    airdrop.set_taxable(taxable)
+
+                    self.airdrop_configs.append(airdrop)
 
         return True

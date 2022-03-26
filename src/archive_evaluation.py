@@ -4,7 +4,7 @@ from pathlib import Path
 from zipfile import ZipFile
 
 import log_config
-from config import ACCOUNT_STATMENTS_PATH, BASE_PATH, DATA_PATH, EXPORT_PATH, TAX_YEAR
+from config import ACCOUNT_STATEMENTS_PATH, BASE_PATH, DATA_PATH, EXPORT_PATH, TAX_YEAR
 
 log = log_config.getLogger(__name__)
 IGNORE_FILES = [".gitkeep"]
@@ -19,10 +19,10 @@ def append_files(basedir: Path, filenames: list[str]) -> None:
 # Account statements
 log.debug("Archive account statements")
 account_statements = [
-    f for f in os.listdir(ACCOUNT_STATMENTS_PATH) if f not in IGNORE_FILES
+    f for f in os.listdir(ACCOUNT_STATEMENTS_PATH) if f not in IGNORE_FILES
 ]
 log.debug("Found: %s", ", ".join(account_statements))
-append_files(ACCOUNT_STATMENTS_PATH, account_statements)
+append_files(ACCOUNT_STATEMENTS_PATH, account_statements)
 
 # Price database
 log.debug("Archive price database")
