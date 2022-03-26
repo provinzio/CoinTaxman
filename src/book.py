@@ -45,6 +45,8 @@ class Book:
         self.price_data = price_data
 
         self.operations: list[tr.Operation] = []
+        # list of airdrops with user-configured taxation
+        self.airdrop_configs: list[tr.Airdrop] = []
 
     def __bool__(self) -> bool:
         return bool(self.operations)
@@ -1314,5 +1316,71 @@ class Book:
         if not bool(self):
             log.warning("Unable to import any data.")
             return False
+
+        return True
+
+    def get_airdrops(self) -> bool:
+        """Read all airdrop configurations from the folder specified in the config.
+        This allows the user to configure the taxation of each airdrop individually.
+
+        Returns:
+            bool: Return True if everything went as expected.
+        """
+        paths = self.get_file_paths(config.AIRDROP_STATEMENTS_PATH)
+
+        if not paths:
+            log.debug(
+                "No airdrop configuration files located in %s.",
+                config.AIRDROP_STATEMENTS_PATH,
+            )
+            return False
+
+        for file_path in paths:
+            with open(file_path, encoding="utf8") as f:
+                reader = csv.reader(f)
+                line = next(reader)
+
+                if line == ["platform", "utc_time", "coin", "value", "taxable"]:
+                    log.info(f"Reading airdrop configurations from {file_path}")
+                else:
+                    log.error(
+                        f"Airdrop configuration header is not correct in {file_path}"
+                    )
+                    raise RuntimeError
+
+                for (
+                    platform,
+                    csv_utc_time,
+                    coin,
+                    csv_change,
+                    csv_taxable,
+                ) in reader:
+                    row = reader.line_num
+
+                    utc_time = datetime.datetime.fromisoformat(csv_utc_time)
+                    change = misc.force_decimal(csv_change)
+
+                    airdrop = tr.Airdrop(
+                        utc_time,
+                        platform,
+                        change,
+                        coin,
+                        row,
+                        file_path,
+                    )
+
+                    if csv_taxable.lower() == "true":
+                        taxable = True
+                    elif csv_taxable.lower() == "false":
+                        taxable = False
+                    else:
+                        log.error(
+                            f"Unkown taxable parameter '{csv_taxable}' in row {row} "
+                            f"of {file_path}: Should be 'true' or 'false'"
+                        )
+                        raise RuntimeError
+                    airdrop.set_taxable(taxable)
+
+                    self.airdrop_configs.append(airdrop)
 
         return True

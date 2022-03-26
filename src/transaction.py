@@ -108,7 +108,10 @@ class StakingInterest(Transaction):
 
 
 class Airdrop(Transaction):
-    pass
+    taxable = True
+
+    def set_taxable(self, taxable):
+        self.taxable = taxable
 
 
 class Commission(Transaction):

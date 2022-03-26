@@ -50,13 +50,13 @@ if COUNTRY == core.Country.GERMANY:
     def IS_LONG_TERM(buy: datetime, sell: datetime) -> bool:
         return buy + relativedelta(years=1) < sell
 
-
 else:
     raise NotImplementedError(f"Your country {COUNTRY} is not supported.")
 
 # Program specific constants.
 BASE_PATH = Path(__file__).parent.parent.absolute()
 ACCOUNT_STATEMENTS_PATH = Path(BASE_PATH, "account_statements")
+AIRDROP_STATEMENTS_PATH = Path(BASE_PATH, "airdrop_configs")
 DATA_PATH = Path(BASE_PATH, "data")
 EXPORT_PATH = Path(BASE_PATH, "export")
 TMP_LOG_FILEPATH = Path(EXPORT_PATH, "tmp.log")
