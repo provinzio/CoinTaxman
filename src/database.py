@@ -330,8 +330,15 @@ def set_price_db(
         if f"UNIQUE constraint failed: {tablename}.utc_time" in str(e):
             # Trying to add an already existing price in db.
             # Check price from db and issue warning, if prices do not match.
-            price_db = misc.force_decimal(__get_price_db(db_path, tablename, utc_time))
-            rel_error = abs(price - price_db) / price * 100 if price != 0 else 100
+            price_db = __get_price_db(db_path, tablename, utc_time)
+            assert isinstance(price_db, decimal.Decimal)
+            assert isinstance(price, decimal.Decimal)
+            if price == price_db:
+                rel_error = decimal.Decimal(0)
+            elif price != 0:
+                rel_error = decimal.Decimal(1)
+            else:
+                rel_error = abs(price - price_db) / price
             if abs(rel_error) > decimal.Decimal("1E-16"):
                 log.warning(
                     f"Tried to write {tablename} price to database, but a "
@@ -341,14 +348,14 @@ def set_price_db(
                     # Overwrite price.
                     log.warning(
                         f"Relative error: %.6f %%, using new price: {price}, "
-                        f"overwriting database price: {price_db}", rel_error
+                        f"overwriting database price: {price_db}", rel_error * 100
                     )
                     __delete_price_db(db_path, tablename, utc_time)
                     __set_price_db(db_path, tablename, utc_time, price)
                 else:
                     log.warning(
                         f"Relative error: %.6f %%, discarding new price: {price}, "
-                        f"using database price: {price_db}", rel_error
+                        f"using database price: {price_db}", rel_error * 100
                     )
         else:
             raise e
