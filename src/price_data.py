@@ -431,7 +431,7 @@ class PriceData:
 
                 if not data["error"]:
                     break
-                elif data["error"] == ['EGeneral:Invalid arguments']:
+                elif data["error"] == ["EGeneral:Invalid arguments"]:
                     # add pair to invalid pairs list
                     # leads to inversion of pair next time
                     log.warning(
