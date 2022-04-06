@@ -4,7 +4,14 @@ from pathlib import Path
 from zipfile import ZipFile
 
 import log_config
-from config import ACCOUNT_STATMENTS_PATH, BASE_PATH, DATA_PATH, EXPORT_PATH, TAX_YEAR
+from config import (
+    ACCOUNT_STATMENTS_PATH,
+    BASE_PATH,
+    CONFIG_FILE,
+    DATA_PATH,
+    EXPORT_PATH,
+    TAX_YEAR,
+)
 
 log = log_config.getLogger(__name__)
 IGNORE_FILES = [".gitkeep"]
@@ -40,6 +47,11 @@ log_file = evaluation.removesuffix(".csv") + ".log"
 log.debug("Found: %s", ", ".join((evaluation, log_file)))
 append_files(EXPORT_PATH, [evaluation, log_file])
 
+# Evaluation and log file
+log.debug("Archive config file")
+if CONFIG_FILE.is_file():
+    log.debug("Found: %s", ", ".join((evaluation, log_file)))
+    filepaths.append(CONFIG_FILE)
 
 archive_filepath = Path(
     EXPORT_PATH, f"CoinTaxman - Crypto Tax Evaluation - {TAX_YEAR}.zip"
