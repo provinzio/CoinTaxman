@@ -49,7 +49,7 @@ def get_version(db_path: Path) -> int:
             )
 
 
-def get_price_db(
+def __get_price_db(
     db_path: Path,
     tablename: str,
     utc_time: datetime.datetime,
@@ -77,14 +77,40 @@ def get_price_db(
                 raise e
 
             if prices := cur.fetchone():
-                return misc.force_decimal(prices[0])
+                price = misc.force_decimal(prices[0])
+                return price
 
     return None
 
 
+def get_price_db(
+    db_path: Path,
+    coin: str,
+    reference_coin: str,
+    utc_time: datetime.datetime,
+) -> Optional[decimal.Decimal]:
+    """Try to retrieve the price from our local database.
+
+    Args:
+        db_path (Path)
+        coin (str)
+        reference_coin(str)
+        utc_time (datetime.datetime)
+
+    Returns:
+        Optional[decimal.Decimal]: Price.
+    """
+    tablename, inverted = get_sorted_tablename(coin, reference_coin)
+    price = __get_price_db(db_path, tablename, utc_time)
+    if price is not None and inverted:
+        price = misc.reciprocal(price)
+    return price
+
+
 def mean_price_db(
     db_path: Path,
-    tablename: str,
+    coin: str,
+    reference_coin: str,
     utc_time: datetime.datetime,
 ) -> decimal.Decimal:
     """Try to retrieve the price right before and after `utc_time`
@@ -101,6 +127,8 @@ def mean_price_db(
     Returns:
         decimal.Decimal: Price.
     """
+    tablename, inverted = get_sorted_tablename(coin, reference_coin)
+
     if db_path.is_file():
         with sqlite3.connect(db_path) as conn:
             cur = conn.cursor()
@@ -146,6 +174,8 @@ def mean_price_db(
                 # Linear gradiant between the neighbored transactions.
                 m = (after_price - before_price) / (after_time - before_time)
                 price = before_price + (d_utc_time - before_time) * m
+                if inverted:
+                    price = misc.reciprocal(price)
                 return price
 
     return decimal.Decimal()
@@ -235,8 +265,7 @@ def set_price_db(
     """
     assert coin != reference_coin
 
-    coin_a, coin_b, inverted = _sort_pair(coin, reference_coin)
-    tablename = get_tablename(coin_a, coin_b)
+    tablename, inverted = get_sorted_tablename(coin, reference_coin)
 
     if inverted:
         price = misc.reciprocal(price)
@@ -251,7 +280,7 @@ def set_price_db(
     except sqlite3.IntegrityError as e:
         if str(e) == f"UNIQUE constraint failed: {tablename}.utc_time":
             # Trying to add an already existing price in db.
-            old_price = get_price_db(db_path, tablename, utc_time)
+            old_price = __get_price_db(db_path, tablename, utc_time)
             assert isinstance(old_price, decimal.Decimal)
             if overwrite:
                 if abs(old_price - price) / price > decimal.Decimal("1E-16"):
@@ -264,7 +293,7 @@ def set_price_db(
                     __set_price_db(db_path, tablename, utc_time, price)
             else:
                 # Check price from db and issue warning, if prices do not match.
-                price_db = get_price_db(db_path, tablename, utc_time)
+                price_db = __get_price_db(db_path, tablename, utc_time)
                 if price != price_db:
                     log.warning(
                         "Tried to write price to database, "
@@ -296,7 +325,14 @@ def _sort_pair(coin: str, reference_coin: str) -> Tuple[str, str, bool]:
 
 
 def get_tablename(coin: str, reference_coin: str) -> str:
+    assert coin <= reference_coin, "tablenames must be sorted"
     return f"{coin}/{reference_coin}"
+
+
+def get_sorted_tablename(coin: str, reference_coin: str) -> tuple[str, bool]:
+    coin_a, coin_b, inverted = _sort_pair(coin, reference_coin)
+    tablename = get_tablename(coin_a, coin_b)
+    return tablename, inverted
 
 
 def get_tablenames_from_db(cur: sqlite3.Cursor) -> list[str]:
