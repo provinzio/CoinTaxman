@@ -180,11 +180,11 @@ def sort_operations(
         list[Operation]: Sorted operations by `operations_order` and specific keys.
     """
 
-    def key(op: Operation) -> tuple:
+    def key_function(op: Operation) -> tuple:
         try:
             idx = operations_order.index(type(op))
         except ValueError:
             idx = 0
         return tuple(([getattr(op, key) for key in keys] if keys else []) + [idx])
 
-    return sorted(operations, key=key)
+    return sorted(operations, key=key_function)
