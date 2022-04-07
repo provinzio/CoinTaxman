@@ -103,11 +103,7 @@ def get_price_db(
         Optional[decimal.Decimal]: Price.
     """
     tablename, inverted = get_sorted_tablename(coin, reference_coin)
-
-    if db_path is None and platform:
-        db_path = get_db_path(platform)
-
-    assert isinstance(db_path, Path), "DB path is no valid path"
+    db_path = get_db_path(platform, db_path)
 
     if price := __get_price_db(db_path, tablename, utc_time):
         if inverted:
@@ -209,11 +205,7 @@ def mean_price_db(
         decimal.Decimal: Price.
     """
     tablename, inverted = get_sorted_tablename(coin, reference_coin)
-
-    if db_path is None and platform:
-        db_path = get_db_path(platform)
-
-    assert isinstance(db_path, Path), "DB path is no valid path"
+    db_path = get_db_path(platform, db_path)
 
     if price := __mean_price_db(db_path, tablename, utc_time):
         if inverted:
@@ -309,14 +301,10 @@ def set_price_db(
     assert coin != reference_coin
 
     tablename, inverted = get_sorted_tablename(coin, reference_coin)
+    db_path = get_db_path(platform, db_path)
 
     if inverted:
         price = misc.reciprocal(price)
-
-    if db_path is None and platform:
-        db_path = get_db_path(platform)
-
-    assert isinstance(db_path, Path), "DB path is no valid path"
 
     try:
         __set_price_db(db_path, tablename, utc_time, price)
@@ -393,8 +381,12 @@ def get_tablenames_from_db(cur: sqlite3.Cursor) -> list[str]:
     return tablenames
 
 
-def get_db_path(platform: str) -> Path:
-    return Path(config.DATA_PATH, f"{platform}.db")
+def get_db_path(platform: str, db_path: Optional[Path] = None) -> Path:
+    if db_path is None and platform:
+        db_path = Path(config.DATA_PATH, f"{platform}.db")
+
+    assert isinstance(db_path, Path), "DB path is no valid path"
+    return db_path
 
 
 def check_database_or_create(platform: str) -> None:
