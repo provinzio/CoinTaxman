@@ -97,7 +97,7 @@ def get_price_db(
         coin (str)
         reference_coin (str)
         utc_time (datetime.datetime)
-        db_path (Optional[Path])
+        db_path (Optional[Path]): Defaults to None.
 
     Returns:
         Optional[decimal.Decimal]: Price.
@@ -199,10 +199,10 @@ def mean_price_db(
         coin (str)
         reference_coin (str)
         utc_time (datetime.datetime)
-        db_path (Optional[Path])
+        db_path (Optional[Path]): Defaults to None.
 
     Returns:
-        decimal.Decimal: Price.
+        decimal.Decimal: Price
     """
     tablename, inverted = get_sorted_tablename(coin, reference_coin)
     db_path = get_db_path(platform, db_path)
@@ -295,8 +295,8 @@ def set_price_db(
         reference_coin (str)
         utc_time (datetime.datetime)
         price (decimal.Decimal)
-        db_path (Optional[Path])
-        overwrite (bool)
+        db_path (Optional[Path]): Defaults to None.
+        overwrite (bool): Default to False.
     """
     assert coin != reference_coin
 
