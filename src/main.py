@@ -40,7 +40,11 @@ def main() -> None:
         return
 
     book.get_price_from_csv()
+    # Merge identical operations together, which makes it easier to match fees
+    # afterwards (as long as there are only one buy/sell pair per time).
+    # And reduced database accesses.
     book.merge_identical_operations()
+    book.match_fees_with_operations()
 
     taxman.evaluate_taxation()
     evaluation_file_path = taxman.export_evaluation_as_csv()

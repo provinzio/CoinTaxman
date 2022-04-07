@@ -154,8 +154,11 @@ class Taxman:
                 remark,
             )
 
+        # TODO handle buy.fees and sell.fees.
+
         for op in operations:
             if isinstance(op, transaction.Fee):
+                raise RuntimeError("single fee operations shouldn't exist")
                 balance.remove_fee(op.change)
                 if self.in_tax_year(op):
                     # Fees reduce taxed gain.

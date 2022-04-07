@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import collections
 import csv
 import datetime
 import decimal
@@ -1258,6 +1259,70 @@ class Book:
     def merge_identical_operations(self) -> None:
         grouped_ops = misc.group_by(self.operations, tr.Operation.identical_columns)
         self.operations = [tr.Operation.merge(*ops) for ops in grouped_ops.values()]
+
+    def match_fees_with_operations(self) -> None:
+        # Split operations in fees and other operations.
+        operations = []
+        all_fees: list[tr.Fee] = []
+        for op in self.operations:
+            if isinstance(op, tr.Fee):
+                all_fees.append(op)
+            else:
+                operations.append(op)
+
+        # Only keep none fee operations in book.
+        self.operations = operations
+
+        # Match fees to book operations.
+        platform_fees = misc.group_by(all_fees, "platform")
+        for platform, fees in platform_fees.items():
+            time_fees = misc.group_by(all_fees, "utc_time")
+            for utc_time, fees in time_fees.items():
+
+                # Find matching operations by platform and time.
+                matching_operations = {
+                    idx: op
+                    for idx, op in enumerate(self.operations)
+                    if op.platform == platform and op.utc_time == utc_time
+                }
+
+                # Group matching operations in dict with
+                # { operation typename: list of indices }
+                t_op = collections.defaultdict(list)
+                for idx, op in matching_operations.items():
+                    t_op[op.type_name].append(idx)
+
+                # Check if this is a buy/sell-pair.
+                # Fees might occure by other operation types,
+                # but this is currently not implemented.
+                is_buy_sell_pair = all(
+                    (
+                        len(matching_operations) == 2,
+                        len(t_op[tr.Buy.type_name_c()]) == 1,
+                        len(t_op[tr.Sell.type_name_c()]) == 1,
+                    )
+                )
+                if is_buy_sell_pair:
+                    # Fees have to be added to all buys and sells.
+                    # 1. Fees on sells are the transaction cost,
+                    #    which might be fully tax relevant for this sell
+                    #    and which gets removed from the account balance
+                    # 2. Fees on buys increase the buy-in price of the coins
+                    #    which is relevant when selling these (not buying)
+                    (sell_idx,) = t_op[tr.Buy.type_name_c()]
+                    (buy_idx,) = t_op[tr.Sell.type_name_c()]
+                    assert self.operations[sell_idx].fees is None
+                    assert self.operations[buy_idx].fees is None
+                    self.operations[sell_idx].fees = fees
+                    self.operations[buy_idx].fees = fees
+                else:
+                    log.warning(
+                        "Fee matching is not implemented for this case. "
+                        "Your fees will be discarded and are not evaluated in "
+                        "the tax evaluation.\n"
+                        "Please create an Issue or PR.\n\n"
+                        f"{matching_operations=}\n{fees=}"
+                    )
 
     def read_file(self, file_path: Path) -> None:
         """Import transactions form an account statement.

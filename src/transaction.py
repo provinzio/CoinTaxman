@@ -23,12 +23,17 @@ import itertools
 import typing
 from copy import copy
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, Optional
 
 import log_config
 import misc
 
 log = log_config.getLogger(__name__)
+
+
+# TODO Implementation might be cleaner, when we add a class AbstractOperation
+# which gets inherited by Fee and Operation
+# Currently it might be possible for fees to have fees, which is unwanted.
 
 
 @dataclasses.dataclass
@@ -39,10 +44,15 @@ class Operation:
     coin: str
     line: list[int]
     file_path: Path
+    fees: "Optional[list[Fee]]" = None
+
+    @classmethod
+    def type_name_c(cls) -> str:
+        return cls.__name__
 
     @property
     def type_name(self) -> str:
-        return self.__class__.__name__
+        return self.type_name_c()
 
     identical_columns: ClassVar[list[str]] = [
         "type_name",
@@ -65,6 +75,14 @@ class Operation:
                 # (without parameters)
                 continue
 
+            actual_value = getattr(self, field.name)
+
+            if field.name == "fees":
+                # BUG currently kind of ignored, would be nice when
+                # implemented correctly.
+                assert actual_value is None
+                continue
+
             actual_type = typing.get_origin(field.type) or field.type
 
             if isinstance(actual_type, typing._SpecialForm):
@@ -78,7 +96,6 @@ class Operation:
                     else:
                         actual_type = eval(actual_type)
 
-            actual_value = getattr(self, field.name)
             if not isinstance(actual_value, actual_type):
                 log.warning(
                     f"\t{field.name}: '{type(actual_value)}' "
@@ -111,6 +128,10 @@ class Operation:
         # Update this operation with merged entries.
         o.change = misc.dsum(op.change for op in operations)
         o.line = list(itertools.chain(*(op.line for op in operations)))
+        if not all(op.fees is None for op in operations):
+            raise NotImplementedError(
+                "merging operations with fees is currently not supported"
+            )
         return o
 
 
