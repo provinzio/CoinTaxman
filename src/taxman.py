@@ -71,7 +71,9 @@ class Taxman:
     ) -> None:
         balance = self.BalanceType()
 
-        def evaluate_sell(op: transaction.Operation) -> Optional[transaction.TaxEvent]:
+        def evaluate_sell(
+            op: transaction.Operation, force: bool = False
+        ) -> Optional[transaction.TaxEvent]:
             # Remove coins from queue.
             sold_coins, unsold_coins = balance.sell(op.change)
 
@@ -97,7 +99,7 @@ class Taxman:
                 )
                 raise RuntimeError
 
-            if not self.in_tax_year(op):
+            if not self.in_tax_year(op) and not force:
                 # Sell is only taxable in the respective year.
                 return None
 
@@ -231,7 +233,7 @@ class Taxman:
                 -1,
                 Path(""),
             )
-            if tx_ := evaluate_sell(virtual_sell):
+            if tx_ := evaluate_sell(virtual_sell, force=True):
                 self.virtual_tax_events.append(tx_)
 
     def _evaluate_taxation_per_coin(
