@@ -321,7 +321,7 @@ def set_price_db(
             assert isinstance(price, decimal.Decimal)
             if price == price_db:
                 rel_error = decimal.Decimal(0)
-            elif price != 0:
+            elif price == 0:
                 rel_error = decimal.Decimal(1)
             else:
                 rel_error = abs(price - price_db) / price
