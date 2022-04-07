@@ -105,9 +105,13 @@ def get_price_db(
     tablename, inverted = get_sorted_tablename(coin, reference_coin)
     db_path = get_db_path(platform, db_path)
 
-    if price := __get_price_db(db_path, tablename, utc_time):
-        if inverted:
-            price = misc.reciprocal(price)
+    price = __get_price_db(db_path, tablename, utc_time)
+
+    if not price:
+        return None
+
+    if inverted:
+        price = misc.reciprocal(price)
 
     return price
 
