@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import (
     Any,
     Callable,
+    Iterable,
     Optional,
     SupportsFloat,
     SupportsInt,
@@ -66,6 +67,10 @@ def xdecimal(
         x = str(x)
     assert x is None or isinstance(x, str) or isinstance(x, decimal.Decimal)
     return None if x is None or x == "" else decimal.Decimal(x)
+
+
+def dsum(__iterable: Iterable[decimal.Decimal]) -> decimal.Decimal:
+    return decimal.Decimal(sum(__iterable))
 
 
 def force_decimal(x: Union[None, str, int, float, decimal.Decimal]) -> decimal.Decimal:

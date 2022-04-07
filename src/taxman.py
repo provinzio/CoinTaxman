@@ -227,7 +227,11 @@ class Taxman:
         # Calculate the amount of coins which should be left on the platform
         # and evaluate the (taxed) gain, if the coin would be sold right now.
         if config.CALCULATE_UNREALIZED_GAINS and (
-            (left_coin := sum(((bop.op.change - bop.sold) for bop in balance.queue)))
+            (
+                left_coin := misc.dsum(
+                    ((bop.op.change - bop.sold) for bop in balance.queue)
+                )
+            )
         ):
             assert isinstance(left_coin, decimal.Decimal)
             # Calculate unrealized gains for the last time of `TAX_YEAR`.
@@ -285,7 +289,7 @@ class Taxman:
             for taxation_type, tax_events in misc.group_by(
                 self.tax_events, "taxation_type"
             ).items():
-                taxed_gains = sum(tx.taxed_gain for tx in tax_events)
+                taxed_gains = misc.dsum(tx.taxed_gain for tx in tax_events)
                 eval_str += f"{taxation_type}: {taxed_gains:.2f} {config.FIAT}\n"
         else:
             eval_str += (
@@ -301,9 +305,9 @@ class Taxman:
             )
             lo_date = latest_operation.op.utc_time.strftime("%d.%m.%y")
 
-            invsted = sum(tx.sell_price for tx in self.virtual_tax_events)
-            real_gains = sum(tx.real_gain for tx in self.virtual_tax_events)
-            taxed_gains = sum(tx.taxed_gain for tx in self.virtual_tax_events)
+            invsted = misc.dsum(tx.sell_price for tx in self.virtual_tax_events)
+            real_gains = misc.dsum(tx.real_gain for tx in self.virtual_tax_events)
+            taxed_gains = misc.dsum(tx.taxed_gain for tx in self.virtual_tax_events)
             eval_str += "\n"
             eval_str += (
                 f"Deadline {config.TAX_YEAR}: {lo_date}\n"
