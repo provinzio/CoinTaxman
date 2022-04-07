@@ -78,11 +78,12 @@ class Book:
 
     def _append_operation(
         self,
-        operation: tr.Operation,
+        op: tr.Operation,
     ) -> None:
         # Discard operations after the `TAX_YEAR`.
-        if operation.utc_time.year <= config.TAX_YEAR:
-            self.operations.append(operation)
+        # Ignore operations which make no change.
+        if op.utc_time.year <= config.TAX_YEAR and op.change != 0:
+            self.operations.append(op)
 
     def append_operation(
         self,
@@ -95,7 +96,8 @@ class Book:
         file_path: Path,
     ) -> None:
         # Discard operations after the `TAX_YEAR`.
-        if utc_time.year <= config.TAX_YEAR:
+        # Ignore operations which make no change.
+        if utc_time.year <= config.TAX_YEAR and change != 0:
             op = self.create_operation(
                 operation,
                 utc_time,
