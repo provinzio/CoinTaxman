@@ -80,8 +80,9 @@ class Book:
         self,
         operation: tr.Operation,
     ) -> None:
-
-        self.operations.append(operation)
+        # Discard operations after the `TAX_YEAR`.
+        if operation.utc_time.year <= config.TAX_YEAR:
+            self.operations.append(operation)
 
     def append_operation(
         self,
@@ -93,18 +94,19 @@ class Book:
         row: int,
         file_path: Path,
     ) -> None:
+        # Discard operations after the `TAX_YEAR`.
+        if utc_time.year <= config.TAX_YEAR:
+            op = self.create_operation(
+                operation,
+                utc_time,
+                platform,
+                change,
+                coin,
+                row,
+                file_path,
+            )
 
-        op = self.create_operation(
-            operation,
-            utc_time,
-            platform,
-            change,
-            coin,
-            row,
-            file_path,
-        )
-
-        self._append_operation(op)
+            self._append_operation(op)
 
     def _read_binance(self, file_path: Path, version: int = 1) -> None:
         platform = "binance"

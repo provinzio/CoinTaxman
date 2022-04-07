@@ -30,13 +30,7 @@ import log_config
 import misc
 import transaction
 from core import kraken_pair_map
-from database import (
-    get_db_path,
-    get_price_db,
-    get_tablename,
-    mean_price_db,
-    set_price_db,
-)
+from database import get_price_db, mean_price_db, set_price_db
 
 log = log_config.getLogger(__name__)
 
@@ -50,12 +44,6 @@ log = log_config.getLogger(__name__)
 class PriceData:
     # list of Kraken pairs that returned invalid arguments error
     kraken_invalid_pairs: list[str] = []
-
-    def get_db_path(self, platform: str) -> Path:
-        return Path(config.DATA_PATH, f"{platform}.db")
-
-    def get_tablename(self, coin: str, reference_coin: str) -> str:
-        return f"{coin}/{reference_coin}"
 
     @misc.delayed
     def _get_price_binance(
@@ -156,6 +144,18 @@ class PriceData:
         return average_price
 
     @misc.delayed
+    def _get_price_coinbase(
+        self,
+        base_asset: str,
+        utc_time: datetime.datetime,
+        quote_asset: str,
+        minutes_step: int = 5,
+    ) -> decimal.Decimal:
+        return self._get_price_coinbase_pro(
+            base_asset, utc_time, quote_asset, minutes_step
+        )
+
+    @misc.delayed
     def _get_price_coinbase_pro(
         self,
         base_asset: str,
@@ -195,7 +195,6 @@ class PriceData:
             params = f"start={start}&end={end}&granularity=60"
             url = f"{root_url}/products/{pair}/candles?{params}"
 
-            log.debug("Calling %s", url)
             log.debug(
                 f"Querying Coinbase Pro candles for {pair} at {utc_time} "
                 f"(offset={minutes_offset}m): Calling %s",
@@ -541,10 +540,8 @@ class PriceData:
         if coin == reference_coin:
             return decimal.Decimal("1")
 
-        db_path = get_db_path(platform)
-
         # Check if price exists already in our database.
-        if (price := get_price_db(db_path, coin, reference_coin, utc_time)) is None:
+        if (price := get_price_db(platform, coin, reference_coin, utc_time)) is None:
             # Price doesn't exists. Fetch price from platform.
             try:
                 get_price = getattr(self, f"_get_price_{platform}")
@@ -553,15 +550,13 @@ class PriceData:
 
             price = get_price(coin, utc_time, reference_coin, **kwargs)
             assert isinstance(price, decimal.Decimal)
-            set_price_db(
-                platform, coin, reference_coin, utc_time, price, db_path=db_path
-            )
+            set_price_db(platform, coin, reference_coin, utc_time, price)
 
         if config.MEAN_MISSING_PRICES and price <= 0.0:
             # The price is missing. Check for prices before and after the
             # transaction and estimate the price.
             # Do not save price in database.
-            price = mean_price_db(db_path, coin, reference_coin, utc_time)
+            price = mean_price_db(platform, coin, reference_coin, utc_time)
 
         return price
 
