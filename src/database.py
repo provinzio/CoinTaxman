@@ -107,7 +107,11 @@ def get_price_db(
 
     price = __get_price_db(db_path, tablename, utc_time)
 
-    if not price:
+    if price is None:
+        return None
+
+    if not price and config.REFETCH_MISSING_PRICES:
+        # Return None instead of price=0, so that our tool refetches the price.
         return None
 
     if inverted:
@@ -317,14 +321,22 @@ def set_price_db(
             # Trying to add an already existing price in db.
             # Check price from db and issue warning, if prices do not match.
             price_db = __get_price_db(db_path, tablename, utc_time)
+
             assert isinstance(price_db, decimal.Decimal)
             assert isinstance(price, decimal.Decimal)
+
+            # Always overwrite missing prices in database.
+            if price_db == 0:
+                overwrite = True
+
+            # Calculate the relative error between new price and price in database.
             if price == price_db:
                 rel_error = decimal.Decimal(0)
             elif price == 0:
                 rel_error = decimal.Decimal(1)
             else:
                 rel_error = abs(price - price_db) / price
+
             if abs(rel_error) > decimal.Decimal("1E-16"):
                 log.debug(
                     f"Tried to write {tablename} price to database, but a "
