@@ -326,13 +326,13 @@ def set_price_db(
             else:
                 rel_error = abs(price - price_db) / price
             if abs(rel_error) > decimal.Decimal("1E-16"):
-                log.warning(
+                log.debug(
                     f"Tried to write {tablename} price to database, but a "
                     f"different price exists already ({platform} @ {utc_time})"
                 )
                 if overwrite:
                     # Overwrite price.
-                    log.warning(
+                    log.info(
                         f"Relative error: %.6f %%, using new price: {price}, "
                         f"overwriting database price: {price_db}",
                         rel_error * 100,
