@@ -64,6 +64,12 @@ class Taxman:
     def in_tax_year(self, op: transaction.Operation) -> bool:
         return op.utc_time.year == config.TAX_YEAR
 
+    def tax_deadline(self) -> datetime.datetime:
+        return min(
+            datetime.datetime(config.TAX_YEAR, 12, 31, 23, 59, 59),
+            datetime.datetime.now(),
+        ).astimezone()
+
     def _evaluate_taxation_GERMANY(
         self,
         coin: str,
@@ -225,8 +231,10 @@ class Taxman:
             and self.price_data.get_cost(op)
         ):
             assert isinstance(left_coin, decimal.Decimal)
+            # Calculate unrealized gains for the last time of `TAX_YEAR`.
+            # If we are currently in ´TAX_YEAR` take now.
             virtual_sell = transaction.Sell(
-                datetime.datetime.now().astimezone(),
+                self.tax_deadline(),
                 op.platform,
                 left_coin,
                 coin,
@@ -253,6 +261,10 @@ class Taxman:
     def evaluate_taxation(self) -> None:
         """Evaluate the taxation using country specific function."""
         log.debug("Starting evaluation...")
+
+        assert all(
+            op.utc_time.year <= config.TAX_YEAR for op in self.book.operations
+        ), "For tax evaluation, no operation should happen after the tax year."
 
         if config.MULTI_DEPOT:
             # Evaluate taxation separated by platforms and coins.
@@ -285,19 +297,25 @@ class Taxman:
         # Summarize the virtual sell, if all left over coins would be sold right now.
         if self.virtual_tax_events:
             assert config.CALCULATE_UNREALIZED_GAINS
+            latest_operation = max(
+                self.virtual_tax_events, key=lambda tx: tx.op.utc_time
+            )
+            lo_date = latest_operation.op.utc_time.strftime("%d.%m.%y")
+
             invsted = sum(tx.sell_price for tx in self.virtual_tax_events)
             real_gains = sum(tx.real_gain for tx in self.virtual_tax_events)
             taxed_gains = sum(tx.taxed_gain for tx in self.virtual_tax_events)
             eval_str += "\n"
             eval_str += (
-                f"You are currently invested with {invsted:.2f} {config.FIAT}.\n"
-                f"If you would sell everything right now, "
-                f"you would realize {real_gains:.2f} {config.FIAT} gains "
+                f"Deadline {config.TAX_YEAR}: {lo_date}\n"
+                f"You were invested with {invsted:.2f} {config.FIAT}.\n"
+                f"If you would have sold everything then, "
+                f"you would have realized {real_gains:.2f} {config.FIAT} gains "
                 f"({taxed_gains:.2f} {config.FIAT} taxed gain).\n"
             )
 
             eval_str += "\n"
-            eval_str += "Your current portfolio should be:\n"
+            eval_str += f"Your portfolio on {lo_date} was:\n"
             for tx in sorted(
                 self.virtual_tax_events,
                 key=lambda tx: tx.sell_price,
