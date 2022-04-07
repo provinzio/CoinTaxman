@@ -24,7 +24,7 @@ from typing import Iterator, Optional
 
 import config
 import log_config
-from database import set_price_db
+from database import get_tablenames_from_db, set_price_db
 
 FUNC_PREFIX = "__patch_"
 log = log_config.getLogger(__name__)
@@ -100,15 +100,6 @@ def get_patch_func_version(func_name: str) -> int:
     return version
 
 
-def get_tablenames(cur: sqlite3.Cursor, ignore_version_table: bool = True) -> list[str]:
-    query = "SELECT name FROM sqlite_master WHERE type='table'"
-    if ignore_version_table:
-        query += " AND name != '§version'"
-    cur.execute(f"{query};")
-    tablenames = [result[0] for result in cur.fetchall()]
-    return tablenames
-
-
 def __patch_001(db_path: Path) -> None:
     """Convert prices from float to string
 
@@ -142,7 +133,7 @@ def __patch_002(db_path: Path) -> None:
     """
     with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
-        tablenames = get_tablenames(cur)
+        tablenames = get_tablenames_from_db(cur)
         # Iterate over all tables.
         for tablename in tablenames:
             base_asset, quote_asset = tablename.split("/")

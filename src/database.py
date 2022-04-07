@@ -386,8 +386,13 @@ def get_sorted_tablename(coin: str, reference_coin: str) -> tuple[str, bool]:
     return tablename, inverted
 
 
-def get_tablenames_from_db(cur: sqlite3.Cursor) -> list[str]:
-    cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
+def get_tablenames_from_db(
+    cur: sqlite3.Cursor, ignore_version_table: bool = True
+) -> list[str]:
+    query = "SELECT name FROM sqlite_master WHERE type='table'"
+    if ignore_version_table:
+        query += " AND name != '§version'"
+    cur.execute(f"{query};")
     tablenames = [result[0] for result in cur.fetchall()]
     return tablenames
 
