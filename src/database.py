@@ -107,7 +107,7 @@ def get_price_db(
 
     if price := __get_price_db(db_path, tablename, utc_time):
         if inverted:
-            price = misc.force_decimal(price)
+            price = misc.reciprocal(price)
 
     return price
 
