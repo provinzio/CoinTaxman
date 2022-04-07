@@ -172,7 +172,7 @@ def parse_iso_timestamp_to_decimal_timestamp(d: str) -> decimal.Decimal:
     return to_decimal_timestamp(datetime.datetime.fromisoformat(d))
 
 
-def group_by(lst: L, key: str) -> dict[Any, L]:
+def group_by(lst: L, key: Union[str, list[str]]) -> dict[Any, L]:
     """Group a list of objects by `key`.
 
     Args:
@@ -183,8 +183,15 @@ def group_by(lst: L, key: str) -> dict[Any, L]:
         dict[Any, list]: Dict with different `key`as keys.
     """
     d = collections.defaultdict(list)
-    for e in lst:
-        d[getattr(e, key)].append(e)
+    if isinstance(key, str):
+        for e in lst:
+            d[getattr(e, key)].append(e)
+    elif isinstance(key, list):
+        assert all(isinstance(k, str) for k in key)
+        for e in lst:
+            d[tuple(getattr(e, k) for k in key)].append(e)
+    else:
+        raise TypeError
     return dict(d)
 
 
