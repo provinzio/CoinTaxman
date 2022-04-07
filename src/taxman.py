@@ -228,7 +228,6 @@ class Taxman:
         # and evaluate the (taxed) gain, if the coin would be sold right now.
         if config.CALCULATE_UNREALIZED_GAINS and (
             (left_coin := sum(((bop.op.change - bop.sold) for bop in balance.queue)))
-            and self.price_data.get_cost(op)
         ):
             assert isinstance(left_coin, decimal.Decimal)
             # Calculate unrealized gains for the last time of `TAX_YEAR`.
