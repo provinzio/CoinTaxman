@@ -308,13 +308,13 @@ class Taxman:
             )
             lo_date = latest_operation.op.utc_time.strftime("%d.%m.%y")
 
-            invsted = misc.dsum(tx.sell_price for tx in self.virtual_tax_events)
+            invested = misc.dsum(tx.sell_price for tx in self.virtual_tax_events)
             real_gains = misc.dsum(tx.real_gain for tx in self.virtual_tax_events)
             taxed_gains = misc.dsum(tx.taxed_gain for tx in self.virtual_tax_events)
             eval_str += "\n"
             eval_str += (
                 f"Deadline {config.TAX_YEAR}: {lo_date}\n"
-                f"You were invested with {invsted:.2f} {config.FIAT}.\n"
+                f"You were invested with {invested:.2f} {config.FIAT}.\n"
                 f"If you would have sold everything then, "
                 f"you would have realized {real_gains:.2f} {config.FIAT} gains "
                 f"({taxed_gains:.2f} {config.FIAT} taxed gain).\n"
