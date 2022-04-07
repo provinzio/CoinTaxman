@@ -364,14 +364,9 @@ def _sort_pair(coin: str, reference_coin: str) -> Tuple[str, str, bool]:
     return coin_a, coin_b, inverted
 
 
-def get_tablename(coin: str, reference_coin: str) -> str:
-    assert coin <= reference_coin, "tablenames must be sorted"
-    return f"{coin}/{reference_coin}"
-
-
 def get_sorted_tablename(coin: str, reference_coin: str) -> tuple[str, bool]:
     coin_a, coin_b, inverted = _sort_pair(coin, reference_coin)
-    tablename = get_tablename(coin_a, coin_b)
+    tablename = f"{coin_a}/{coin_b}"
     return tablename, inverted
 
 
