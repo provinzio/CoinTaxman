@@ -91,7 +91,7 @@ class Taxman:
                 # Queue ran out of items to sell and not all coins
                 # could be sold.
                 log.error(
-                    f"{op.file_path.name}: Line {op.line}: "
+                    f"{op.file_path.name}: Lines {op.line}: "
                     f"Not enough {coin} in queue to sell: "
                     f"missing {unsold_coins} {coin} "
                     f"(transaction from {op.utc_time} "
@@ -237,7 +237,7 @@ class Taxman:
                 op.platform,
                 left_coin,
                 coin,
-                -1,
+                [-1],
                 Path(""),
             )
             if tx_ := evaluate_sell(virtual_sell, force=True):

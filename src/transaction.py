@@ -33,7 +33,7 @@ class Operation:
     platform: str
     change: decimal.Decimal
     coin: str
-    line: int
+    line: list[int]
     file_path: Path
 
     def __post_init__(self):
@@ -52,10 +52,16 @@ class Operation:
 
             actual_type = typing.get_origin(field.type) or field.type
 
-            if isinstance(actual_type, str):
-                actual_type = eval(actual_type)
-            elif isinstance(actual_type, typing._SpecialForm):
+            if isinstance(actual_type, typing._SpecialForm):
                 actual_type = field.type.__args__
+            elif isinstance(actual_type, str):
+                while isinstance(actual_type, str):
+                    # BUG row:list[int] value gets only checked for list.
+                    # not as list[int]
+                    if actual_type.startswith("list["):
+                        actual_type = list
+                    else:
+                        actual_type = eval(actual_type)
 
             actual_value = getattr(self, field.name)
             if not isinstance(actual_value, actual_type):

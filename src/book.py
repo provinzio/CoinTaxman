@@ -72,7 +72,7 @@ class Book:
             )
             raise RuntimeError
 
-        op = Op(utc_time, platform, change, coin, row, file_path)
+        op = Op(utc_time, platform, change, coin, [row], file_path)
         assert isinstance(op, tr.Operation)
         return op
 
@@ -654,7 +654,8 @@ class Book:
                                 op.coin == self.kraken_held_ops[refid]["operation"].coin
                             ), "coin"
                         except AssertionError as e:
-                            first_row = self.kraken_held_ops[refid]["operation"].line
+                            # Row is internally saved as list[int].
+                            first_row = self.kraken_held_ops[refid]["operation"].line[0]
                             log.error(
                                 "Two internal kraken operations matched by the "
                                 f"same {refid=} don't have the same {e}.\n"
