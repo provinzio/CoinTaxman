@@ -45,9 +45,6 @@ class PriceData:
     # list of Kraken pairs that returned invalid arguments error
     kraken_invalid_pairs: list[str] = []
 
-    def get_db_path(self, platform: str) -> Path:
-        return Path(config.DATA_PATH, f"{platform}.db")
-
     @misc.delayed
     def _get_price_binance(
         self,
