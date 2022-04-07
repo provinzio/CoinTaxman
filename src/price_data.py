@@ -30,7 +30,7 @@ import log_config
 import misc
 import transaction
 from core import kraken_pair_map
-from database import get_price_db, mean_price_db, set_price_db
+from database import get_price_db, get_tablenames_from_db, mean_price_db, set_price_db
 
 log = log_config.getLogger(__name__)
 
@@ -591,9 +591,8 @@ class PriceData:
                         )
 
                 with sqlite3.connect(db_path) as conn:
-                    query = "SELECT name FROM sqlite_master WHERE type='table'"
-                    cur = conn.execute(query)
-                    tablenames = (result[0] for result in cur.fetchall())
+                    cur = conn.cursor()
+                    tablenames = get_tablenames_from_db(cur)
                     for tablename in tablenames:
                         base_asset, quote_asset = tablename.split("/")
                         query = f"SELECT utc_time FROM `{tablename}` WHERE price<=0.0;"
