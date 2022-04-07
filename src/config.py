@@ -38,7 +38,7 @@ COUNTRY = core.Country[config["BASE"].get("COUNTRY", "GERMANY")]
 TAX_YEAR = int(config["BASE"].get("TAX_YEAR", "2021"))
 REFETCH_MISSING_PRICES = config["BASE"].getboolean("REFETCH_MISSING_PRICES")
 MEAN_MISSING_PRICES = config["BASE"].getboolean("MEAN_MISSING_PRICES")
-CALCULATE_VIRTUAL_SELL = config["BASE"].getboolean("CALCULATE_VIRTUAL_SELL")
+CALCULATE_UNREALIZED_PROFITS = config["BASE"].getboolean("CALCULATE_UNREALIZED_PROFITS")
 MULTI_DEPOT = config["BASE"].getboolean("MULTI_DEPOT")
 
 # Read in environmental variables.
