@@ -1253,6 +1253,10 @@ class Book:
                     overwrite=True,
                 )
 
+    def merge_identical_operations(self) -> None:
+        grouped_ops = misc.group_by(self.operations, tr.Operation.identical_columns)
+        self.operations = [tr.Operation.merge(*ops) for ops in grouped_ops.values()]
+
     def read_file(self, file_path: Path) -> None:
         """Import transactions form an account statement.
 

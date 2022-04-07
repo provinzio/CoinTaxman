@@ -19,10 +19,14 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import decimal
+import itertools
 import typing
+from copy import copy
 from pathlib import Path
+from typing import ClassVar
 
 import log_config
+import misc
 
 log = log_config.getLogger(__name__)
 
@@ -35,6 +39,17 @@ class Operation:
     coin: str
     line: list[int]
     file_path: Path
+
+    @property
+    def type_name(self) -> str:
+        return self.__class__.__name__
+
+    identical_columns: ClassVar[list[str]] = [
+        "type_name",
+        "utc_time",
+        "platform",
+        "coin",
+    ]
 
     def __post_init__(self):
         assert self.validate_types()
@@ -71,6 +86,32 @@ class Operation:
                 )
                 ret = False
         return ret
+
+    def identical_to(self, op: Operation) -> bool:
+        identical_to = all(
+            getattr(self, i) == getattr(op, i) for i in self.identical_columns
+        )
+
+        if identical_to:
+            assert (
+                self.file_path == op.file_path
+            ), "Identical operations should also be in the same file."
+
+        return identical_to
+
+    @staticmethod
+    def merge(*operations: Operation) -> Operation:
+        assert len(operations) > 0, "There have to be operations to be merged."
+        assert all(
+            op1.identical_to(op2) for op1, op2 in itertools.combinations(operations, 2)
+        ), "Operations have to be identical to be mereged"
+
+        # Select arbitray operation from list.
+        o = copy(operations[0])
+        # Update this operation with merged entries.
+        o.change = misc.dsum(op.change for op in operations)
+        o.line = list(itertools.chain(*(op.line for op in operations)))
+        return o
 
 
 class Fee(Operation):

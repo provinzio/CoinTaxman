@@ -40,6 +40,8 @@ def main() -> None:
         return
 
     book.get_price_from_csv()
+    book.merge_identical_operations()
+
     taxman.evaluate_taxation()
     evaluation_file_path = taxman.export_evaluation_as_csv()
     taxman.print_evaluation()
