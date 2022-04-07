@@ -127,13 +127,13 @@ class Taxman:
                     and not sc.op.coin == config.FIAT
                 )
                 # Only calculate the gains if necessary.
-                if is_taxable or config.CALCULATE_UNREALIZED_PROFITS:
+                if is_taxable or config.CALCULATE_UNREALIZED_GAINS:
                     partial_sell_price = (sc.sold / op.change) * sell_price
                     sold_coin_cost = self.price_data.get_cost(sc)
                     gain = partial_sell_price - sold_coin_cost
                     if is_taxable:
                         taxed_gain += gain
-                    if config.CALCULATE_UNREALIZED_PROFITS:
+                    if config.CALCULATE_UNREALIZED_GAINS:
                         real_gain += gain
             remark = ", ".join(
                 f"{sc.sold} from {sc.op.utc_time} " f"({sc.op.__class__.__name__})"
@@ -220,7 +220,7 @@ class Taxman:
 
         # Calculate the amount of coins which should be left on the platform
         # and evaluate the (taxed) gain, if the coin would be sold right now.
-        if config.CALCULATE_UNREALIZED_PROFITS and (
+        if config.CALCULATE_UNREALIZED_GAINS and (
             (left_coin := sum(((bop.op.change - bop.sold) for bop in balance.queue)))
             and self.price_data.get_cost(op)
         ):
@@ -284,7 +284,7 @@ class Taxman:
 
         # Summarize the virtual sell, if all left over coins would be sold right now.
         if self.virtual_tax_events:
-            assert config.CALCULATE_UNREALIZED_PROFITS
+            assert config.CALCULATE_UNREALIZED_GAINS
             invsted = sum(tx.sell_price for tx in self.virtual_tax_events)
             real_gains = sum(tx.real_gain for tx in self.virtual_tax_events)
             taxed_gains = sum(tx.taxed_gain for tx in self.virtual_tax_events)
