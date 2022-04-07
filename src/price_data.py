@@ -433,7 +433,7 @@ class PriceData:
 
                 if not data["error"]:
                     break
-                elif data["error"] == ['EGeneral:Invalid arguments']:
+                elif data["error"] == ["EGeneral:Invalid arguments"]:
                     # add pair to invalid pairs list
                     # leads to inversion of pair next time
                     log.warning(
@@ -553,9 +553,7 @@ class PriceData:
 
             price = get_price(coin, utc_time, reference_coin, **kwargs)
             assert isinstance(price, decimal.Decimal)
-            set_price_db(
-                platform, coin, reference_coin, utc_time, price
-            )
+            set_price_db(platform, coin, reference_coin, utc_time, price)
 
         if config.MEAN_MISSING_PRICES and price <= 0.0:
             # The price is missing. Check for prices before and after the

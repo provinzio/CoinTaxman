@@ -77,7 +77,8 @@ def __get_price_db(
                 raise e
 
             if prices := cur.fetchone():
-                return misc.force_decimal(prices[0])
+                price = misc.force_decimal(prices[0])
+                return price
 
     return None
 
@@ -101,22 +102,18 @@ def get_price_db(
     Returns:
         Optional[decimal.Decimal]: Price.
     """
-    coin_a, coin_b, inverted = _sort_pair(coin, reference_coin)
-    tablename = get_tablename(coin_a, coin_b)
+    tablename, inverted = get_sorted_tablename(coin, reference_coin)
 
     if db_path is None and platform:
         db_path = get_db_path(platform)
 
     assert isinstance(db_path, Path), "DB path is no valid path"
 
-    price = __get_price_db(db_path, tablename, utc_time)
+    if price := __get_price_db(db_path, tablename, utc_time):
+        if inverted:
+            price = misc.force_decimal(price)
 
-    if not price:
-        return None
-    elif inverted:
-        return misc.reciprocal(misc.force_decimal(price))
-    else:
-        return misc.force_decimal(price)
+    return price
 
 
 def __mean_price_db(
@@ -211,20 +208,18 @@ def mean_price_db(
     Returns:
         decimal.Decimal: Price.
     """
-    coin_a, coin_b, inverted = _sort_pair(coin, reference_coin)
-    tablename = get_tablename(coin_a, coin_b)
+    tablename, inverted = get_sorted_tablename(coin, reference_coin)
 
     if db_path is None and platform:
         db_path = get_db_path(platform)
 
     assert isinstance(db_path, Path), "DB path is no valid path"
 
-    price = __mean_price_db(db_path, tablename, utc_time)
+    if price := __mean_price_db(db_path, tablename, utc_time):
+        if inverted:
+            price = misc.reciprocal(price)
 
-    if inverted:
-        return misc.reciprocal(price)
-    else:
-        return price
+    return price
 
 
 def __delete_price_db(
@@ -313,8 +308,7 @@ def set_price_db(
     """
     assert coin != reference_coin
 
-    coin_a, coin_b, inverted = _sort_pair(coin, reference_coin)
-    tablename = get_tablename(coin_a, coin_b)
+    tablename, inverted = get_sorted_tablename(coin, reference_coin)
 
     if inverted:
         price = misc.reciprocal(price)
@@ -348,14 +342,16 @@ def set_price_db(
                     # Overwrite price.
                     log.warning(
                         f"Relative error: %.6f %%, using new price: {price}, "
-                        f"overwriting database price: {price_db}", rel_error * 100
+                        f"overwriting database price: {price_db}",
+                        rel_error * 100,
                     )
                     __delete_price_db(db_path, tablename, utc_time)
                     __set_price_db(db_path, tablename, utc_time, price)
                 else:
                     log.warning(
                         f"Relative error: %.6f %%, discarding new price: {price}, "
-                        f"using database price: {price_db}", rel_error * 100
+                        f"using database price: {price_db}",
+                        rel_error * 100,
                     )
         else:
             raise e
@@ -381,7 +377,14 @@ def _sort_pair(coin: str, reference_coin: str) -> Tuple[str, str, bool]:
 
 
 def get_tablename(coin: str, reference_coin: str) -> str:
+    assert coin <= reference_coin, "tablenames must be sorted"
     return f"{coin}/{reference_coin}"
+
+
+def get_sorted_tablename(coin: str, reference_coin: str) -> tuple[str, bool]:
+    coin_a, coin_b, inverted = _sort_pair(coin, reference_coin)
+    tablename = get_tablename(coin_a, coin_b)
+    return tablename, inverted
 
 
 def get_tablenames_from_db(cur: sqlite3.Cursor) -> list[str]:

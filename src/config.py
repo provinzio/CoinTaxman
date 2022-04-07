@@ -23,8 +23,17 @@ from dateutil.relativedelta import relativedelta
 
 import core
 
+# Dir and file paths
+BASE_PATH = Path(__file__).parent.parent.absolute()
+CONFIG_FILE = BASE_PATH / "config.ini"
+ACCOUNT_STATMENTS_PATH = BASE_PATH / "account_statements"
+DATA_PATH = BASE_PATH / "data"
+EXPORT_PATH = BASE_PATH / "export"
+TMP_LOG_FILEPATH = BASE_PATH / "tmp.log"
+
+# General config
 config = configparser.ConfigParser()
-config.read("config.ini")
+config.read(CONFIG_FILE)
 COUNTRY = core.Country[config["BASE"].get("COUNTRY", "GERMANY")]
 TAX_YEAR = int(config["BASE"].get("TAX_YEAR", "2021"))
 MEAN_MISSING_PRICES = config["BASE"].getboolean("MEAN_MISSING_PRICES")
@@ -55,9 +64,4 @@ else:
     raise NotImplementedError(f"Your country {COUNTRY} is not supported.")
 
 # Program specific constants.
-BASE_PATH = Path(__file__).parent.parent.absolute()
-ACCOUNT_STATMENTS_PATH = Path(BASE_PATH, "account_statements")
-DATA_PATH = Path(BASE_PATH, "data")
-EXPORT_PATH = Path(BASE_PATH, "export")
-TMP_LOG_FILEPATH = Path(EXPORT_PATH, "tmp.log")
 FIAT = FIAT_CLASS.name  # Convert to string.
