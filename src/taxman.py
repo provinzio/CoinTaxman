@@ -281,7 +281,7 @@ class Taxman:
             ).items():
                 self._evaluate_taxation_per_coin(operations)
         else:
-            # Evaluate taxation separated by coins in a single virtual depot.
+            # Evaluate taxation separated by coins "in a single virtual depot".
             self._evaluate_taxation_per_coin(self.book.operations)
 
     def print_evaluation(self) -> None:
