@@ -221,8 +221,12 @@ class BalanceQueue(abc.ABC):
         """
         _, left_over_fee = self._remove(fee)
         if left_over_fee:
-            # Not enough coins in queue to remove fee.
-            # Buffer the fee for next time.
+            log.warning(
+                "Not enough coins in queue to remove fee. Buffer the fee for "
+                "next adding time... "
+                "This should not happen. You might be missing a account "
+                "statement. Please open issue or PR if you need help."
+            )
             self.buffer_fee += left_over_fee
 
     def remove_fee(self, fee: tr.Fee) -> None:
