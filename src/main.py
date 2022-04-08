@@ -39,11 +39,12 @@ def main() -> None:
         log.warning("Stopping CoinTaxman.")
         return
 
-    book.get_price_from_csv()
-    # Merge identical operations together, which makes it easier to match fees
-    # afterwards (as long as there are only one buy/sell pair per time).
-    # And reduced database accesses.
+    # Merge identical operations together, which makes it easier to match
+    # buy/sell to get prices from csv, match fees and reduces database access
+    # (as long as there are only one buy/sell pair per time,
+    # might be problematic otherwhise).
     book.merge_identical_operations()
+    book.get_price_from_csv()
     book.match_fees_with_operations()
 
     taxman.evaluate_taxation()
