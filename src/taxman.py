@@ -25,7 +25,7 @@ import config
 import core
 import log_config
 import misc
-import transaction
+import transaction as tr
 from book import Book
 from price_data import PriceData
 
@@ -36,7 +36,7 @@ TAX_DEADLINE = min(
 )
 
 
-def in_tax_year(op: transaction.Operation) -> bool:
+def in_tax_year(op: tr.Operation) -> bool:
     return op.utc_time.year == config.TAX_YEAR
 
 
@@ -45,9 +45,9 @@ class Taxman:
         self.book = book
         self.price_data = price_data
 
-        self.tax_events: list[transaction.TaxEvent] = []
+        self.tax_events: list[tr.TaxEvent] = []
         # Tax Events which would occur if all left over coins were sold now.
-        self.virtual_tax_events: list[transaction.TaxEvent] = []
+        self.virtual_tax_events: list[tr.TaxEvent] = []
 
         # Determine used functions/classes depending on the config.
         country = config.COUNTRY.name
@@ -70,7 +70,7 @@ class Taxman:
             )
 
     @staticmethod
-    def in_tax_year(op: transaction.Operation) -> bool:
+    def in_tax_year(op: tr.Operation) -> bool:
         return op.utc_time.year == config.TAX_YEAR
 
     @staticmethod
@@ -83,13 +83,13 @@ class Taxman:
     def _evaluate_taxation_GERMANY(
         self,
         coin: str,
-        operations: list[transaction.Operation],
+        operations: list[tr.Operation],
     ) -> None:
         balance = self.BalanceType()
 
         def evaluate_sell(
-            op: transaction.Operation, force: bool = False
-        ) -> Optional[transaction.TaxEvent]:
+            op: tr.Operation, force: bool = False
+        ) -> Optional[tr.TaxEvent]:
             # Remove coins from queue.
             sold_coins = balance.remove(op)
 
@@ -116,10 +116,10 @@ class Taxman:
                     isinstance(
                         sc.op,
                         (
-                            transaction.Airdrop,
-                            transaction.CoinLendInterest,
-                            transaction.StakingInterest,
-                            transaction.Commission,
+                            tr.Airdrop,
+                            tr.CoinLendInterest,
+                            tr.StakingInterest,
+                            tr.Commission,
                         ),
                     )
                     and not sc.op.coin == config.FIAT
@@ -137,7 +137,7 @@ class Taxman:
                 f"{sc.sold} from {sc.op.utc_time} " f"({sc.op.__class__.__name__})"
                 for sc in sold_coins
             )
-            return transaction.TaxEvent(
+            return tr.TaxEvent(
                 taxation_type,
                 taxed_gain,
                 op,
@@ -149,53 +149,51 @@ class Taxman:
         # TODO handle buy.fees and sell.fees.
 
         for op in operations:
-            if isinstance(op, transaction.Fee):
+            if isinstance(op, tr.Fee):
                 raise RuntimeError("single fee operations shouldn't exist")
                 balance.remove_fee(op.change)
                 if in_tax_year(op):
                     # Fees reduce taxed gain.
                     taxation_type = "Sonstige Einkünfte"
                     taxed_gain = -self.price_data.get_cost(op)
-                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
+                    tx = tr.TaxEvent(taxation_type, taxed_gain, op)
                     self.tax_events.append(tx)
-            elif isinstance(op, transaction.CoinLend):
+            elif isinstance(op, tr.CoinLend):
                 pass
-            elif isinstance(op, transaction.CoinLendEnd):
+            elif isinstance(op, tr.CoinLendEnd):
                 pass
-            elif isinstance(op, transaction.Staking):
+            elif isinstance(op, tr.Staking):
                 pass
-            elif isinstance(op, transaction.StakingEnd):
+            elif isinstance(op, tr.StakingEnd):
                 pass
-            elif isinstance(op, transaction.Buy):
+            elif isinstance(op, tr.Buy):
                 balance.add(op)
-            elif isinstance(op, transaction.Sell):
+            elif isinstance(op, tr.Sell):
                 if tx_ := evaluate_sell(op):
                     self.tax_events.append(tx_)
-            elif isinstance(
-                op, (transaction.CoinLendInterest, transaction.StakingInterest)
-            ):
+            elif isinstance(op, (tr.CoinLendInterest, tr.StakingInterest)):
                 balance.add(op)
                 if in_tax_year(op):
                     if misc.is_fiat(coin):
                         assert not isinstance(
-                            op, transaction.StakingInterest
+                            op, tr.StakingInterest
                         ), "You can not stake fiat currencies."
                         taxation_type = "Einkünfte aus Kapitalvermögen"
                     else:
                         taxation_type = "Einkünfte aus sonstigen Leistungen"
                     taxed_gain = self.price_data.get_cost(op)
-                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
+                    tx = tr.TaxEvent(taxation_type, taxed_gain, op)
                     self.tax_events.append(tx)
-            elif isinstance(op, transaction.Airdrop):
+            elif isinstance(op, tr.Airdrop):
                 balance.add(op)
-            elif isinstance(op, transaction.Commission):
+            elif isinstance(op, tr.Commission):
                 balance.add(op)
                 if in_tax_year(op):
                     taxation_type = "Einkünfte aus sonstigen Leistungen"
                     taxed_gain = self.price_data.get_cost(op)
-                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
+                    tx = tr.TaxEvent(taxation_type, taxed_gain, op)
                     self.tax_events.append(tx)
-            elif isinstance(op, transaction.Deposit):
+            elif isinstance(op, tr.Deposit):
                 if coin == config.FIAT:
                     # Add to balance;
                     # we do not care, where our home fiat comes from.
@@ -206,7 +204,7 @@ class Taxman:
                         f"on {op.platform} at {op.utc_time}. "
                         "The evaluation might be wrong."
                     )
-            elif isinstance(op, transaction.Withdrawal):
+            elif isinstance(op, tr.Withdrawal):
                 if coin == config.FIAT:
                     # Remove from balance;
                     # we do not care, where our home fiat goes to.
@@ -230,7 +228,7 @@ class Taxman:
             assert isinstance(left_coin, decimal.Decimal)
             # Calculate unrealized gains for the last time of `TAX_YEAR`.
             # If we are currently in ´TAX_YEAR` take now.
-            virtual_sell = transaction.Sell(
+            virtual_sell = tr.Sell(
                 TAX_DEADLINE,
                 op.platform,
                 left_coin,
@@ -243,16 +241,16 @@ class Taxman:
 
     def _evaluate_taxation_per_coin(
         self,
-        operations: list[transaction.Operation],
+        operations: list[tr.Operation],
     ) -> None:
         """Evaluate the taxation for a list of operations per coin using
         country specific functions.
 
         Args:
-            operations (list[transaction.Operation])
+            operations (list[tr.Operation])
         """
         for coin, coin_operations in misc.group_by(operations, "coin").items():
-            coin_operations = transaction.sort_operations(coin_operations, ["utc_time"])
+            coin_operations = tr.sort_operations(coin_operations, ["utc_time"])
             self.__evaluate_taxation(coin, coin_operations)
 
     def evaluate_taxation(self) -> None:

@@ -21,14 +21,14 @@ import decimal
 from typing import Union
 
 import log_config
-import transaction
+import transaction as tr
 
 log = log_config.getLogger(__name__)
 
 
 @dataclasses.dataclass
 class BalancedOperation:
-    op: transaction.Operation
+    op: tr.Operation
     sold: decimal.Decimal = decimal.Decimal()
 
     @property
@@ -81,13 +81,13 @@ class BalanceQueue(abc.ABC):
         """
         raise NotImplementedError
 
-    def _put(self, item: Union[transaction.Operation, BalancedOperation]) -> None:
+    def _put(self, item: Union[tr.Operation, BalancedOperation]) -> None:
         """Put a new item in the queue and remove buffered fees.
 
         Args:
             item (Union[Operation, BalancedOperation])
         """
-        if isinstance(item, transaction.Operation):
+        if isinstance(item, tr.Operation):
             item = BalancedOperation(item)
         elif not isinstance(item, BalancedOperation):
             raise TypeError
@@ -117,20 +117,20 @@ class BalanceQueue(abc.ABC):
         """
         return self._peek_()
 
-    def add(self, op: transaction.Operation) -> None:
+    def add(self, op: tr.Operation) -> None:
         """Add an operation with coins to the balance.
 
         Args:
-            op (transaction.Operation)
+            op (tr.Operation)
         """
-        assert not isinstance(op, transaction.Fee)
+        assert not isinstance(op, tr.Fee)
         assert op.coin == self.coin
         self._put(op)
 
     def _remove(
         self,
         change: decimal.Decimal,
-    ) -> tuple[list[transaction.SoldCoin], decimal.Decimal]:
+    ) -> tuple[list[tr.SoldCoin], decimal.Decimal]:
         """Remove as many coins as necessary from the queue.
 
         The removement logic is defined by the BalanceQueue child class.
@@ -139,11 +139,11 @@ class BalanceQueue(abc.ABC):
             change (decimal.Decimal): Amount of coins to be removed.
 
         Returns:
-          - list[transaction.SoldCoin]: List of coins which were removed.
+          - list[tr.SoldCoin]: List of coins which were removed.
           - decimal.Decimal: Amount of change which could not be removed
                 because the queue ran out of coins.
         """
-        sold_coins: list[transaction.SoldCoin] = []
+        sold_coins: list[tr.SoldCoin] = []
 
         while self.queue and change > 0:
             # Look at the next coin in the queue.
@@ -157,7 +157,7 @@ class BalanceQueue(abc.ABC):
                 # Update the sold value,
                 bop.sold += change
                 # keep track of the sold amount
-                sold_coins.append(transaction.SoldCoin(bop.op, change))
+                sold_coins.append(tr.SoldCoin(bop.op, change))
                 # and set the change to 0.
                 change = decimal.Decimal()
                 # All demanded change was removed.
@@ -170,27 +170,27 @@ class BalanceQueue(abc.ABC):
                 # remove the fully sold coin from the queue
                 self._pop()
                 # and keep track of the sold amount.
-                sold_coins.append(transaction.SoldCoin(bop.op, not_sold))
+                sold_coins.append(tr.SoldCoin(bop.op, not_sold))
 
         assert change >= 0, "Removed more than necessary from the queue."
         return sold_coins, change
 
     def remove(
         self,
-        op: transaction.Operation,
-    ) -> list[transaction.SoldCoin]:
+        op: tr.Operation,
+    ) -> list[tr.SoldCoin]:
         """Remove as many coins as necessary from the queue.
 
         The removement logic is defined by the BalanceQueue child class.
 
         Args:
-            op (transaction.Operation): Operation with coins to be removed.
+            op (tr.Operation): Operation with coins to be removed.
 
         Raises:
             RuntimeError: When there are not enough coins in queue to be sold.
 
         Returns:
-          - list[transaction.SoldCoin]: List of coins which were removed.
+          - list[tr.SoldCoin]: List of coins which were removed.
         """
         assert op.coin == self.coin
         sold_coins, unsold_change = self._remove(op.change)
@@ -225,7 +225,7 @@ class BalanceQueue(abc.ABC):
             # Buffer the fee for next time.
             self.buffer_fee += left_over_fee
 
-    def remove_fee(self, fee: transaction.Fee) -> None:
+    def remove_fee(self, fee: tr.Fee) -> None:
         assert fee.coin == self.coin
         self._remove_fee(fee.change)
 

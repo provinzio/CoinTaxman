@@ -28,7 +28,7 @@ import requests
 import config
 import log_config
 import misc
-import transaction
+import transaction as tr
 from core import kraken_pair_map
 from database import get_price_db, get_tablenames_from_db, mean_price_db, set_price_db
 
@@ -562,15 +562,15 @@ class PriceData:
 
     def get_cost(
         self,
-        tr: Union[transaction.Operation, transaction.SoldCoin],
+        op_sc: Union[tr.Operation, tr.SoldCoin],
         reference_coin: str = config.FIAT,
     ) -> decimal.Decimal:
-        op = tr if isinstance(tr, transaction.Operation) else tr.op
+        op = op_sc if isinstance(op_sc, tr.Operation) else op_sc.op
         price = self.get_price(op.platform, op.coin, op.utc_time, reference_coin)
-        if isinstance(tr, transaction.Operation):
-            return price * tr.change
-        if isinstance(tr, transaction.SoldCoin):
-            return price * tr.sold
+        if isinstance(op_sc, tr.Operation):
+            return price * op_sc.change
+        if isinstance(op_sc, tr.SoldCoin):
+            return price * op_sc.sold
         raise NotImplementedError
 
     def check_database(self):
