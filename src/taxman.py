@@ -82,10 +82,9 @@ class Taxman:
         def evaluate_sell(
             op: transaction.Operation,
             force: bool = False,
-        ) -> Optional[list[transaction.TaxEvent]]:
+        ) -> Optional[transaction.TaxEvent]:
             # Remove coins from queue.
             sold_coins, unsold_coins = balance.sell(op.change)
-            tx_list = []
 
             if coin == config.FIAT:
                 # Not taxable.
@@ -118,7 +117,6 @@ class Taxman:
             sell_value = self.price_data.get_cost(op)
             taxed_gain = decimal.Decimal()
             real_gain = decimal.Decimal()
-            any_sc_is_taxable = False
             # Coins which are older than (in this case) one year or
             # which come from an Airdrop, CoinLend or Commission (in an
             # foreign currency) will not be taxed.
@@ -137,7 +135,6 @@ class Taxman:
                     )
                     and not sc.op.coin == config.FIAT
                 )
-                any_sc_is_taxable |= is_taxable
                 # Only calculate the gains if necessary.
                 if is_taxable or config.CALCULATE_UNREALIZED_GAINS:
                     partial_sell_value = (sc.sold / op.change) * sell_value
@@ -147,128 +144,68 @@ class Taxman:
                         taxed_gain += gain
                     if config.CALCULATE_UNREALIZED_GAINS:
                         real_gain += gain
-                # For the detailed export with all events, split all sold coins into
-                # multiple tax events. Else combine all in one tax event after the loop.
-                if config.EXPORT_ALL_EVENTS:
-                    remark = (
-                        f"{sc.sold} vom {sc.op.utc_time} "
-                        f"({sc.op.__class__.__name__})"
-                    )
-                    tx_list.append(
-                        transaction.TaxEvent(
-                            taxation_type,
-                            taxed_gain,
-                            op,
-                            is_taxable,
-                            sell_value,
-                            real_gain,
-                            remark,
-                        )
-                    )
-            if not config.EXPORT_ALL_EVENTS:
-                remark = ", ".join(
-                    f"{sc.sold} vom {sc.op.utc_time} " f"({sc.op.__class__.__name__})"
-                    for sc in sold_coins
-                )
-                tx_list.append(
-                    transaction.TaxEvent(
-                        taxation_type,
-                        taxed_gain,
-                        op,
-                        any_sc_is_taxable,
-                        sell_value,
-                        real_gain,
-                        remark,
-                    )
-                )
-            return tx_list
+            remark = ", ".join(
+                f"{sc.sold} from {sc.op.utc_time} " f"({sc.op.__class__.__name__})"
+                for sc in sold_coins
+            )
+            return transaction.TaxEvent(
+                taxation_type,
+                taxed_gain,
+                op,
+                sell_price,
+                real_gain,
+                remark,
+            )
 
         # TODO handle buy.fees and sell.fees.
 
         for op in operations:
-            tx: Union[transaction.TaxEvent, list, None] = None
             if isinstance(op, transaction.Fee):
                 raise RuntimeError("single fee operations shouldn't exist")
                 balance.remove_fee(op.change)
-                # fees reduce taxed gain in the corresponding tax period
-                is_taxable = self.in_tax_year(op)
-                taxation_type = "Sonstige Einkünfte"
-                if not is_taxable:
-                    taxation_type += " außerhalb des Steuerjahres"
-                taxed_gain = -self.price_data.get_cost(op)
-                tx = transaction.TaxEvent(taxation_type, taxed_gain, op, is_taxable)
+                if self.in_tax_year(op):
+                    # Fees reduce taxed gain.
+                    taxation_type = "Sonstige Einkünfte"
+                    taxed_gain = -self.price_data.get_cost(op)
+                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
+                    self.tax_events.append(tx)
             elif isinstance(op, transaction.CoinLend):
-                taxation_type = "Krypto-Lending Beginn"
-                tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
+                pass
             elif isinstance(op, transaction.CoinLendEnd):
-                taxation_type = "Krypto-Lending Ende"
-                tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
+                pass
             elif isinstance(op, transaction.Staking):
-                taxation_type = "Krypto-Staking Beginn"
-                tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
+                pass
             elif isinstance(op, transaction.StakingEnd):
-                taxation_type = "Krypto-Staking Ende"
-                tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
+                pass
             elif isinstance(op, transaction.Buy):
                 balance.put(op)
-                if op.coin == config.FIAT:
-                    continue
-                else:
-                    taxation_type = "Kauf"
-                    cost = self.price_data.get_cost(op)
-                    price = self.price_data.get_price(op.platform, op.coin, op.utc_time)
-                    remark = (
-                        f"Kosten {cost} {config.FIAT}, "
-                        f"Preis {price} {op.coin}/{config.FIAT}"
-                    )
-                    tx = transaction.TaxEvent(
-                        taxation_type, decimal.Decimal(), op, False, remark=remark
-                    )
             elif isinstance(op, transaction.Sell):
-                if op.coin == config.FIAT:
-                    continue
-                if (tx := evaluate_sell(op)) is None:
-                    if self.in_tax_year(op):
-                        taxation_type = "Verkauf (nicht steuerbar)"
-                    else:
-                        taxation_type = "Verkauf (außerhalb des Steuerjahres)"
-                    tx = transaction.TaxEvent(
-                        taxation_type, decimal.Decimal(), op, False
-                    )
+                if tx_ := evaluate_sell(op):
+                    self.tax_events.append(tx_)
             elif isinstance(
                 op, (transaction.CoinLendInterest, transaction.StakingInterest)
             ):
                 balance.put(op)
-                is_taxable = self.in_tax_year(op)
-                if misc.is_fiat(coin):
-                    taxation_type = "Einkünfte aus Kapitalvermögen"
-                    if isinstance(op, transaction.StakingInterest):
-                        log.error(
-                            f"{coin} at {op.platform}, {op.utc_time}: "
-                            "You can not stake fiat currencies."
-                        )
-                        raise RuntimeError
-                else:
-                    taxation_type = "Einkünfte aus sonstigen Leistungen"
-                if not is_taxable:
-                    taxation_type += " außerhalb des Steuerjahres"
-                taxed_gain = self.price_data.get_cost(op)
-                tx = transaction.TaxEvent(taxation_type, taxed_gain, op, is_taxable)
+                if self.in_tax_year(op):
+                    if misc.is_fiat(coin):
+                        assert not isinstance(
+                            op, transaction.StakingInterest
+                        ), "You can not stake fiat currencies."
+                        taxation_type = "Einkünfte aus Kapitalvermögen"
+                    else:
+                        taxation_type = "Einkünfte aus sonstigen Leistungen"
+                    taxed_gain = self.price_data.get_cost(op)
+                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
+                    self.tax_events.append(tx)
             elif isinstance(op, transaction.Airdrop):
                 balance.put(op)
-                taxation_type = "Airdrop"
-                real_gain = self.price_data.get_cost(op)
-                tx = transaction.TaxEvent(
-                    taxation_type, decimal.Decimal(), op, False, real_gain=real_gain
-                )
             elif isinstance(op, transaction.Commission):
                 balance.put(op)
-                is_taxable = self.in_tax_year(op)
-                taxation_type = "Einkünfte aus sonstigen Leistungen"
-                if not is_taxable:
-                    taxation_type += " außerhalb des Steuerjahres"
-                taxed_gain = self.price_data.get_cost(op)
-                tx = transaction.TaxEvent(taxation_type, taxed_gain, op, is_taxable)
+                if self.in_tax_year(op):
+                    taxation_type = "Einkünfte aus sonstigen Leistungen"
+                    taxed_gain = self.price_data.get_cost(op)
+                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
+                    self.tax_events.append(tx)
             elif isinstance(op, transaction.Deposit):
                 if coin != config.FIAT:
                     log.warning(
@@ -276,8 +213,6 @@ class Taxman:
                         f"on {op.platform} at {op.utc_time}. "
                         "The evaluation might be wrong."
                     )
-                taxation_type = "Einzahlung"
-                tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             elif isinstance(op, transaction.Withdrawal):
                 if coin != config.FIAT:
                     log.warning(
@@ -285,20 +220,8 @@ class Taxman:
                         f"from {op.platform} at {op.utc_time}. "
                         "The evaluation might be wrong."
                     )
-                taxation_type = "Auszahlung"
-                tx = transaction.TaxEvent(taxation_type, decimal.Decimal(), op, False)
             else:
                 raise NotImplementedError
-
-            # for all valid cases, add tax event to list
-            if tx is None:
-                continue
-            elif isinstance(tx, list):
-                self.tax_events.extend(tx)
-            elif isinstance(tx, transaction.TaxEvent):
-                self.tax_events.append(tx)
-            else:
-                raise TypeError
 
         # Check that all relevant positions were considered.
         if balance.buffer_fee:
@@ -328,12 +251,7 @@ class Taxman:
                 Path(""),
             )
             if tx_ := evaluate_sell(virtual_sell, force=True):
-                if isinstance(tx_, list):
-                    self.tax_events.extend(tx_)
-                elif isinstance(tx_, transaction.TaxEvent):
-                    self.tax_events.append(tx_)
-                else:
-                    raise TypeError
+                self.virtual_tax_events.append(tx_)
 
     def _evaluate_taxation_per_coin(
         self,
@@ -393,15 +311,15 @@ class Taxman:
             )
             lo_date = latest_operation.op.utc_time.strftime("%d.%m.%y")
 
-            invested = sum(tx.sell_value for tx in self.virtual_tax_events)
-            real_gains = sum(tx.real_gain for tx in self.virtual_tax_events)
-            taxed_gains = sum(tx.taxed_gain for tx in self.virtual_tax_events)
+            invested = misc.dsum(tx.sell_value for tx in self.virtual_tax_events)
+            real_gains = misc.dsum(tx.real_gain for tx in self.virtual_tax_events)
+            taxed_gains = misc.dsum(tx.taxed_gain for tx in self.virtual_tax_events)
             eval_str += "\n"
             eval_str += (
                 f"Deadline {config.TAX_YEAR}: {lo_date}\n"
                 f"You were invested with {invested:.2f} {config.FIAT}.\n"
                 f"If you would have sold everything then, "
-                f"you would realize {real_gains:.2f} {config.FIAT} gains "
+                f"you would have realized {real_gains:.2f} {config.FIAT} gains "
                 f"({taxed_gains:.2f} {config.FIAT} taxed gain).\n"
             )
 
@@ -459,12 +377,6 @@ class Taxman:
                 "Remark",
             ]
             writer.writerow(header)
-
-            if config.EXPORT_VIRTUAL_SELL:
-                # move virtual sells to tax_events list
-                self.tax_events = self.tax_events + self.virtual_tax_events
-                self.virtual_tax_events = []
-
             # Tax events are currently sorted by coin. Sort by time instead.
             for tx in sorted(self.tax_events, key=lambda tx: tx.op.utc_time):
                 line = [
@@ -478,8 +390,7 @@ class Taxman:
                     tx.sell_value,
                     tx.remark,
                 ]
-                if tx.is_taxable or config.EXPORT_ALL_EVENTS:
-                    writer.writerow(line)
+                writer.writerow(line)
 
         log.info("Saved evaluation in %s.", file_path)
         return file_path

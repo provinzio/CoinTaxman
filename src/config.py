@@ -33,27 +33,20 @@ TMP_LOG_FILEPATH = BASE_PATH / "tmp.log"
 
 # General config
 config = configparser.ConfigParser()
-<<<<<<< HEAD
 config.read(CONFIG_FILE)
-COUNTRY = core.Country[config["BASE"].get("COUNTRY", "GERMANY")]
-=======
-config.read("config.ini")
 
 try:
     COUNTRY = core.Country[config["BASE"].get("COUNTRY", "GERMANY")]
 except KeyError as e:
     raise NotImplementedError(
-        f"Your country {e} is currently not supported. " "Please create an Issue or PR."
+        f"Your country {e} is currently not supported. Please create an Issue or PR."
     )
 
->>>>>>> Griffsano/detailed-export
 TAX_YEAR = int(config["BASE"].get("TAX_YEAR", "2021"))
 REFETCH_MISSING_PRICES = config["BASE"].getboolean("REFETCH_MISSING_PRICES")
 MEAN_MISSING_PRICES = config["BASE"].getboolean("MEAN_MISSING_PRICES")
 CALCULATE_UNREALIZED_GAINS = config["BASE"].getboolean("CALCULATE_UNREALIZED_GAINS")
 MULTI_DEPOT = config["BASE"].getboolean("MULTI_DEPOT")
-EXPORT_VIRTUAL_SELL = config["BASE"].getboolean("EXPORT_VIRTUAL_SELL")
-EXPORT_ALL_EVENTS = config["BASE"].getboolean("EXPORT_ALL_EVENTS")
 
 # Read in environmental variables.
 if _env_country := environ.get("COUNTRY"):
@@ -73,6 +66,7 @@ if COUNTRY == core.Country.GERMANY:
 
     def IS_LONG_TERM(buy: datetime, sell: datetime) -> bool:
         return buy + relativedelta(years=1) < sell
+
 
 else:
     raise NotImplementedError(
