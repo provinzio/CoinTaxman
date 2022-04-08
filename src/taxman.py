@@ -31,6 +31,14 @@ from price_data import PriceData
 
 log = log_config.getLogger(__name__)
 
+TAX_DEADLINE = min(
+    datetime.datetime(config.TAX_YEAR, 12, 31, 23, 59, 59), datetime.datetime.now()
+)
+
+
+def in_tax_year(op: transaction.Operation) -> bool:
+    return op.utc_time.year == config.TAX_YEAR
+
 
 class Taxman:
     def __init__(self, book: Book, price_data: PriceData) -> None:
@@ -89,7 +97,7 @@ class Taxman:
                 # Not taxable.
                 return None
 
-            if not self.in_tax_year(op) and not force:
+            if not in_tax_year(op) and not force:
                 # Sell is only taxable in the respective year.
                 return None
 
@@ -144,7 +152,7 @@ class Taxman:
             if isinstance(op, transaction.Fee):
                 raise RuntimeError("single fee operations shouldn't exist")
                 balance.remove_fee(op.change)
-                if self.in_tax_year(op):
+                if in_tax_year(op):
                     # Fees reduce taxed gain.
                     taxation_type = "Sonstige Einkünfte"
                     taxed_gain = -self.price_data.get_cost(op)
@@ -167,7 +175,7 @@ class Taxman:
                 op, (transaction.CoinLendInterest, transaction.StakingInterest)
             ):
                 balance.add(op)
-                if self.in_tax_year(op):
+                if in_tax_year(op):
                     if misc.is_fiat(coin):
                         assert not isinstance(
                             op, transaction.StakingInterest
@@ -182,7 +190,7 @@ class Taxman:
                 balance.add(op)
             elif isinstance(op, transaction.Commission):
                 balance.add(op)
-                if self.in_tax_year(op):
+                if in_tax_year(op):
                     taxation_type = "Einkünfte aus sonstigen Leistungen"
                     taxed_gain = self.price_data.get_cost(op)
                     tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
@@ -223,7 +231,7 @@ class Taxman:
             # Calculate unrealized gains for the last time of `TAX_YEAR`.
             # If we are currently in ´TAX_YEAR` take now.
             virtual_sell = transaction.Sell(
-                self.tax_deadline(),
+                TAX_DEADLINE,
                 op.platform,
                 left_coin,
                 coin,
