@@ -648,14 +648,26 @@ class Book:
                             # of change and same coin.
                             assert isinstance(
                                 op, type(self.kraken_held_ops[refid]["operation"])
-                            ), "operation"
+                            ), (
+                                "operation "
+                                f"({op.type_name} != "
+                                f'{self.kraken_held_ops[refid]["operation"].type_name})'
+                            )
                             assert (
                                 op.change
                                 == self.kraken_held_ops[refid]["operation"].change
-                            ), "change"
+                            ), (
+                                "change "
+                                f"({op.change} != "
+                                f'{self.kraken_held_ops[refid]["operation"].change})'
+                            )
                             assert (
                                 op.coin == self.kraken_held_ops[refid]["operation"].coin
-                            ), "coin"
+                            ), (
+                                "coin "
+                                f"({op.coin} != "
+                                f'{self.kraken_held_ops[refid]["operation"].coin})'
+                            )
                         except AssertionError as e:
                             # Row is internally saved as list[int].
                             first_row = self.kraken_held_ops[refid]["operation"].line[0]
