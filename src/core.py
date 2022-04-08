@@ -209,6 +209,7 @@ kraken_asset_map = {
     "ZAUD": "AUD",
     "ZCAD": "CAD",
     "ZEUR": "EUR",
+    "EUR.HOLD": "EUR",
     "ZGBP": "GBP",
     "ZJPY": "JPY",
     "ZUSD": "USD",
