@@ -65,11 +65,10 @@ class Book:
             Op = getattr(tr, operation)
         except AttributeError:
             log.error(
-                "Could not recognize operation `%s` in  %s file `%s:%i`.",
-                operation,
-                platform,
-                file_path,
-                row,
+                f"Could not recognize {operation=} from {platform=} in "
+                f"{file_path=} {row=}. "
+                "The operation type might have been removed or renamed. "
+                "Please open an issue or PR."
             )
             raise RuntimeError
 
