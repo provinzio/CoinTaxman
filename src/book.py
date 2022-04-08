@@ -314,9 +314,9 @@ class Book:
                 utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
                 operation = operation_mapping.get(operation, operation)
                 change = misc.force_decimal(_change)
-                #  Current price from exchange.
-                eur_spot = misc.force_decimal(_eur_spot)
-                #  Cost without fees.
+                # Rounded price from CSV
+                # eur_spot = misc.force_decimal(_eur_spot)
+                # Cost without fees
                 eur_subtotal = misc.xdecimal(_eur_subtotal)
                 eur_fee = misc.xdecimal(_eur_fee)
 
@@ -326,8 +326,11 @@ class Book:
                 assert change
                 assert _currency_spot == "EUR"
 
-                # Save price in our local database for later.
-                set_price_db(platform, coin, "EUR", utc_time, eur_spot)
+                if isinstance(eur_subtotal, decimal.Decimal):
+                    # Calculated price
+                    price_calc = eur_subtotal / change
+                    # Save price in our local database for later.
+                    set_price_db(platform, coin, "EUR", utc_time, price_calc)
 
                 if operation == "Convert":
                     # Parse change + coin from remark, which is
@@ -933,7 +936,7 @@ class Book:
                 fiat,
                 amount_asset,
                 asset,
-                asset_price,
+                _asset_price,
                 asset_price_currency,
                 asset_class,
                 _product_id,
@@ -999,8 +1002,13 @@ class Book:
                     change = misc.force_decimal(amount_asset)
                     change_fiat = misc.force_decimal(amount_fiat)
                     # Save price in our local database for later.
-                    price = misc.force_decimal(asset_price)
-                    set_price_db(platform, asset, config.FIAT.upper(), utc_time, price)
+                    # Rounded price in CSV
+                    # price = misc.force_decimal(asset_price)
+                    # Calculated price
+                    price_calc = change_fiat / change
+                    set_price_db(
+                        platform, asset, config.FIAT.upper(), utc_time, price_calc
+                    )
 
                 if change < 0:
                     log.error(
