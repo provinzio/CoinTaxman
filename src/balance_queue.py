@@ -31,35 +31,28 @@ class BalancedOperation:
     op: transaction.Operation
     sold: decimal.Decimal = decimal.Decimal()
 
+    @property
+    def not_sold(self) -> decimal.Decimal:
+        """Calculate the amount of coins which are not sold yet.
+
+        Returns:
+            decimal.Decimal: Amount of coins which are not sold yet.
+        """
+        not_sold = self.op.change - self.sold
+        # If the left over amount is <= 0, this coin shouldn't be in the queue.
+        assert not_sold > 0, f"{not_sold=} should be > 0"
+        return not_sold
+
 
 class BalanceQueue(abc.ABC):
-    def __init__(self) -> None:
+    def __init__(self, coin: str) -> None:
+        self.coin = coin
         self.queue: collections.deque[BalancedOperation] = collections.deque()
-        # Buffer fees which could not be directly set off
-        # with the current coins in the queue.
-        # This can happen if the exchange takes the fees before
-        # the buy/sell process.
+        # It might happen, that the exchange takes fees before the buy/sell-
+        # transaction. Keep fees, which couldn't be removed directly from the
+        # queue and remove them as soon as possible.
+        # At the end, all fees should have been paid (removed from the buffer).
         self.buffer_fee = decimal.Decimal()
-
-    def put(self, item: Union[transaction.Operation, BalancedOperation]) -> None:
-        """Put a new item in the queue and set off buffered fees.
-
-        Args:
-            item (Union[Operation, BalancedOperation])
-        """
-        if isinstance(item, transaction.Operation):
-            item = BalancedOperation(item)
-
-        if not isinstance(item, BalancedOperation):
-            raise ValueError
-
-        self._put(item)
-
-        # Remove fees which could not be set off before now.
-        if self.buffer_fee:
-            # Clear the buffer and remove the buffered fee from the queue.
-            fee, self.buffer_fee = self.buffer_fee, decimal.Decimal()
-            self.remove_fee(fee)
 
     @abc.abstractmethod
     def _put(self, bop: BalancedOperation) -> None:
@@ -71,8 +64,8 @@ class BalanceQueue(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def get(self) -> BalancedOperation:
-        """Get an item from the queue.
+    def _pop(self) -> BalancedOperation:
+        """Pop an item from the queue.
 
         Returns:
             BalancedOperation
@@ -80,7 +73,7 @@ class BalanceQueue(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def peek(self) -> BalancedOperation:
+    def _peek(self) -> BalancedOperation:
         """Peek at the next item in the queue.
 
         Returns:
@@ -88,23 +81,65 @@ class BalanceQueue(abc.ABC):
         """
         raise NotImplementedError
 
-    def sell(
+    def put(self, item: Union[transaction.Operation, BalancedOperation]) -> None:
+        """Put a new item in the queue and remove buffered fees.
+
+        Args:
+            item (Union[Operation, BalancedOperation])
+        """
+        if isinstance(item, transaction.Operation):
+            item = BalancedOperation(item)
+        elif not isinstance(item, BalancedOperation):
+            raise TypeError
+
+        self._put(item)
+
+        # Remove fees which couldn't be removed before.
+        if self.buffer_fee:
+            # Clear the buffer.
+            fee, self.buffer_fee = self.buffer_fee, decimal.Decimal()
+            # Try to remove the fees.
+            self.remove_fee(fee)
+
+    def pop(self) -> BalancedOperation:
+        """Pop an item from the queue.
+
+        Returns:
+            BalancedOperation
+        """
+        return self._pop()
+
+    def peek(self) -> BalancedOperation:
+        """Peek at the next item in the queue.
+
+        Returns:
+            BalancedOperation
+        """
+        return self._peek()
+
+    def add(self, op: transaction.Operation) -> None:
+        """Add an operation with coins to the balance.
+
+        Args:
+            op (transaction.Operation)
+        """
+        self.put(op)
+
+    def _remove(
         self,
         change: decimal.Decimal,
     ) -> tuple[list[transaction.SoldCoin], decimal.Decimal]:
-        """Sell/remove as many coins as possible from the queue.
+        """Remove as many coins as necessary from the queue.
 
-        Depending on the QueueType, the coins will be removed FIFO or LIFO.
+        The removement logic is defined by the BalanceQueue child class.
 
         Args:
-            change (decimal.Decimal): Amount of sold coins which will be removed
-                from the queue.
+            change (decimal.Decimal): Amount of coins to be removed.
 
         Returns:
-          - list[transaction.SoldCoin]: List of specific coins which were
-                (depending on the tax regulation) sold in the transaction.
+          - list[transaction.SoldCoin]: List of coins which were removed.
           - decimal.Decimal: Amount of change which could not be removed
-                because the queue ran out of coins to sell.
+                because the queue ran out of coins.
         """
         sold_coins: list[transaction.SoldCoin] = []
 
@@ -112,31 +147,68 @@ class BalanceQueue(abc.ABC):
             # Look at the next coin in the queue.
             bop = self.peek()
 
-            # Calculate the amount of coins, which are not sold yet.
-            not_sold = bop.op.change - bop.sold
-            assert not_sold > 0
+            # Get the amount of not sold coins.
+            not_sold = bop.not_sold
 
             if not_sold > change:
                 # There are more coins left than change.
                 # Update the sold value,
                 bop.sold += change
-                # keep track of the sold amount and
+                # keep track of the sold amount
                 sold_coins.append(transaction.SoldCoin(bop.op, change))
-                # Set the change to 0.
+                # and set the change to 0.
                 change = decimal.Decimal()
+                # All demanded change was removed.
                 break
 
-            else:  # change >= not_sold
-                # The change is higher than or equal to the (left over) coin.
+            else:  # not_sold <= change
+                # The change is higher than or equal to the left over coins.
                 # Update the left over change,
                 change -= not_sold
-                # remove the fully sold coin from the queue and
-                self.get()
-                # keep track of the sold amount.
+                # remove the fully sold coin from the queue
+                self.pop()
+                # and keep track of the sold amount.
                 sold_coins.append(transaction.SoldCoin(bop.op, not_sold))
 
-        assert change >= 0
+        assert change >= 0, "Removed more than necessary from the queue."
         return sold_coins, change
+
+    def remove(
+        self,
+        op: transaction.Operation,
+    ) -> list[transaction.SoldCoin]:
+        """Remove as many coins as necessary from the queue.
+
+        The removement logic is defined by the BalanceQueue child class.
+
+        Args:
+            op (transaction.Operation): Operation with coins to be removed.
+
+        Raises:
+            RuntimeError: When there are not enough coins in queue to be sold.
+
+        Returns:
+          - list[transaction.SoldCoin]: List of coins which were removed.
+        """
+        sold_coins, unsold_change = self._remove(op.change)
+
+        if unsold_change:
+            # Queue ran out of items to sell and not all coins could be sold.
+            log.error(
+                f"Not enough {op.coin} in queue to sell: "
+                f"missing {unsold_change} {op.coin} "
+                f"(transaction from {op.utc_time} on {op.platform}, "
+                f"see {op.file_path.name} lines {op.line})\n"
+                "\tThis error occurs when you sold more coins than you have "
+                "according to your account statements. Have you added every "
+                "account statement, including these from the last years?\n"
+                "\tThis error may also occur after deposits from unknown "
+                "sources. CoinTaxman requires the full transaction history to "
+                "evaluate taxation (when where these deposited coins bought?).\n"
+            )
+            raise RuntimeError
+
+        return sold_coins
 
     def remove_fee(self, fee: decimal.Decimal) -> None:
         """Remove fee from the last added transaction.
@@ -144,11 +216,32 @@ class BalanceQueue(abc.ABC):
         Args:
             fee: decimal.Decimal
         """
-        _, left_over_fee = self.sell(fee)
+        _, left_over_fee = self._remove(fee)
         if left_over_fee:
             # Not enough coins in queue to remove fee.
             # Buffer the fee for next time.
             self.buffer_fee += left_over_fee
+
+    def sanity_check(self) -> None:
+        """Validate that all fees were paid or raise an exception.
+
+        At the end, all fees should have been paid.
+
+        Raises:
+            RuntimeError: Not all fees were paid.
+        """
+        if self.buffer_fee:
+            log.error(
+                f"Not enough {self.coin} in queue to pay left over fees: "
+                f"missing {self.buffer_fee} {self.coin}.\n"
+                "\tThis error occurs when you sold more coins than you have "
+                "according to your account statements. Have you added every "
+                "account statement, including these from the last years?\n"
+                "\tThis error may also occur after deposits from unknown "
+                "sources. CoinTaxman requires the full transaction history to "
+                "evaluate taxation (when where these deposited coins bought?).\n"
+            )
+            raise RuntimeError
 
 
 class BalanceFIFOQueue(BalanceQueue):
@@ -160,15 +253,15 @@ class BalanceFIFOQueue(BalanceQueue):
         """
         self.queue.append(bop)
 
-    def get(self) -> BalancedOperation:
-        """Get an item from the queue.
+    def _pop(self) -> BalancedOperation:
+        """Pop an item from the queue.
 
         Returns:
             BalancedOperation
         """
         return self.queue.popleft()
 
-    def peek(self) -> BalancedOperation:
+    def _peek(self) -> BalancedOperation:
         """Peek at the next item in the queue.
 
         Returns:
@@ -186,15 +279,15 @@ class BalanceLIFOQueue(BalanceQueue):
         """
         self.queue.append(bop)
 
-    def get(self) -> BalancedOperation:
-        """Get an item from the queue.
+    def _pop(self) -> BalancedOperation:
+        """Pop an item from the queue.
 
         Returns:
             BalancedOperation
         """
         return self.queue.pop()
 
-    def peek(self) -> BalancedOperation:
+    def _peek(self) -> BalancedOperation:
         """Peek at the next item in the queue.
 
         Returns:

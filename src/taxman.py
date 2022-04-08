@@ -83,29 +83,11 @@ class Taxman:
             op: transaction.Operation, force: bool = False
         ) -> Optional[transaction.TaxEvent]:
             # Remove coins from queue.
-            sold_coins, unsold_coins = balance.sell(op.change)
+            sold_coins = balance.remove(op)
 
             if coin == config.FIAT:
                 # Not taxable.
                 return None
-
-            if unsold_coins:
-                # Queue ran out of items to sell and not all coins
-                # could be sold.
-                log.error(
-                    f"{op.file_path.name}: Lines {op.line}: "
-                    f"Not enough {coin} in queue to sell: "
-                    f"missing {unsold_coins} {coin} "
-                    f"(transaction from {op.utc_time} "
-                    f"on {op.platform})\n"
-                    "\tThis error occurs if your account statements "
-                    "have unmatched buy/sell positions.\n"
-                    "\tHave you added all your account statements "
-                    "of the last years?\n"
-                    "\tThis error may also occur after deposits "
-                    "from unknown sources.\n"
-                )
-                raise RuntimeError
 
             if not self.in_tax_year(op) and not force:
                 # Sell is only taxable in the respective year.
@@ -177,14 +159,14 @@ class Taxman:
             elif isinstance(op, transaction.StakingEnd):
                 pass
             elif isinstance(op, transaction.Buy):
-                balance.put(op)
+                balance.add(op)
             elif isinstance(op, transaction.Sell):
                 if tx_ := evaluate_sell(op):
                     self.tax_events.append(tx_)
             elif isinstance(
                 op, (transaction.CoinLendInterest, transaction.StakingInterest)
             ):
-                balance.put(op)
+                balance.add(op)
                 if self.in_tax_year(op):
                     if misc.is_fiat(coin):
                         assert not isinstance(
@@ -197,23 +179,31 @@ class Taxman:
                     tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
                     self.tax_events.append(tx)
             elif isinstance(op, transaction.Airdrop):
-                balance.put(op)
+                balance.add(op)
             elif isinstance(op, transaction.Commission):
-                balance.put(op)
+                balance.add(op)
                 if self.in_tax_year(op):
                     taxation_type = "Einkünfte aus sonstigen Leistungen"
                     taxed_gain = self.price_data.get_cost(op)
                     tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
                     self.tax_events.append(tx)
             elif isinstance(op, transaction.Deposit):
-                if coin != config.FIAT:
+                if coin == config.FIAT:
+                    # Add to balance;
+                    # we do not care, where our home fiat comes from.
+                    balance.add(op)
+                else:  # coin != config.FIAT
                     log.warning(
                         f"Unresolved deposit of {op.change} {coin} "
                         f"on {op.platform} at {op.utc_time}. "
                         "The evaluation might be wrong."
                     )
             elif isinstance(op, transaction.Withdrawal):
-                if coin != config.FIAT:
+                if coin == config.FIAT:
+                    # Remove from balance;
+                    # we do not care, where our home fiat goes to.
+                    balance.remove(op)
+                else:  # coin != config.FIAT
                     log.warning(
                         f"Unresolved withdrawal of {op.change} {coin} "
                         f"from {op.platform} at {op.utc_time}. "
@@ -222,21 +212,12 @@ class Taxman:
             else:
                 raise NotImplementedError
 
-        # Check that all relevant positions were considered.
-        if balance.buffer_fee:
-            log.warning(
-                "Balance has outstanding fees which were not considered: "
-                f"{balance.buffer_fee} {coin}"
-            )
+        balance.sanity_check()
 
         # Calculate the amount of coins which should be left on the platform
         # and evaluate the (taxed) gain, if the coin would be sold right now.
         if config.CALCULATE_UNREALIZED_GAINS and (
-            (
-                left_coin := misc.dsum(
-                    ((bop.op.change - bop.sold) for bop in balance.queue)
-                )
-            )
+            (left_coin := misc.dsum((bop.not_sold for bop in balance.queue)))
         ):
             assert isinstance(left_coin, decimal.Decimal)
             # Calculate unrealized gains for the last time of `TAX_YEAR`.
