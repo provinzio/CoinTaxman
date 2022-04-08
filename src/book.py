@@ -115,21 +115,26 @@ class Book:
         platform = "binance"
         operation_mapping = {
             "Distribution": "Airdrop",
+            "Cash Voucher distribution": "Airdrop",
+            #
             "Savings Interest": "CoinLendInterest",
             "Savings purchase": "CoinLend",
             "Savings Principal redemption": "CoinLendEnd",
+            #
             "Commission History": "Commission",
             "Commission Fee Shared With You": "Commission",
             "Referrer rebates": "Commission",
             "Referral Kickback": "Commission",
-            "Launchpool Interest": "StakingInterest",
-            "Cash Voucher distribution": "Airdrop",
-            "Super BNB Mining": "StakingInterest",
+            # DeFi yield farming
             "Liquid Swap add": "CoinLend",
             "Liquid Swap remove": "CoinLendEnd",
+            "Launchpool Interest": "CoindLendInterest",
+            #
+            "Super BNB Mining": "StakingInterest",
             "POS savings interest": "StakingInterest",
             "POS savings purchase": "Staking",
             "POS savings redemption": "StakingEnd",
+            #
             "Withdraw": "Withdrawal",
         }
 
