@@ -224,13 +224,13 @@ def delayed(func: F) -> F:
 
 
 def is_fiat(symbol: Union[str, core.Fiat]) -> bool:
-    """Check if `symbol` is a fiat.
+    """Check if `symbol` is a fiat currency.
 
     Args:
         fiat (str): Currency Symbol.
 
     Returns:
-        bool: True if `symbol` is fiat. False otherwise.
+        bool: True if `symbol` is a fiat currency. False otherwise.
     """
     return isinstance(symbol, core.Fiat) or symbol in core.Fiat.__members__
 
