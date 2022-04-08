@@ -121,7 +121,7 @@ class Operation:
         assert len(operations) > 0, "There have to be operations to be merged."
         assert all(
             op1.identical_to(op2) for op1, op2 in itertools.combinations(operations, 2)
-        ), "Operations have to be identical to be mereged"
+        ), "Operations have to be identical to be merged"
 
         # Select arbitray operation from list.
         o = copy(operations[0])
