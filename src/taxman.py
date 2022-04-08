@@ -113,7 +113,7 @@ class Taxman:
 
             taxation_type = "Sonstige Einkünfte"
             # Price of the sell.
-            sell_price = self.price_data.get_cost(op)
+            sell_value = self.price_data.get_cost(op)
             taxed_gain = decimal.Decimal()
             real_gain = decimal.Decimal()
             # Coins which are older than (in this case) one year or
@@ -136,9 +136,9 @@ class Taxman:
                 )
                 # Only calculate the gains if necessary.
                 if is_taxable or config.CALCULATE_UNREALIZED_GAINS:
-                    partial_sell_price = (sc.sold / op.change) * sell_price
+                    partial_sell_value = (sc.sold / op.change) * sell_value
                     sold_coin_cost = self.price_data.get_cost(sc)
-                    gain = partial_sell_price - sold_coin_cost
+                    gain = partial_sell_value - sold_coin_cost
                     if is_taxable:
                         taxed_gain += gain
                     if config.CALCULATE_UNREALIZED_GAINS:
@@ -151,7 +151,7 @@ class Taxman:
                 taxation_type,
                 taxed_gain,
                 op,
-                sell_price,
+                sell_value,
                 real_gain,
                 remark,
             )
@@ -310,7 +310,7 @@ class Taxman:
             )
             lo_date = latest_operation.op.utc_time.strftime("%d.%m.%y")
 
-            invested = misc.dsum(tx.sell_price for tx in self.virtual_tax_events)
+            invested = misc.dsum(tx.sell_value for tx in self.virtual_tax_events)
             real_gains = misc.dsum(tx.real_gain for tx in self.virtual_tax_events)
             taxed_gains = misc.dsum(tx.taxed_gain for tx in self.virtual_tax_events)
             eval_str += "\n"
@@ -326,13 +326,13 @@ class Taxman:
             eval_str += f"Your portfolio on {lo_date} was:\n"
             for tx in sorted(
                 self.virtual_tax_events,
-                key=lambda tx: tx.sell_price,
+                key=lambda tx: tx.sell_value,
                 reverse=True,
             ):
                 eval_str += (
                     f"{tx.op.platform}: "
                     f"{tx.op.change:.6f} {tx.op.coin} > "
-                    f"{tx.sell_price:.2f} {config.FIAT} "
+                    f"{tx.sell_value:.2f} {config.FIAT} "
                     f"({tx.real_gain:.2f} gain, {tx.taxed_gain:.2f} taxed gain)\n"
                 )
 
@@ -371,7 +371,7 @@ class Taxman:
                 "Action",
                 "Amount",
                 "Asset",
-                f"Sell Price in {config.FIAT}",
+                f"Sell Value in {config.FIAT}",
                 "Remark",
             ]
             writer.writerow(header)
@@ -384,7 +384,7 @@ class Taxman:
                     tx.op.__class__.__name__,
                     tx.op.change,
                     tx.op.coin,
-                    tx.sell_price,
+                    tx.sell_value,
                     tx.remark,
                 ]
                 writer.writerow(line)
