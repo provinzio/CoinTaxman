@@ -640,6 +640,9 @@ class Book:
                     elif self.kraken_held_ops[refid]["appended"] is False:
                         self.kraken_held_ops[refid]["appended"] = True
                         try:
+                            # Make sure, that the found operations with the
+                            # same refid  have the same operation type, amount
+                            # of change and same coin.
                             assert isinstance(
                                 op, type(self.kraken_held_ops[refid]["operation"])
                             ), "operation"
@@ -651,9 +654,15 @@ class Book:
                                 op.coin == self.kraken_held_ops[refid]["operation"].coin
                             ), "coin"
                         except AssertionError as e:
+                            first_row = self.kraken_held_ops[refid]["operation"].line
                             log.error(
-                                f"{file_path} row {row}: Parameters for refid {refid} "
-                                f"({operation}) do not agree: {e}. "
+                                "Two internal kraken operations matched by the "
+                                f"same {refid=} don't have the same {e}.\n"
+                                "CoinTaxman expects, that these two operations "
+                                "have the same type of operation, amount of "
+                                "change and the same coin.\n"
+                                f"See {file_path} in row {first_row} and "
+                                f"{row}.\n"
                                 "Please create an Issue or PR."
                             )
                             raise RuntimeError
