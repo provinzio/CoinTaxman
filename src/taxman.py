@@ -61,10 +61,12 @@ class Taxman:
                 f"Unable to evaluate taxation for {config.PRINCIPLE=}."
             )
 
-    def in_tax_year(self, op: transaction.Operation) -> bool:
+    @staticmethod
+    def in_tax_year(op: transaction.Operation) -> bool:
         return op.utc_time.year == config.TAX_YEAR
 
-    def tax_deadline(self) -> datetime.datetime:
+    @staticmethod
+    def tax_deadline() -> datetime.datetime:
         return min(
             datetime.datetime(config.TAX_YEAR, 12, 31, 23, 59, 59),
             datetime.datetime.now(),
