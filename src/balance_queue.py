@@ -55,7 +55,7 @@ class BalanceQueue(abc.ABC):
         self.buffer_fee = decimal.Decimal()
 
     @abc.abstractmethod
-    def _put(self, bop: BalancedOperation) -> None:
+    def _put_(self, bop: BalancedOperation) -> None:
         """Put a new item in the queue.
 
         Args:
@@ -64,7 +64,7 @@ class BalanceQueue(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def _pop(self) -> BalancedOperation:
+    def _pop_(self) -> BalancedOperation:
         """Pop an item from the queue.
 
         Returns:
@@ -73,7 +73,7 @@ class BalanceQueue(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def _peek(self) -> BalancedOperation:
+    def _peek_(self) -> BalancedOperation:
         """Peek at the next item in the queue.
 
         Returns:
@@ -81,7 +81,7 @@ class BalanceQueue(abc.ABC):
         """
         raise NotImplementedError
 
-    def put(self, item: Union[transaction.Operation, BalancedOperation]) -> None:
+    def _put(self, item: Union[transaction.Operation, BalancedOperation]) -> None:
         """Put a new item in the queue and remove buffered fees.
 
         Args:
@@ -92,30 +92,30 @@ class BalanceQueue(abc.ABC):
         elif not isinstance(item, BalancedOperation):
             raise TypeError
 
-        self._put(item)
+        self._put_(item)
 
         # Remove fees which couldn't be removed before.
         if self.buffer_fee:
             # Clear the buffer.
             fee, self.buffer_fee = self.buffer_fee, decimal.Decimal()
             # Try to remove the fees.
-            self.remove_fee(fee)
+            self._remove_fee(fee)
 
-    def pop(self) -> BalancedOperation:
+    def _pop(self) -> BalancedOperation:
         """Pop an item from the queue.
 
         Returns:
             BalancedOperation
         """
-        return self._pop()
+        return self._pop_()
 
-    def peek(self) -> BalancedOperation:
+    def _peek(self) -> BalancedOperation:
         """Peek at the next item in the queue.
 
         Returns:
             BalancedOperation
         """
-        return self._peek()
+        return self._peek_()
 
     def add(self, op: transaction.Operation) -> None:
         """Add an operation with coins to the balance.
@@ -123,7 +123,9 @@ class BalanceQueue(abc.ABC):
         Args:
             op (transaction.Operation)
         """
-        self.put(op)
+        assert not isinstance(op, transaction.Fee)
+        assert op.coin == self.coin
+        self._put(op)
 
     def _remove(
         self,
@@ -145,7 +147,7 @@ class BalanceQueue(abc.ABC):
 
         while self.queue and change > 0:
             # Look at the next coin in the queue.
-            bop = self.peek()
+            bop = self._peek()
 
             # Get the amount of not sold coins.
             not_sold = bop.not_sold
@@ -166,7 +168,7 @@ class BalanceQueue(abc.ABC):
                 # Update the left over change,
                 change -= not_sold
                 # remove the fully sold coin from the queue
-                self.pop()
+                self._pop()
                 # and keep track of the sold amount.
                 sold_coins.append(transaction.SoldCoin(bop.op, not_sold))
 
@@ -190,6 +192,7 @@ class BalanceQueue(abc.ABC):
         Returns:
           - list[transaction.SoldCoin]: List of coins which were removed.
         """
+        assert op.coin == self.coin
         sold_coins, unsold_change = self._remove(op.change)
 
         if unsold_change:
@@ -210,7 +213,7 @@ class BalanceQueue(abc.ABC):
 
         return sold_coins
 
-    def remove_fee(self, fee: decimal.Decimal) -> None:
+    def _remove_fee(self, fee: decimal.Decimal) -> None:
         """Remove fee from the last added transaction.
 
         Args:
@@ -221,6 +224,10 @@ class BalanceQueue(abc.ABC):
             # Not enough coins in queue to remove fee.
             # Buffer the fee for next time.
             self.buffer_fee += left_over_fee
+
+    def remove_fee(self, fee: transaction.Fee) -> None:
+        assert fee.coin == self.coin
+        self._remove_fee(fee.change)
 
     def sanity_check(self) -> None:
         """Validate that all fees were paid or raise an exception.
@@ -245,7 +252,7 @@ class BalanceQueue(abc.ABC):
 
 
 class BalanceFIFOQueue(BalanceQueue):
-    def _put(self, bop: BalancedOperation) -> None:
+    def _put_(self, bop: BalancedOperation) -> None:
         """Put a new item in the queue.
 
         Args:
@@ -253,7 +260,7 @@ class BalanceFIFOQueue(BalanceQueue):
         """
         self.queue.append(bop)
 
-    def _pop(self) -> BalancedOperation:
+    def _pop_(self) -> BalancedOperation:
         """Pop an item from the queue.
 
         Returns:
@@ -261,7 +268,7 @@ class BalanceFIFOQueue(BalanceQueue):
         """
         return self.queue.popleft()
 
-    def _peek(self) -> BalancedOperation:
+    def _peek_(self) -> BalancedOperation:
         """Peek at the next item in the queue.
 
         Returns:
@@ -271,7 +278,7 @@ class BalanceFIFOQueue(BalanceQueue):
 
 
 class BalanceLIFOQueue(BalanceQueue):
-    def _put(self, bop: BalancedOperation) -> None:
+    def _put_(self, bop: BalancedOperation) -> None:
         """Put a new item in the queue.
 
         Args:
@@ -279,7 +286,7 @@ class BalanceLIFOQueue(BalanceQueue):
         """
         self.queue.append(bop)
 
-    def _pop(self) -> BalancedOperation:
+    def _pop_(self) -> BalancedOperation:
         """Pop an item from the queue.
 
         Returns:
@@ -287,7 +294,7 @@ class BalanceLIFOQueue(BalanceQueue):
         """
         return self.queue.pop()
 
-    def _peek(self) -> BalancedOperation:
+    def _peek_(self) -> BalancedOperation:
         """Peek at the next item in the queue.
 
         Returns:
