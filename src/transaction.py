@@ -148,10 +148,14 @@ class CoinLendEnd(Operation):
 
 
 class Staking(Operation):
+    """Cold Staking or Proof Of Stake (not for mining)"""
+
     pass
 
 
 class StakingEnd(Operation):
+    """Cold Staking or Proof Of Stake (not for mining)"""
+
     pass
 
 
@@ -172,6 +176,8 @@ class CoinLendInterest(Transaction):
 
 
 class StakingInterest(Transaction):
+    """Cold Staking or Proof Of Stake (not for mining)"""
+
     pass
 
 
