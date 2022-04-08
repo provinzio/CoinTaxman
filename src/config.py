@@ -34,7 +34,14 @@ TMP_LOG_FILEPATH = BASE_PATH / "tmp.log"
 # General config
 config = configparser.ConfigParser()
 config.read(CONFIG_FILE)
-COUNTRY = core.Country[config["BASE"].get("COUNTRY", "GERMANY")]
+
+try:
+    COUNTRY = core.Country[config["BASE"].get("COUNTRY", "GERMANY")]
+except KeyError as e:
+    raise NotImplementedError(
+        f"Your country {e} is currently not supported. Please create an Issue or PR."
+    )
+
 TAX_YEAR = int(config["BASE"].get("TAX_YEAR", "2021"))
 REFETCH_MISSING_PRICES = config["BASE"].getboolean("REFETCH_MISSING_PRICES")
 MEAN_MISSING_PRICES = config["BASE"].getboolean("MEAN_MISSING_PRICES")
@@ -62,7 +69,10 @@ if COUNTRY == core.Country.GERMANY:
 
 
 else:
-    raise NotImplementedError(f"Your country {COUNTRY} is not supported.")
+    raise NotImplementedError(
+        f"Your country {COUNTRY} is currently not supported. "
+        "Please create an Issue or PR."
+    )
 
 # Program specific constants.
 FIAT = FIAT_CLASS.name  # Convert to string.
