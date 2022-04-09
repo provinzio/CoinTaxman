@@ -17,10 +17,10 @@
 import logging
 from logging import getLogger, shutdown  # noqa: F401
 
-from config import TMP_LOG_FILEPATH
+from config import LOG_LEVEL, TMP_LOG_FILEPATH
 
-logging.basicConfig(level=logging.DEBUG)
 log = getLogger(None)
+log.setLevel(LOG_LEVEL)
 
 # Entferne die handler des basic loggers.
 for handler in log.handlers:
