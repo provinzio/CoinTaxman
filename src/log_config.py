@@ -17,7 +17,7 @@
 import logging
 from logging import getLogger, shutdown  # noqa: F401
 
-from config import TMP_LOG_FILEPATH, LOG_LEVEL
+from config import LOG_LEVEL, TMP_LOG_FILEPATH
 
 log = getLogger(None)
 log.setLevel(LOG_LEVEL)
