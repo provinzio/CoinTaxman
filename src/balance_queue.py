@@ -114,7 +114,7 @@ class BalanceQueue(abc.ABC):
 
             # Calculate the amount of coins, which are not sold yet.
             not_sold = bop.op.change - bop.sold
-            assert not_sold > 0
+            assert not_sold > 0, f"{not_sold} {bop.op.coin} not sold ({type(bop.op)})"
 
             if not_sold > change:
                 # There are more coins left than change.

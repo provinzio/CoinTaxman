@@ -128,6 +128,7 @@ class Taxman:
                             transaction.CoinLendInterest,
                             transaction.StakingInterest,
                             transaction.Commission,
+                            transaction.MarginGain,
                         ),
                     )
                     and not sc.op.coin == config.FIAT
@@ -176,6 +177,33 @@ class Taxman:
             elif isinstance(op, transaction.Sell):
                 if tx_ := evaluate_sell(op):
                     self.tax_events.append(tx_)
+            elif isinstance(op, transaction.MarginFee):
+                balance.remove_fee(op.change)
+                if self.in_tax_year(op):
+                    # Fees reduce taxed gain.
+                    taxation_type = (
+                        "Kapitaleinkünfte aus Margin Trading (Werbungskosten)"
+                    )
+                    taxed_gain = -self.price_data.get_cost(op)
+                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
+                    self.tax_events.append(tx)
+            elif isinstance(op, transaction.MarginGain):
+                balance.put(op)
+                if self.in_tax_year(op):
+                    taxation_type = "Kapitaleinkünfte aus Margin Trading"
+                    taxed_gain = self.price_data.get_cost(op)
+                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
+                    self.tax_events.append(tx)
+            elif isinstance(op, transaction.MarginLoss):
+                # First, sell the lost coin to evaluate gain/loss from holding it
+                if tx_ := evaluate_sell(op):
+                    self.tax_events.append(tx_)
+                # Then, add the total loss to the income from capital
+                if self.in_tax_year(op):
+                    taxation_type = "Kapitaleinkünfte aus Margin Trading"
+                    taxed_gain = -self.price_data.get_cost(op)
+                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
+                    self.tax_events.append(tx)
             elif isinstance(
                 op, (transaction.CoinLendInterest, transaction.StakingInterest)
             ):
