@@ -1212,6 +1212,56 @@ class Book:
 
         return None
 
+    def resolve_deposits(self) -> None:
+        """Matches withdrawals and deposits by referencing the related
+        withdrawal on the deposit.
+
+        A match is found when:
+            A. The coin is the same
+            B. The deposit amount is between 0.99 and 1 times the withdrawal amount.
+
+        Returns:
+            None
+        """
+        sorted_ops = tr.sort_operations(self.operations, ["utc_time"])
+
+        def is_match(withdrawal: tr.Withdrawal, deposit: tr.Deposit) -> bool:
+            return (
+                withdrawal.coin == deposit.coin
+                and withdrawal.change * decimal.Decimal(0.99)
+                <= deposit.change
+                <= withdrawal.change
+            )
+
+        withdrawal_queue: list[tr.Withdrawal] = []
+
+        for op in sorted_ops:
+            # log.debug(op.utc_time)
+            if isinstance(op, tr.Withdrawal):
+                if not misc.is_fiat(op.coin):
+                    withdrawal_queue.append(op)
+            elif isinstance(op, tr.Deposit):
+                if not misc.is_fiat(op.coin):
+                    try:
+                        match = next(w for w in withdrawal_queue if is_match(w, op))
+                        op.link = match
+                        withdrawal_queue.remove(match)
+                        log.info(
+                            "Linking transfer: "
+                            f"{match.change} {match.coin} "
+                            f"({match.platform}, {match.utc_time}) "
+                            f"-> {op.change} {op.coin} "
+                            f"({op.platform}, {op.utc_time})"
+                        )
+                    except StopIteration:
+                        log.warning(
+                            "No matching withdrawal operation found for deposit of "
+                            f"{match.change} {match.coin} "
+                            f"({match.platform}, {match.utc_time})"
+                        )
+
+        log.info("Finished matching")
+
     def get_price_from_csv(self) -> None:
         """Calculate coin prices from buy/sell operations in CSV files.
 

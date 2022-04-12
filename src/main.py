@@ -44,6 +44,7 @@ def main() -> None:
     # (as long as there are only one buy/sell pair per time,
     # might be problematic otherwhise).
     book.merge_identical_operations()
+    book.resolve_deposits()
     book.get_price_from_csv()
     book.match_fees_with_operations()
 

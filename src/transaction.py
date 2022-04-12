@@ -190,7 +190,7 @@ class Commission(Transaction):
 
 
 class Deposit(Transaction):
-    pass
+    link: typing.Optional[Withdrawal] = None
 
 
 class Withdrawal(Transaction):
