@@ -1237,10 +1237,10 @@ class Book:
 
         for op in sorted_ops:
             if isinstance(op, tr.Withdrawal):
-                if not misc.is_fiat(op.coin):
+                if op.coin != config.FIAT:
                     withdrawal_queue.append(op)
             elif isinstance(op, tr.Deposit):
-                if not misc.is_fiat(op.coin):
+                if op.coin != config.FIAT:
                     try:
                         match = next(w for w in withdrawal_queue if is_match(w, op))
                         op.link = match
