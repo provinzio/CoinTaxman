@@ -1236,7 +1236,6 @@ class Book:
         withdrawal_queue: list[tr.Withdrawal] = []
 
         for op in sorted_ops:
-            # log.debug(op.utc_time)
             if isinstance(op, tr.Withdrawal):
                 if not misc.is_fiat(op.coin):
                     withdrawal_queue.append(op)
