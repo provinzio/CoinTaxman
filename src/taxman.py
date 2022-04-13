@@ -308,7 +308,7 @@ class Taxman:
             coin=op.coin,
             sell_utc_time=op.utc_time,
             buy_utc_time=sc.op.utc_time,
-            **fee_params,  # type: ignore[call-arg]
+            **fee_params,
             sell_value_in_fiat=sell_value_in_fiat,
             buy_cost_in_fiat=buy_cost_in_fiat,
             is_taxable=is_taxable,
