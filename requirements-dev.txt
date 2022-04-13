@@ -20,6 +20,8 @@ flake8==4.0.1
     #   flake8-bugbear
 flake8-bugbear==22.3.23
     # via -r requirements-dev.in
+isort==5.10.1
+    # via -r requirements-dev.in
 mccabe==0.6.1
     # via flake8
 mypy==0.942

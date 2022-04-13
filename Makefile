@@ -65,7 +65,7 @@ else # Linux
 	source .pyenv/bin/activate && make install
 endif
 
-# Rebuild dependencies(-dev).txt
+# Rebuild requirements(-dev).txt
 build-deps:
 	pip-compile --output-file requirements.txt requirements.in
 	pip-compile --output-file requirements-dev.txt requirements-dev.in
