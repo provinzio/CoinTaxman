@@ -1270,7 +1270,20 @@ class Book:
                         f"({op.platform}, {op.utc_time})"
                     )
 
-        log.info("Finished matching")
+        if withdrawal_queue:
+            log.warning(
+                "Unable to match all withdrawals with deposits. "
+                "Have you added all account statements? "
+                "Following withdrawals couldn't be matched:\n"
+                + (
+                    "\n".join(
+                        f" - {op.change} {op.coin} from {op.platform} at{op.utc_time}"
+                        for op in withdrawal_queue
+                    )
+                )
+            )
+
+        log.info("Finished withdrawal/deposit matching")
 
     def get_price_from_csv(self) -> None:
         """Calculate coin prices from buy/sell operations in CSV files.
