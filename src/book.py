@@ -1251,8 +1251,8 @@ class Book:
                 except StopIteration:
                     log.warning(
                         "No matching withdrawal operation found for deposit of "
-                        f"{match.change} {match.coin} "
-                        f"({match.platform}, {match.utc_time}). "
+                        f"{op.change} {op.coin} "
+                        f"({op.platform}, {op.utc_time}). "
                         "The tax evaluation might be wrong. "
                         "Have you added all account statements? "
                         "For tax evaluation, it might be importend when "
