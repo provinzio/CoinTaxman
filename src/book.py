@@ -18,6 +18,7 @@ import collections
 import csv
 import datetime
 import decimal
+import itertools
 import re
 from collections import defaultdict
 from pathlib import Path
@@ -1353,6 +1354,7 @@ class Book:
         # Split operations in fees and other operations.
         operations = []
         all_fees: list[tr.Fee] = []
+
         for op in self.operations:
             if isinstance(op, tr.Fee):
                 all_fees.append(op)
@@ -1363,10 +1365,8 @@ class Book:
         self.operations = operations
 
         # Match fees to book operations.
-        platform_fees = misc.group_by(all_fees, "platform")
-        for platform, fees in platform_fees.items():
-            time_fees = misc.group_by(all_fees, "utc_time")
-            for utc_time, fees in time_fees.items():
+        for platform, _fees in misc.group_by(all_fees, "platform").items():
+            for utc_time, fees in misc.group_by(_fees, "utc_time").items():
 
                 # Find matching operations by platform and time.
                 matching_operations = {
