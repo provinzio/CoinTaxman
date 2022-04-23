@@ -235,7 +235,7 @@ def is_fiat(symbol: Union[str, core.Fiat]) -> bool:
     """Check if `symbol` is a fiat currency.
 
     Args:
-        fiat (str): Currency Symbol.
+        fiat (Union[str, core.Fiat]): Currency Symbol.
 
     Returns:
         bool: True if `symbol` is a fiat currency. False otherwise.
