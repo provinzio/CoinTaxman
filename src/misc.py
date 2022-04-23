@@ -189,11 +189,11 @@ def group_by(lst: L, key: Union[str, list[str]]) -> dict[Any, L]:
     """Group a list of objects by `key`.
 
     Args:
-        lst (list)
-        key (str)
+        lst (L)
+        key (Union[str, list[str]])
 
     Returns:
-        dict[Any, list]: Dict with different `key`as keys.
+        dict[Any, L]: Dict with different `key`as keys.
     """
     d = collections.defaultdict(list)
     if isinstance(key, str):
