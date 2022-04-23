@@ -190,7 +190,7 @@ class Commission(Transaction):
 
 
 class Deposit(Transaction):
-    pass
+    link: Optional[Withdrawal] = None
 
 
 class Withdrawal(Transaction):

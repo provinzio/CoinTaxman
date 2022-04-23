@@ -1212,6 +1212,66 @@ class Book:
 
         return None
 
+    def resolve_deposits(self) -> None:
+        """Match withdrawals to deposits.
+
+        A match is found when:
+            A. The coin is the same  and
+            B. The deposit amount is between 0.99 and 1 times the withdrawal amount.
+
+        Returns:
+            None
+        """
+        sorted_ops = tr.sort_operations(self.operations, ["utc_time"])
+
+        def is_match(withdrawal: tr.Withdrawal, deposit: tr.Deposit) -> bool:
+            return (
+                withdrawal.coin == deposit.coin
+                and withdrawal.change * decimal.Decimal(0.99)
+                <= deposit.change
+                <= withdrawal.change
+            )
+
+        withdrawal_queue: list[tr.Withdrawal] = []
+
+        for op in sorted_ops:
+            if op.coin == config.FIAT:
+                # Do not match home fiat deposit/withdrawals.
+                continue
+
+            if isinstance(op, tr.Withdrawal):
+                # Add new withdrawal to queue.
+                withdrawal_queue.append(op)
+
+            elif isinstance(op, tr.Deposit):
+                try:
+                    # Find a matching withdrawal for this deposit.
+                    # If multiple are found, take the first (regarding utc_time).
+                    match = next(w for w in withdrawal_queue if is_match(w, op))
+                except StopIteration:
+                    log.warning(
+                        "No matching withdrawal operation found for deposit of "
+                        f"{op.change} {op.coin} "
+                        f"({op.platform}, {op.utc_time}). "
+                        "The tax evaluation might be wrong. "
+                        "Have you added all account statements? "
+                        "For tax evaluation, it might be importend when "
+                        "and for which price these coins were bought."
+                    )
+                else:
+                    # Match the found withdrawal and remove it from queue.
+                    op.link = match
+                    withdrawal_queue.remove(match)
+                    log.debug(
+                        "Linking withdrawal with deposit: "
+                        f"{match.change} {match.coin} "
+                        f"({match.platform}, {match.utc_time}) "
+                        f"-> {op.change} {op.coin} "
+                        f"({op.platform}, {op.utc_time})"
+                    )
+
+        log.info("Finished matching")
+
     def get_price_from_csv(self) -> None:
         """Calculate coin prices from buy/sell operations in CSV files.
 
