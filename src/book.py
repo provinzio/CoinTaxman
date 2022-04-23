@@ -1213,11 +1213,10 @@ class Book:
         return None
 
     def resolve_deposits(self) -> None:
-        """Matches withdrawals and deposits by referencing the related
-        withdrawal on the deposit.
+        """Match withdrawals to deposits.
 
         A match is found when:
-            A. The coin is the same
+            A. The coin is the same  and
             B. The deposit amount is between 0.99 and 1 times the withdrawal amount.
 
         Returns:
@@ -1236,28 +1235,40 @@ class Book:
         withdrawal_queue: list[tr.Withdrawal] = []
 
         for op in sorted_ops:
+            if op.coin == config.FIAT:
+                # Do not match home fiat deposit/withdrawals.
+                continue
+
             if isinstance(op, tr.Withdrawal):
-                if op.coin != config.FIAT:
-                    withdrawal_queue.append(op)
+                # Add new withdrawal to queue.
+                withdrawal_queue.append(op)
+
             elif isinstance(op, tr.Deposit):
-                if op.coin != config.FIAT:
-                    try:
-                        match = next(w for w in withdrawal_queue if is_match(w, op))
-                        op.link = match
-                        withdrawal_queue.remove(match)
-                        log.info(
-                            "Linking transfer: "
-                            f"{match.change} {match.coin} "
-                            f"({match.platform}, {match.utc_time}) "
-                            f"-> {op.change} {op.coin} "
-                            f"({op.platform}, {op.utc_time})"
-                        )
-                    except StopIteration:
-                        log.warning(
-                            "No matching withdrawal operation found for deposit of "
-                            f"{match.change} {match.coin} "
-                            f"({match.platform}, {match.utc_time})"
-                        )
+                try:
+                    # Find a matching withdrawal for this deposit.
+                    # If multiple are found, take the first (regarding utc_time).
+                    match = next(w for w in withdrawal_queue if is_match(w, op))
+                except StopIteration:
+                    log.warning(
+                        "No matching withdrawal operation found for deposit of "
+                        f"{match.change} {match.coin} "
+                        f"({match.platform}, {match.utc_time}). "
+                        "The tax evaluation might be wrong. "
+                        "Have you added all account statements? "
+                        "For tax evaluation, it might be importend when "
+                        "and for which price these coins were bought."
+                    )
+                else:
+                    # Match the found withdrawal and remove it from queue.
+                    op.link = match
+                    withdrawal_queue.remove(match)
+                    log.debug(
+                        "Linking withdrawal with deposit: "
+                        f"{match.change} {match.coin} "
+                        f"({match.platform}, {match.utc_time}) "
+                        f"-> {op.change} {op.coin} "
+                        f"({op.platform}, {op.utc_time})"
+                    )
 
         log.info("Finished matching")
 
