@@ -70,6 +70,14 @@ def xdecimal(
 
 
 def dsum(__iterable: Iterable[decimal.Decimal]) -> decimal.Decimal:
+    """Builtin sum function, which always returns a decimal.Decimal.
+
+    Args:
+        __iterable (Iterable[decimal.Decimal])
+
+    Returns:
+        decimal.Decimal
+    """
     return decimal.Decimal(sum(__iterable))
 
 
