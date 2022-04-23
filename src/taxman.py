@@ -32,7 +32,8 @@ from price_data import PriceData
 log = log_config.getLogger(__name__)
 
 TAX_DEADLINE = min(
-    datetime.datetime(config.TAX_YEAR, 12, 31, 23, 59, 59), datetime.datetime.now()
+    datetime.datetime.now(),  # now
+    datetime.datetime(config.TAX_YEAR, 12, 31, 23, 59, 59),  # end of year
 )
 
 
@@ -73,8 +74,10 @@ class Taxman:
 
         self._balances: dict[Any, balance_queue.BalanceQueue] = {}
 
+    ###########################################################################
     # Helper functions for balances.
     # TODO Refactor this into separated BalanceDict class?
+    ###########################################################################
 
     def balance(self, platform: str, coin: str) -> balance_queue.BalanceQueue:
         key = (platform, coin) if config.MULTI_DEPOT else coin
@@ -99,7 +102,9 @@ class Taxman:
             for fee in fees:
                 self.balance_op(fee).remove_fee(fee)
 
+    ###########################################################################
     # Country specific evaluation functions.
+    ###########################################################################
 
     def evaluate_sell(self, op: tr.Sell, sold_coins: list[tr.SoldCoin]) -> tr.TaxEvent:
         assert op.coin != config.FIAT
@@ -226,6 +231,7 @@ class Taxman:
         elif isinstance(op, (tr.CoinLendInterest, tr.StakingInterest)):
             # TODO@now
             self.add_to_balance(op)
+
             # TODO@now REFACTOR
             if in_tax_year(op):
                 if misc.is_fiat(op.coin):
@@ -235,6 +241,7 @@ class Taxman:
                     taxation_type = "Einkünfte aus Kapitalvermögen"
                 else:
                     taxation_type = "Einkünfte aus sonstigen Leistungen"
+
                 taxed_gain = self.price_data.get_cost(op)
                 tx = tr.TaxEvent(taxation_type, taxed_gain, op)
                 self.tax_events.append(tx)
@@ -262,6 +269,7 @@ class Taxman:
         elif isinstance(op, tr.Commission):
             # TODO write information text
             self.add_to_balance(op)
+
             if in_tax_year(op):
                 # TODO do correct taxation.
                 log.warning(
@@ -291,7 +299,9 @@ class Taxman:
         else:
             raise NotImplementedError
 
+    ###########################################################################
     # General tax evaluation functions.
+    ###########################################################################
 
     def _evaluate_taxation(self, operations: list[tr.Operation]) -> None:
         """Evaluate the taxation for a list of operations using
@@ -345,6 +355,10 @@ class Taxman:
         else:
             # Evaluate taxation separated by coins "in a single virtual depot".
             self._evaluate_taxation(self.book.operations)
+
+    ###########################################################################
+    # Export / Summary
+    ###########################################################################
 
     def print_evaluation(self) -> None:
         """Print short summary of evaluation to stdout."""
