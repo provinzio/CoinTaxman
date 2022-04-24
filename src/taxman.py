@@ -253,7 +253,7 @@ class Taxman:
             if in_tax_year(op):
                 # TODO do correct taxation.
                 log.warning(
-                    "You received an Aridrop. An airdrop could be taxed as "
+                    "You received an Airdrop. An airdrop could be taxed as "
                     "`Einkünfte aus sonstigen Leistungen` or `Schenkung` or "
                     "something else?, as the case may be. "
                     "In the current implementation, all airdrops are taxed as "
