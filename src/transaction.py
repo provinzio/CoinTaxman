@@ -194,7 +194,12 @@ class Deposit(Transaction):
 
 
 class Withdrawal(Transaction):
-    pass
+    withdrawn_coins: Optional[list[SoldCoin]]
+
+    def partial_withdrawn_coins(self, percent: decimal.Decimal) -> list[SoldCoin]:
+        assert self.withdrawn_coins
+        withdrawn_coins = [wc.partial(percent) for wc in self.withdrawn_coins]
+        return withdrawn_coins
 
 
 # Helping variables
@@ -204,6 +209,12 @@ class Withdrawal(Transaction):
 class SoldCoin:
     op: Operation
     sold: decimal.Decimal
+
+    def partial(self, percent: decimal.Decimal) -> SoldCoin:
+        sc = copy(self)
+        sc.sold *= percent
+        sc.op.change *= percent
+        return sc
 
 
 @dataclasses.dataclass
