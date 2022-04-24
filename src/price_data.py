@@ -573,6 +573,14 @@ class PriceData:
             return price * op_sc.sold
         raise NotImplementedError
 
+    def get_partial_cost(
+        self,
+        op_sc: Union[tr.Operation, tr.SoldCoin],
+        percent: decimal.Decimal,
+        reference_coin: str = config.FIAT,
+    ) -> decimal.Decimal:
+        return percent * self.get_cost(op_sc, reference_coin=reference_coin)
+
     def check_database(self):
         stats = {}
 
