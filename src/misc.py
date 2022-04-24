@@ -69,6 +69,21 @@ def xdecimal(
     return None if x is None or x == "" else decimal.Decimal(x)
 
 
+def cdecimal(x: Union[None, str, int, float, decimal.Decimal]) -> decimal.Decimal:
+    """Convert to decimal and change None to 0.
+
+    See xdecimal for further informations.
+
+    Args:
+        x (Union[None, str, int, float, decimal.Decimal])
+
+    Returns:
+        decimal.Decimal
+    """
+    dec = xdecimal(x)
+    return decimal.Decimal() if dec is None else dec
+
+
 def dsum(__iterable: Iterable[decimal.Decimal]) -> decimal.Decimal:
     """Builtin sum function, which always returns a decimal.Decimal.
 
