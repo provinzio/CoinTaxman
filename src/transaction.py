@@ -199,6 +199,9 @@ class Withdrawal(Transaction):
     def partial_withdrawn_coins(self, percent: decimal.Decimal) -> list[SoldCoin]:
         assert self.withdrawn_coins
         withdrawn_coins = [wc.partial(percent) for wc in self.withdrawn_coins]
+        assert self.change == misc.dsum(
+            (wsc.sold for wsc in withdrawn_coins)
+        ), "Withdrawn coins total must be equal to the sum if the single coins."
         return withdrawn_coins
 
 
