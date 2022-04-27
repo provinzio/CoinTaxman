@@ -32,8 +32,10 @@ from price_data import PriceData
 log = log_config.getLogger(__name__)
 
 TAX_DEADLINE = min(
-    datetime.datetime.now(),  # now
-    datetime.datetime(config.TAX_YEAR, 12, 31, 23, 59, 59),  # end of year
+    datetime.datetime.now().replace(tzinfo=config.LOCAL_TIMEZONE),  # now
+    datetime.datetime(
+        config.TAX_YEAR, 12, 31, 23, 59, 59, tzinfo=config.LOCAL_TIMEZONE
+    ),  # end of year
 )
 
 

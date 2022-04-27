@@ -15,7 +15,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import configparser
-from datetime import datetime
+import datetime as dt
+import locale
 from os import environ
 from pathlib import Path
 
@@ -63,8 +64,10 @@ if _env_tax_year := environ.get("TAX_YEAR"):
 if COUNTRY == core.Country.GERMANY:
     FIAT_CLASS = core.Fiat.EUR
     PRINCIPLE = core.Principle.FIFO
+    LOCAL_TIMEZONE = dt.datetime.now(dt.timezone.utc).astimezone().tzinfo
+    locale_str = "de_DE"
 
-    def IS_LONG_TERM(buy: datetime, sell: datetime) -> bool:
+    def IS_LONG_TERM(buy: dt.datetime, sell: dt.datetime) -> bool:
         return buy + relativedelta(years=1) < sell
 
 
@@ -76,3 +79,4 @@ else:
 
 # Program specific constants.
 FIAT = FIAT_CLASS.name  # Convert to string.
+locale.setlocale(locale.LC_ALL, locale_str)
