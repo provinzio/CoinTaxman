@@ -254,6 +254,14 @@ class BalanceQueue(abc.ABC):
             )
             raise RuntimeError
 
+    def remove_all(self) -> list[tr.SoldCoin]:
+        sold_coins = []
+        while self.queue:
+            bop = self._pop()
+            not_sold = bop.not_sold
+            sold_coins.append(tr.SoldCoin(bop.op, not_sold))
+        return sold_coins
+
 
 class BalanceFIFOQueue(BalanceQueue):
     def _put_(self, bop: BalancedOperation) -> None:
