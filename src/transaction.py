@@ -529,11 +529,11 @@ class InterestReportEntry(TaxReportEntry):
 
 
 class LendingInterestReportEntry(InterestReportEntry):
-    event_type = "Einkünfte durch Coin-Lending"
+    event_type = "Coin-Lending"
 
 
 class StakingInterestReportEntry(InterestReportEntry):
-    event_type = "Einkünfte durch Staking"
+    event_type = "Staking"
 
 
 class AirdropReportEntry(TaxReportEntry):
