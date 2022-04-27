@@ -248,12 +248,12 @@ class TaxReportEntry:
 
     @property
     def _total_fee_in_fiat(self) -> Optional[decimal.Decimal]:
-        if self.first_fee_in_fiat == self.second_fee_in_fiat == None:
+        if self.first_fee_in_fiat is None and self.second_fee_in_fiat is None:
             return None
         return misc.dsum(
             map(
                 # TODO Report mypy bug
-                misc.cdecimal,  # type: ignore
+                misc.cdecimal,
                 (self.first_fee_in_fiat, self.second_fee_in_fiat),
             )
         )
@@ -263,10 +263,9 @@ class TaxReportEntry:
     @property
     def _gain_in_fiat(self) -> Optional[decimal.Decimal]:
         if (
-            self.first_value_in_fiat
-            == self.second_value_in_fiat
-            == self._total_fee_in_fiat
-            == None
+            self.first_value_in_fiat is None
+            and self.second_value_in_fiat is None
+            and self._total_fee_in_fiat is None
         ):
             return None
         return (
@@ -347,9 +346,9 @@ class TaxReportEntry:
 
     @classmethod
     def labels(cls) -> list[str]:
-        l = cls._labels()
-        assert len(l) == len(dataclasses.fields(cls))
-        return l
+        labels = cls._labels()
+        assert len(labels) == len(dataclasses.fields(cls))
+        return labels
 
     def values(self) -> Iterator:
         return (getattr(self, f) for f in self.field_names())

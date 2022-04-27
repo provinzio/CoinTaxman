@@ -126,10 +126,12 @@ class Taxman:
         self,
         op: tr.Sell,
         sc: tr.SoldCoin,
-        additional_fee: decimal.Decimal = decimal.Decimal(),
+        additional_fee: Optional[decimal.Decimal] = None,
         ReportType: Type[tr.SellReportEntry] = tr.SellReportEntry,
     ) -> None:
         assert op.coin == sc.op.coin
+        if additional_fee is None:
+            additional_fee = decimal.Decimal()
 
         # Share the fees and sell_value proportionally to the coins sold.
         percent = sc.sold / op.change
@@ -451,10 +453,13 @@ class Taxman:
                     ReportType=tr.UnrealizedSellReportEntry,
                 )
                 # TODO UnrealizedSellReportEntry nicht von irgendwas vererben?
-                # TODO _evaluate_sell darf noch nicht hinzufügen, nur anlegen? return ReportType
-                # TODO offene Positionen nur platform/coin, wert,... ohne kauf und verkaufsdatum
+                # TODO _evaluate_sell darf noch nicht hinzufügen, nur anlegen?
+                #      return ReportType
+                # TODO offene Positionen nur platform/coin, wert,... ohne kauf
+                #      und verkaufsdatum
 
-                # TODO ODER Offene  Position bei "Einkunftsart" -> "Herkunft" (Kauf, Interest, ...)
+                # TODO ODER Offene  Position bei "Einkunftsart" -> "Herkunft"
+                #      (Kauf, Interest, ...)
                 # TODO dann noch eine Zusammenfassung der offenen Positionen
 
     def evaluate_taxation(self) -> None:
@@ -502,7 +507,7 @@ class Taxman:
         ]
         assert all(tre.gain_in_fiat is not None for tre in unrealized_report_entries)
         unrealized_gain = misc.dsum(
-            tre.gain_in_fiat for tre in unrealized_report_entries
+            misc.not_none(tre.gain_in_fiat) for tre in unrealized_report_entries
         )
         unrealized_taxable_gain = misc.dsum(
             tre.taxable_gain for tre in unrealized_report_entries
@@ -582,7 +587,8 @@ class Taxman:
                 tre.first_utc_time is not None for tre in self.tax_report_entries
             )
             for tre in sorted(
-                self.tax_report_entries, key=lambda tre: tre.first_utc_time
+                self.tax_report_entries,
+                key=lambda tre: misc.not_none(tre.first_utc_time),
             ):
                 assert isinstance(tre, tr.TaxReportEntry)
                 writer.writerow(tre.values())
@@ -628,7 +634,8 @@ class Taxman:
             # Header
             # TODO increase height of first row
             ws.write_row(0, 0, ReportType.labels())
-            # TODO set column width (custom?) and correct format (datetime, change up to 8 decimal places, ...)
+            # TODO set column width (custom?) and correct format (datetime,
+            #      change up to 8 decimal places, ...)
 
             for row, entry in enumerate(tax_report_entries, 1):
                 ws.write_row(row, 0, entry.values())

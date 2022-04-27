@@ -18,7 +18,6 @@ import collections
 import csv
 import datetime
 import decimal
-import itertools
 import re
 from collections import defaultdict
 from pathlib import Path

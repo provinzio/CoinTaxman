@@ -302,3 +302,12 @@ def get_current_commit_hash(default: Optional[str] = None) -> str:
         if default is None:
             raise RuntimeError("Unable to determine commit hash") from e
         return default
+
+
+T = TypeVar("T")
+
+
+def not_none(v: Optional[T]) -> T:
+    if v is None:
+        raise ValueError()
+    return v
