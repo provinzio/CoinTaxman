@@ -23,7 +23,7 @@ import itertools
 import typing
 from copy import copy
 from pathlib import Path
-from typing import ClassVar, Optional
+from typing import ClassVar, Iterator, Optional
 
 import log_config
 import misc
@@ -228,6 +228,439 @@ class TaxEvent:
     sell_value: decimal.Decimal = decimal.Decimal()
     real_gain: decimal.Decimal = decimal.Decimal()
     remark: str = ""
+
+
+@dataclasses.dataclass
+class TaxReportEntry:
+    event_type = "virtual"
+
+    first_platform: Optional[str] = None
+    second_platform: Optional[str] = None
+
+    amount: Optional[decimal.Decimal] = None
+    coin: Optional[str] = None
+
+    first_utc_time: Optional[datetime.datetime] = None
+    second_utc_time: Optional[datetime.datetime] = None
+
+    # Fee might be paid in multiple coin types (e.g. Binance BNB)
+    first_fee_amount: Optional[decimal.Decimal] = None
+    first_fee_coin: Optional[str] = None
+    first_fee_in_fiat: Optional[decimal.Decimal] = None
+    #
+    second_fee_amount: Optional[decimal.Decimal] = None
+    second_fee_coin: Optional[str] = None
+    second_fee_in_fiat: Optional[decimal.Decimal] = None
+
+    first_value_in_fiat: Optional[decimal.Decimal] = None
+    second_value_in_fiat: Optional[decimal.Decimal] = None
+    total_fee_in_fiat: Optional[decimal.Decimal] = dataclasses.field(init=False)
+
+    @property
+    def _total_fee_in_fiat(self) -> Optional[decimal.Decimal]:
+        if self.first_fee_in_fiat == self.second_fee_in_fiat == None:
+            return None
+        return misc.dsum(
+            map(
+                # TODO Report mypy bug
+                misc.cdecimal,  # type: ignore
+                (self.first_fee_in_fiat, self.second_fee_in_fiat),
+            )
+        )
+
+    gain_in_fiat: Optional[decimal.Decimal] = dataclasses.field(init=False)
+
+    @property
+    def _gain_in_fiat(self) -> Optional[decimal.Decimal]:
+        if (
+            self.first_value_in_fiat
+            == self.second_value_in_fiat
+            == self._total_fee_in_fiat
+            == None
+        ):
+            return None
+        return (
+            misc.cdecimal(self.first_value_in_fiat)
+            - misc.cdecimal(self.second_value_in_fiat)
+            - misc.cdecimal(self._total_fee_in_fiat)
+        )
+
+    is_taxable: Optional[bool] = None
+    taxation_type: Optional[str] = None
+    remark: Optional[str] = None
+
+    @property
+    def taxable_gain(self) -> decimal.Decimal:
+        if self.is_taxable and self._gain_in_fiat:
+            return self._gain_in_fiat
+        return decimal.Decimal()
+
+    # Copy-paste template for subclasses.
+    # def __init__(
+    #     self,
+    #     first_platform: str,
+    #     second_platform: str,
+    #     amount: decimal.Decimal,
+    #     coin: str,
+    #     first_utc_time: datetime.datetime,
+    #     second_utc_time: datetime.datetime,
+    #     first_fee_amount: decimal.Decimal,
+    #     first_fee_coin: str,
+    #     first_fee_in_fiat: decimal.Decimal,
+    #     second_fee_amount: decimal.Decimal,
+    #     second_fee_coin: str,
+    #     second_fee_in_fiat: decimal.Decimal,
+    #     first_value_in_fiat: decimal.Decimal,
+    #     second_value_in_fiat: decimal.Decimal,
+    #     is_taxable: bool,
+    #     taxation_type: str,
+    #     remark: str,
+    # ) -> None:
+    #     super().__init__(
+    #         first_platform=first_platform,
+    #         second_platform=second_platform,
+    #         amount=amount,
+    #         coin=coin,
+    #         first_utc_time=first_utc_time,
+    #         second_utc_time=second_utc_time,
+    #         first_fee_amount=first_fee_amount,
+    #         first_fee_coin=first_fee_coin,
+    #         first_fee_in_fiat=first_fee_in_fiat,
+    #         second_fee_amount=second_fee_amount,
+    #         second_fee_coin=second_fee_coin,
+    #         second_fee_in_fiat=second_fee_in_fiat,
+    #         first_value_in_fiat=first_value_in_fiat,
+    #         second_value_in_fiat=second_value_in_fiat,
+    #         is_taxable=is_taxable,
+    #         taxation_type=taxation_type,
+    #         remark=remark,
+    #     )
+
+    def __post_init__(self) -> None:
+        """Validate that all required fields (label != '-') are given."""
+        missing_field_values = [
+            field_name
+            for label, field_name in zip(self.labels(), self.field_names())
+            if label != "-" and getattr(self, field_name) is None
+        ]
+        assert not missing_field_values, (
+            f"{self=} : missing values for fields " f"{', '.join(missing_field_values)}"
+        )
+
+    @classmethod
+    def field_names(cls) -> Iterator[str]:
+        return (field.name for field in dataclasses.fields(cls))
+
+    @classmethod
+    def _labels(cls) -> list[str]:
+        return list(cls.field_names())
+
+    @classmethod
+    def labels(cls) -> list[str]:
+        l = cls._labels()
+        assert len(l) == len(dataclasses.fields(cls))
+        return l
+
+    def values(self) -> Iterator:
+        return (getattr(self, f) for f in self.field_names())
+
+
+# Bypass dataclass machinery, add a custom property function to a dataclass field.
+TaxReportEntry.total_fee_in_fiat = TaxReportEntry._total_fee_in_fiat  # type:ignore
+TaxReportEntry.gain_in_fiat = TaxReportEntry._gain_in_fiat  # type:ignore
+
+
+class LendingReportEntry(TaxReportEntry):
+    event_type = "Coin-Lending Zeitraum"
+
+    @classmethod
+    def _labels(cls) -> list[str]:
+        return [
+            "Börse",
+            "-",
+            #
+            "Anzahl",
+            "Währung",
+            #
+            "Wiedererhalten am",
+            "Verliehen am",
+            #
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
+            #
+            "-",
+            "-",
+            "-",
+            #
+            "Gewinn/Verlust in EUR",
+            "davon steuerbar",
+            "Einkunftsart",
+            "Bemerkung",
+        ]
+
+
+class StakingReportEntry(LendingReportEntry):
+    event_type = "Staking Zeitaraum"
+
+
+class SellReportEntry(TaxReportEntry):
+    event_type = "Verkauf"
+
+    def __init__(
+        self,
+        sell_platform: str,
+        buy_platform: str,
+        amount: decimal.Decimal,
+        coin: str,
+        sell_utc_time: datetime.datetime,
+        buy_utc_time: datetime.datetime,
+        first_fee_amount: decimal.Decimal,
+        first_fee_coin: str,
+        first_fee_in_fiat: decimal.Decimal,
+        second_fee_amount: decimal.Decimal,
+        second_fee_coin: str,
+        second_fee_in_fiat: decimal.Decimal,
+        sell_value_in_fiat: decimal.Decimal,
+        buy_value_in_fiat: decimal.Decimal,
+        is_taxable: bool,
+        taxation_type: str,
+        remark: str,
+    ) -> None:
+        super().__init__(
+            first_platform=sell_platform,
+            second_platform=buy_platform,
+            amount=amount,
+            coin=coin,
+            first_utc_time=sell_utc_time,
+            second_utc_time=buy_utc_time,
+            first_fee_amount=first_fee_amount,
+            first_fee_coin=first_fee_coin,
+            first_fee_in_fiat=first_fee_in_fiat,
+            second_fee_amount=second_fee_amount,
+            second_fee_coin=second_fee_coin,
+            second_fee_in_fiat=second_fee_in_fiat,
+            first_value_in_fiat=sell_value_in_fiat,
+            second_value_in_fiat=buy_value_in_fiat,
+            is_taxable=is_taxable,
+            taxation_type=taxation_type,
+            remark=remark,
+        )
+
+    @classmethod
+    def _labels(cls) -> list[str]:
+        return [
+            "Verkauf auf Börse",
+            "Erworben von Börse",
+            #
+            "Anzahl",
+            "Währung",
+            #
+            "Verkaufsdatum",
+            "Erwerbsdatum",
+            #
+            "(1) Anzahl Transaktionsgebühr",
+            "(1) Währung Transaktionsgebühr",
+            "(1) Transaktionsgebühr in EUR",
+            "(2) Anzahl Transaktionsgebühr",
+            "(2) Währung Transaktionsgebühr",
+            "(2) Transaktionsgebühr in EUR",
+            #
+            "Veräußerungserlös in EUR",
+            "Anschaffungskosten in EUR",
+            "Gesamt Transaktionsgebühr in EUR",
+            #
+            "Gewinn/Verlust in EUR",
+            "davon steuerbar",
+            "Einkunftsart",
+            "Bemerkung",
+        ]
+
+
+class UnrealizedSellReportEntry(SellReportEntry):
+    event_type = "Offene Positionen"
+
+
+class InterestReportEntry(TaxReportEntry):
+    event_type = "Zinsen"
+
+    def __init__(
+        self,
+        platform: str,
+        amount: decimal.Decimal,
+        utc_time: datetime.datetime,
+        coin: str,
+        interest_in_fiat: decimal.Decimal,
+        taxation_type: str,
+        remark: str,
+    ) -> None:
+        super().__init__(
+            first_platform=platform,
+            amount=amount,
+            first_utc_time=utc_time,
+            coin=coin,
+            first_value_in_fiat=interest_in_fiat,
+            is_taxable=True,
+            taxation_type=taxation_type,
+            remark=remark,
+        )
+
+    @classmethod
+    def _labels(cls) -> list[str]:
+        return [
+            "Börse",
+            "-",
+            #
+            "Anzahl",
+            "Währung",
+            #
+            "Erhalten am",
+            "-",
+            #
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
+            #
+            "Wert in EUR",
+            "-",
+            "-",
+            #
+            "Gewinn/Verlust in EUR",
+            "davon steuerbar",
+            "Einkunftsart",
+            "Bemerkung",
+        ]
+
+
+class LendingInterestReportEntry(InterestReportEntry):
+    event_type = "Einkünfte durch Coin-Lending"
+
+
+class StakingInterestReportEntry(InterestReportEntry):
+    event_type = "Einkünfte durch Staking"
+
+
+class AirdropReportEntry(TaxReportEntry):
+    event_type = "Airdrop"
+
+    def __init__(
+        self,
+        platform: str,
+        amount: decimal.Decimal,
+        coin: str,
+        utc_time: datetime.datetime,
+        in_fiat: decimal.Decimal,
+        taxation_type: str,
+        remark: str,
+    ) -> None:
+        super().__init__(
+            first_platform=platform,
+            amount=amount,
+            coin=coin,
+            first_utc_time=utc_time,
+            first_value_in_fiat=in_fiat,
+            is_taxable=True,
+            taxation_type=taxation_type,
+            remark=remark,
+        )
+
+    @classmethod
+    def _labels(cls) -> list[str]:
+        return [
+            "Börse",
+            "-",
+            #
+            "Anzahl",
+            "Währung",
+            #
+            "Erhalten am",
+            "-",
+            #
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
+            #
+            "Wert in EUR",
+            "-",
+            "-",
+            #
+            "Gewinn/Verlust in EUR",
+            "davon steuerbar",
+            "Einkunftsart",
+            "Bemerkung",
+        ]
+
+
+class CommissionReportEntry(AirdropReportEntry):
+    event_type = "Kommission"  # TODO gibt es eine bessere Bezeichnung?
+
+
+class TransferReportEntry(TaxReportEntry):
+    event_type = "Transfer von Kryptowährung"
+
+    def __init__(
+        self,
+        first_platform: str,
+        second_platform: str,
+        amount: decimal.Decimal,
+        coin: str,
+        first_utc_time: datetime.datetime,
+        second_utc_time: datetime.datetime,
+        first_fee_amount: decimal.Decimal,
+        first_fee_coin: str,
+        first_fee_in_fiat: decimal.Decimal,
+        remark: str,
+    ) -> None:
+        super().__init__(
+            first_platform=first_platform,
+            second_platform=second_platform,
+            amount=amount,
+            coin=coin,
+            first_utc_time=first_utc_time,
+            second_utc_time=second_utc_time,
+            first_fee_amount=first_fee_amount,
+            first_fee_coin=first_fee_coin,
+            first_fee_in_fiat=first_fee_in_fiat,
+            remark=remark,
+        )
+
+    @classmethod
+    def _labels(cls) -> list[str]:
+        return [
+            "Eingang auf Börse",
+            "Ausgang von Börse",
+            #
+            "Anzahl",
+            "Währung",
+            #
+            "Eingangsdatum",
+            "Ausgangsdatum",
+            #
+            "(1) Anzahl Transaktionsgebühr",
+            "(1) Währung Transaktionsgebühr",
+            "(1) Transaktionsgebühr in EUR",
+            "-",
+            "-",
+            "-",
+            #
+            "-",
+            "-",
+            "Gesamt Transaktionsgebühr in EUR",
+            #
+            "Gewinn/Verlust in EUR",
+            "-",
+            "-",
+            "Bemerkung",
+        ]
 
 
 gain_operations = [
