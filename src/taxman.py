@@ -454,6 +454,9 @@ class Taxman:
                 # TODO _evaluate_sell darf noch nicht hinzufügen, nur anlegen? return ReportType
                 # TODO offene Positionen nur platform/coin, wert,... ohne kauf und verkaufsdatum
 
+                # TODO ODER Offene  Position bei "Einkunftsart" -> "Herkunft" (Kauf, Interest, ...)
+                # TODO dann noch eine Zusammenfassung der offenen Positionen
+
     def evaluate_taxation(self) -> None:
         """Evaluate the taxation using country specific function."""
         log.debug("Starting evaluation...")
@@ -623,8 +626,9 @@ class Taxman:
         ).items():
             ws = wb.add_worksheet(ReportType.event_type)
             # Header
+            # TODO increase height of first row
             ws.write_row(0, 0, ReportType.labels())
-            # TODO formatiere Spalten korrekt, Datum+Uhrzeit, Währung, ...Anzahl mit 8 Nachkommastellen
+            # TODO set column width (custom?) and correct format (datetime, change up to 8 decimal places, ...)
 
             for row, entry in enumerate(tax_report_entries, 1):
                 ws.write_row(row, 0, entry.values())
