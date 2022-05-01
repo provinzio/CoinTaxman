@@ -196,8 +196,8 @@ class Taxman:
                     self.tax_events.append(tx)
             elif isinstance(op, transaction.MarginLoss):
                 # First, sell the lost coin to evaluate gain/loss from holding it
-                if tx_ := evaluate_sell(op):
-                    self.tax_events.append(tx_)
+                #if tx_ := evaluate_sell(op):
+                #    self.tax_events.append(tx_)
                 # Then, add the total loss to the income from capital
                 if self.in_tax_year(op):
                     taxation_type = "Kapitaleinkünfte aus Margin Trading"
