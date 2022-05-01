@@ -317,7 +317,7 @@ class Book:
                 # Rounded price from CSV
                 # eur_spot = misc.force_decimal(_eur_spot)
                 # Cost without fees
-                eur_subtotal = misc.xdecimal(_eur_subtotal)
+                eur_subtotal = misc.force_decimal(_eur_subtotal)
                 eur_fee = misc.xdecimal(_eur_fee)
 
                 # Validate data.
@@ -326,11 +326,10 @@ class Book:
                 assert change
                 assert _currency_spot == "EUR"
 
-                if isinstance(eur_subtotal, decimal.Decimal):
-                    # Calculated price
-                    price_calc = eur_subtotal / change
-                    # Save price in our local database for later.
-                    set_price_db(platform, coin, "EUR", utc_time, price_calc)
+                # Calculated price
+                price_calc = eur_subtotal / change
+                # Save price in our local database for later.
+                set_price_db(platform, coin, "EUR", utc_time, price_calc)
 
                 if operation == "Convert":
                     # Parse change + coin from remark, which is
