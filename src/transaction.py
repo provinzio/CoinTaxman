@@ -345,6 +345,14 @@ class TaxReportEntry:
         return (field.name for field in cls.fields())
 
     @classmethod
+    def excel_labels(self) -> list[str]:
+        labels = []
+        for label in self.labels():
+            label = label.replace("Transaktionsgebühr", "Transaktions-gebühr")
+            labels.append(label)
+        return labels
+
+    @classmethod
     def _labels(cls) -> list[str]:
         return list(cls.field_names())
 
