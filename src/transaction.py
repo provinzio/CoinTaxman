@@ -472,6 +472,35 @@ class SellReportEntry(TaxReportEntry):
 class UnrealizedSellReportEntry(SellReportEntry):
     event_type = "Offene Positionen"
 
+    @classmethod
+    def _labels(cls) -> list[str]:
+        return [
+            "Virtueller Verkauf auf Börse",
+            "Erworben von Börse",
+            #
+            "Anzahl",
+            "Währung",
+            #
+            "Virtuelles Verkaufsdatum",
+            "Erwerbsdatum",
+            #
+            "(1) Anzahl Transaktionsgebühr",
+            "(1) Währung Transaktionsgebühr",
+            "(1) Transaktionsgebühr in EUR",
+            "(2) Anzahl Transaktionsgebühr",
+            "(2) Währung Transaktionsgebühr",
+            "(2) Transaktionsgebühr in EUR",
+            #
+            "Virtueller Veräußerungserlös in EUR",
+            "Virtuelle Anschaffungskosten in EUR",
+            "Virtuelle Gesamt Transaktionsgebühr in EUR",
+            #
+            "Virtueller Gewinn/Verlust in EUR",
+            "davon wären steuerbar",
+            "Einkunftsart",
+            "Bemerkung",
+        ]
+
 
 class InterestReportEntry(TaxReportEntry):
     event_type = "Zinsen"
