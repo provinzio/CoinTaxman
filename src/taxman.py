@@ -231,16 +231,23 @@ class Taxman:
                     wsc_percent = wsc.sold / sc.op.link.change
                     wsc_deposit_fee = sold_deposit_fee * wsc_percent
 
+                    wsc_fee_in_fiat = decimal.Decimal()
                     if wsc_deposit_fee:
-                        # Deposit fees are evaluated on deposited platform.
-                        wsc_fee_in_fiat = (
-                            self.price_data.get_price(
-                                sc.op.platform, sc.op.coin, sc.op.utc_time, config.FIAT
-                            )
-                            * wsc_deposit_fee
+                        # TODO Are withdrawal/deposit fees tax relevant?
+                        log.warning(
+                            "You paid fees for withdrawal and deposit of coins. "
+                            "I am currently not sure if you can reduce your taxed "
+                            "gain with these. For now, the deposit/withdrawal fees "
+                            "are not included in the tax report. "
+                            "Please open an issue or PR if you can resolve this."
                         )
-                    else:
-                        wsc_fee_in_fiat = decimal.Decimal()
+                        # Deposit fees are evaluated on deposited platform.
+                        # wsc_fee_in_fiat = (
+                        #     self.price_data.get_price(
+                        #         sc.op.platform, sc.op.coin, sc.op.utc_time, config.FIAT
+                        #     )
+                        #     * wsc_deposit_fee
+                        # )
 
                     self._evaluate_sell(op, wsc, wsc_fee_in_fiat)
 
