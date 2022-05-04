@@ -238,10 +238,13 @@ class Taxman:
                             "are not included in the tax report. "
                             "Please open an issue or PR if you can resolve this."
                         )
-                        # Deposit fees are evaluated on deposited platform.
+                        # # Deposit fees are evaluated on deposited platform.
                         # wsc_fee_in_fiat = (
                         #     self.price_data.get_price(
-                        #         sc.op.platform, sc.op.coin, sc.op.utc_time, config.FIAT
+                        #         sc.op.platform,
+                        #         sc.op.coin,
+                        #         sc.op.utc_time,
+                        #         config.FIAT,
                         #     )
                         #     * wsc_deposit_fee
                         # )
