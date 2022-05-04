@@ -129,6 +129,19 @@ class Taxman:
         additional_fee: Optional[decimal.Decimal] = None,
         ReportType: Type[tr.SellReportEntry] = tr.SellReportEntry,
     ) -> None:
+        """Evaluate a (partial) sell operation.
+
+        Args:
+            op (tr.Sell): The sell operation.
+            sc (tr.SoldCoin): The sold coin.
+            additional_fee (Optional[decimal.Decimal], optional):
+                The additional fee. Defaults to None.
+            ReportType (Type[tr.SellReportEntry], optional):
+                The type of the report entry. Defaults to tr.SellReportEntry.
+
+        Raises:
+            NotImplementedError: When there are more than two different fee coins.
+        """
         assert op.coin == sc.op.coin
         if additional_fee is None:
             additional_fee = decimal.Decimal()
