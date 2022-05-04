@@ -170,19 +170,18 @@ class Taxman:
             raise NotImplementedError("More than two fee coins are not supported")
 
         # buying_fees
+        buying_fees = decimal.Decimal()
         if sc.op.fees:
+            assert sc.sold <= sc.op.change
             sc_percent = sc.sold / sc.op.change
             buying_fees = misc.dsum(
                 self.price_data.get_partial_cost(f, sc_percent) for f in sc.op.fees
             )
-        else:
-            buying_fees = decimal.Decimal()
+
         # buy_value_in_fiat
         buy_value_in_fiat = self.price_data.get_cost(sc) + buying_fees + additional_fee
 
         # TODO Recognized increased speculation period for lended/staked coins?
-        # TODO handle operations on sell differently? are some not tax relevant?
-        #      gifted Airdrops, Commission?
         is_taxable = not config.IS_LONG_TERM(sc.op.utc_time, op.utc_time)
 
         sell_report_entry = ReportType(
@@ -219,10 +218,9 @@ class Taxman:
         for sc in sold_coins:
 
             if isinstance(sc.op, tr.Deposit) and sc.op.link:
-                # TODO Are withdrawal/deposit fees tax relevant?
                 assert (
                     sc.op.link.change >= sc.op.change
-                ), "Withdrawal must be equal or greather the deposited amount."
+                ), "Withdrawal must be equal or greater than the deposited amount."
                 deposit_fee = sc.op.link.change - sc.op.change
                 sold_percent = sc.sold / sc.op.change
                 sold_deposit_fee = deposit_fee * sold_percent
@@ -260,7 +258,8 @@ class Taxman:
                         f"from somewhere unknown onto {sc.op.platform} (see "
                         f"{sc.op.file_path} {sc.op.line}). "
                         "A correct tax evaluation is not possible! "
-                        "For now, we assume that the coins were bought at deposit."
+                        "For now, we assume that the coins were bought at "
+                        "the timestamp of the deposit."
                     )
 
                 self._evaluate_sell(op, sc)
@@ -277,8 +276,8 @@ class Taxman:
 
         elif isinstance(op, (tr.CoinLendEnd, tr.StakingEnd)):
             # TODO determine which coins come back from lending/etc. use fifo
-            # if it's unclear; it might be nice to match Start and
-            # End of these operations like deposit and withdrawal operations.
+            # if it's unclear; it might be nice to match start and
+            # end of these operations like deposit and withdrawal operations.
             # e.g.
             # - lending 1 coin for 2 months
             # - lending 2 coins for 1 month
@@ -306,6 +305,8 @@ class Taxman:
             # Buys and sells always come in a pair. The selling/redeeming
             # time is tax relevant.
             # Remove the sold coins and paid fees from the balance.
+            # Evaluate the sell to determine the taxed gain and other relevant
+            # informations for the tax declaration.
             sold_coins = self.remove_from_balance(op)
             self.remove_fees_from_balance(op.fees)
 
@@ -366,19 +367,12 @@ class Taxman:
                 self.tax_report_entries.append(report_entry)
 
         elif isinstance(op, tr.Commission):
-            # TODO write information text
+            # You received a commission. It is assumed that his is a customer-
+            # recruit-customer-bonus which is taxed as `Einkünfte aus sonstigen
+            # Leistungen`.
             self.add_to_balance(op)
 
             if in_tax_year(op):
-                # TODO do correct taxation.
-                log.warning(
-                    "You have received a Commission. "
-                    "I am currently unsure how Commissions get taxed. "
-                    "For now they are taxed as `Einkünfte aus sonstigen "
-                    "Leistungen`. "
-                    "Please inform yourself and help us to fix this problem "
-                    "by opening an issue or creating a PR."
-                )
                 report_entry = tr.CommissionReportEntry(
                     platform=op.platform,
                     amount=op.change,
@@ -392,9 +386,6 @@ class Taxman:
 
         elif isinstance(op, tr.Deposit):
             # Coins get deposited onto this platform/balance.
-            # TODO are transaction costs deductable from the tax? if yes, when?
-            #      on withdrawal or deposit or on sell of the moved coin??
-            #      > currently tax relevant on sell
             self.add_to_balance(op)
 
             if op.link:
