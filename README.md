@@ -32,9 +32,11 @@ Quick and easy installation can be done with `pip`.
 
 ### Usage
 
-1. Adjust `src/config.py` to your liking
-2. Add account statements from supported exchanges in `account_statements/`
+1. Adjust `src/config.ini` to your liking
+2. Add all your account statements in `account_statements/`
 2. Run `python "src/main.py"`
+
+If not all your exchanges are supported, you can not (directly) calculate your taxes with this tool.
 
 Have a look at our [Wiki](https://github.com/provinzio/CoinTaxman/wiki) for more information on how to obtain the account statement for your exchange.
 
@@ -80,7 +82,7 @@ Information I require are for example
 Not every aspect has to be implemented directly.
 We are free to start by implementing the stuff you need for your tax declaration.
 
-I am looking forward to your [issue](https://github.com/provinzio/CoinTaxman/issues).
+I am looking forward to your [issue](https://github.com/provinzio/CoinTaxman/issues) or pull request.
 Your country was already requested?
 Hit the thumbs up button of that issue or participate in the process.
 
@@ -95,7 +97,7 @@ Please provide an example account statement for the requested exchange or some o
 Are you already familiar with the API of that exchange or know some other way to request historical prices for that exchange?
 Share your knowledge.
 
-I am looking forward to your [issue](https://github.com/provinzio/CoinTaxman/issues).
+I am looking forward to your [issue](https://github.com/provinzio/CoinTaxman/issues) or pull request.
 Your exchange was already requested?
 Hit the thumbs up button of that issue or participate in the process.
 
@@ -106,7 +108,7 @@ Hit the thumbs up button of that issue or participate in the process.
 - Add your country  to the Country enum in `src/core.py`
 - Extend `src/config.py` to fit your tax regulation
 - Add a country specific tax evaluation function in `src/taxman.py` like `Taxman._evaluate_taxation_GERMANY`
-- Depending on your specific tax regulation, you might need to add additional functionality and might want to add or edit the enums in `src/core.py`
+- Depending on your specific tax regulation, you might need to add additional functionality
 - Update the README with a documentation about the taxation guidelines in your country
 
 #### Adding a new exchange
@@ -124,9 +126,18 @@ Feel free to commit details about the taxation in your country.
 ## Taxation in Germany
 
 Meine Interpretation rund um die Besteuerung von Kryptowährung in Deutschland wird durch die Texte von den [Rechtsanwälten und Steuerberatern WINHELLER](https://www.winheller.com/) sehr gut artikuliert.
-Meine kurzen Zusammenfassungen am Ende von jedem Abschnitt werden durch einen ausführlicheren Text von [WINHELLER](https://www.winheller.com/) ergänzt.
 
-An dieser Stelle sei explizit erwähnt, dass dies meine Interpretation ist. Es ist weder sichergestellt, dass ich aktuell noch nach diesen praktiziere (falls ich das Repo in Zukunft nicht mehr aktiv pflege), noch ob diese Art der Versteuerung gesetzlich zulässig ist.
+Zusätzlich hat das Bundesministerium für Finanzen (BMF) am 17.06.2021 einen Entwurf über [Einzelfragen zur ertragssteuerrechtlichen Behandlung von virtuellen Währungen und von Token](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Einkommensteuer/2021-06-17-est-kryptowaehrungen.html) veröffentlicht.
+
+Beide Verweise geben schon einmal einen guten Einblick in die Versteuerung von Kryptowährung.
+Viele Kleinigkeiten könnten jedoch noch steuerlich ungeklärt oder in einen Graubereich fallen.
+Insofern ist es wichtig, sich über die genaue Besteuerung seines eigenen Sachverhaltes zu informieren oder (noch besser) einen Steuerberater diesbezüglich zu kontaktieren.
+
+Im Folgenden werde ich einen groben Überblick über die Besteuerungs-Methode in diesem Tool geben.
+Genauere Informationen finden sich im Source-Code in `src\taxman.py`.
+
+An dieser Stelle sei explizit erwähnt, dass dies meine Interpretation ist.
+Es ist weder sichergestellt, dass ich aktuell noch nach diesen praktiziere (falls ich das Repo in Zukunft nicht mehr aktiv pflege), noch ob diese Art der Versteuerung gesetzlich zulässig ist.
 Meine Interpretation steht gerne zur Debatte.
 
 ### Allgemein
@@ -144,25 +155,43 @@ Meine Interpretation steht gerne zur Debatte.
 
 Zusammenfassung in meinen Worten:
 - Kryptowährung sind immaterielle Wirtschaftsgüter.
-- Der Verkauf innerhalb eines Jahres gilt als privates Veräußerungsgeschäft und ist als Sonstiges Einkommen zu versteuern (Freigrenze 600 €).
-- Der Tausch von Kryptowährung wird ebenfalls versteuert.
+- Der Verkauf innerhalb der Spekulationsfirst gilt als privates Veräußerungsgeschäft und ist als Sonstiges Einkommen zu versteuern (Freigrenze 600 €).
+- Jeder Tausch von Kryptowährung wird (wie ein Verkauf) versteuert, indem der getauschte Betrag virtuell in EUR umgewandelt wird.
 - Gebühren zum Handel sind steuerlich abzugsfähig.
 - Es kann einmalig entschieden werden, ob nach FIFO oder LIFO versteuert werden soll.
 
 Weitere Grundsätze, die oben nicht angesprochen wurden:
-- Versteuerung erfolgt separat getrennt nach Depots (Wallets, Exchanges, etc.) [cryptotax](https://cryptotax.io/fifo-oder-lifo-bitcoin-gewinnermittlung/).
+- Versteuerung kann getrennt nach Depots (Wallets, Exchanges, etc.) erfolgen (Multi-Depot-Methode) [cryptotax](https://cryptotax.io/fifo-oder-lifo-bitcoin-gewinnermittlung/).
 
 ### Airdrops
 
-> Im Rahmen eines Airdrops erhält der Nutzer Kryptowährungen, ohne diese angeschafft oder eine sonstige Leistung hierfür erbracht zu haben. Die Kryptowährungen werden nicht aus dem Rechtskreis eines Dritten auf den Nutzer übertragen. Vielmehr beginnen sie ihre „Existenz“ überhaupt erst in dessen Vermögen. Die Kryptowährung entsteht direkt in den Wallets der Nutzer, wobei die Wallets bestimmte Kriterien erfüllen müssen. Airdrops ähneln insofern einem Lottogewinn oder einem Zufallsfund (sog. Windfall Profits).
->
-> Mangels Anschaffungsvorgangs kommt bei einer anschließenden Veräußerung eine Besteuerung nach § 23 Abs. 1 Nr. 2 Einkommensteuergesetz (EStG) nicht in Betracht. Mangels Leistungserbringung seitens des Nutzers liegen auch keine sonstigen Einkünfte i.S.d. § 22 Nr. 3 EStG vor. Damit ist der Verkauf von Airdrops steuerfrei.
+> Der Erhalt zusätzlicher Einheiten einer virtuellen Währung oder von Token kann zu
+Einkünften aus einer Leistung im Sinne des § 22 Nummer 3 EStG führen. Beim Airdrop
+werden Einheiten einer virtuellen Währung oder Token „unentgeltlich“ verteilt. In der Regel
+handelt es sich dabei um eine Marketingmaßnahme. Allerdings müssen sich Kunden für die
+Teilnahme am Airdrop anmelden und Daten von sich preisgeben. Als Belohnung erhalten
+diese Kunden Einheiten einer virtuellen Währung oder Token zugeteilt. Hängt die Zuteilung
+der Einheiten einer virtuellen Währung oder Token davon ab, dass der Steuerpflichtige Daten
+von sich angibt, die über die Informationen hinausgehen, die für die schlichte technische Zuteilung/Bereitstellung erforderlich sind, liegt in der Datenüberlassung eine Leistung des
+Steuerpflichtigen im Sinne des § 22 Nummer 3 EStG, für die er als Gegenleistung Einheiten
+einer virtuellen Währung oder Token erhält. Davon ist im Zusammenhang mit einem Airdrop
+jedenfalls dann auszugehen, wenn der Steuerpflichtige verpflichtet ist oder sich bereit
+erklären muss, dem Emittenten als Gegenleistung für die Einheiten einer virtuellen Währung
+oder Token personenbezogene Daten zur Verfügung zu stellen.
+Die Einheiten der virtuellen Währung oder Token sind mit dem Marktkurs im Zeitpunkt des
+Erwerbs anzusetzen (vgl. zur Ermittlung des Marktkurses Rz. 32).
+Erfolgt keine Gegenleistung, kommt eine Schenkung in Betracht, für die die
+schenkungssteuerrechtlichen Regelungen gelten.
+Eine Leistung im Sinne des § 22 Nummer 3 EStG erbringt der Steuerpflichtige auch dann,
+wenn er eigene Bilder/Fotos oder private Filme (Videos) auf einer Plattform hochlädt und
+hierfür Einheiten einer virtuellen Währung oder Token erhält, sofern das Eigentum an den
+Bildern/Fotos/Filmen beim Steuerpflichtigen verbleibt.
 
-[Quelle](https://www.winheller.com/bankrecht-finanzrecht/bitcointrading/bitcoinundsteuer/besteuerung-airdrops.html)
-[Wörtlich zitiert vom 14.02.2021]
+[Quelle 79-80](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Einkommensteuer/2021-06-17-est-kryptowaehrungen.html)
+[Wörtlich zitiert vom 04.05.2022]
 
 Zusammenfassung in meinen Worten:
-- Erhalt und Verkauf von Airdrops ist steuerfrei.
+- Falls man etwas gemacht hat, um die Airdrops zu erhalten (bspw. sich irgendwo angemeldet oder anderweitig Daten preisgegeben), handelt es sich um Einkünfte aus sonstigen Leistungen; ansonsten handelt es sich um eine Schenkung
 
 ### Coin Lending
 
@@ -185,7 +214,7 @@ Zusammenfassung in meinen Worten:
 
 Zusammenfassung in meinen Worten:
 - Erhaltene Kryptowährung durch Coin Lending wird im Zeitpunkt des Zuflusses als Einkunft aus sonstigen Leistungen versteuert (Freigrenze 256 €).
-- Der Verkauf ist nicht steuerbar.
+- Der Verkauf ist steuerbar.
 - Coin Lending beeinflusst nicht die Haltefrist der verliehenen Coins.
 
 ### Staking
@@ -207,4 +236,3 @@ Es ist also keine typische Kunden-werben-Kunden-Prämie sondern eher eine Kommis
 
 Für das Erste handhabe ich es wie eine Kunden-werben-Kunden-Prämie in Form eines Sachwerts.
 Sprich, die BTC werden zum Zeitpunkt des Erhalts in ihren EUR-Gegenwert umgerechnet und den Einkünften aus sonstigen Leistungen hinzugefügt.
-Aufgrund eines fehlenden steuerlichen Anschaffungsvorgangs ist eine Veräußerung steuerfrei.
