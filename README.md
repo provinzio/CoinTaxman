@@ -12,7 +12,7 @@ CoinTaxman hilft dir dabei deine Einkünfte aus dem Krypto-Handel/-Verleih/... i
 Momentan deckt der CoinTaxman nur meinen Anwendungsbereich ab.
 Pull Requests und Anfragen über Issues sind gerne gesehen (siehe `Key notes for users` für weitere Informationen).
 
-**Disclaimer: use at your own risk**
+# **Disclaimer: use at your own risk**
 
 ### Currently supported countries
 - Germany
