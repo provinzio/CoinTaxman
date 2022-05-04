@@ -311,3 +311,22 @@ def not_none(v: Optional[T]) -> T:
     if v is None:
         raise ValueError()
     return v
+
+
+def column_num_to_string(n: int) -> str:
+    # References: https://stackoverflow.com/a/63013258/8979290
+    n, rem = divmod(n - 1, 26)
+    char = chr(65 + rem)
+    if n:
+        return column_num_to_string(n) + char
+    else:
+        return char
+
+
+def column_string_to_num(s: str) -> int:
+    # References: https://stackoverflow.com/a/63013258/8979290
+    n = ord(s[-1]) - 64
+    if s[:-1]:
+        return 26 * (column_string_to_num(s[:-1])) + n
+    else:
+        return n
