@@ -375,8 +375,8 @@ class LendingReportEntry(TaxReportEntry):
             "Anzahl",
             "Währung",
             #
-            "Wiedererhalten am",
-            "Verliehen am",
+            "Wiedererhalten am (UTC)",
+            "Verliehen am (UTC)",
             #
             "-",
             "-",
@@ -452,8 +452,8 @@ class SellReportEntry(TaxReportEntry):
             "Anzahl",
             "Währung",
             #
-            "Verkaufsdatum",
-            "Erwerbsdatum",
+            "Verkaufsdatum (UTC)",
+            "Erwerbsdatum (UTC)",
             #
             "(1) Anzahl Transaktionsgebühr",
             "(1) Währung Transaktionsgebühr",
@@ -485,8 +485,8 @@ class UnrealizedSellReportEntry(SellReportEntry):
             "Anzahl",
             "Währung",
             #
-            "Virtuelles Verkaufsdatum",
-            "Erwerbsdatum",
+            "Virtuelles Verkaufsdatum (UTC)",
+            "Erwerbsdatum (UTC)",
             #
             "(1) Anzahl Transaktionsgebühr",
             "(1) Währung Transaktionsgebühr",
@@ -539,7 +539,7 @@ class InterestReportEntry(TaxReportEntry):
             "Anzahl",
             "Währung",
             #
-            "Erhalten am",
+            "Erhalten am (UTC)",
             "-",
             #
             "-",
@@ -601,7 +601,7 @@ class AirdropReportEntry(TaxReportEntry):
             "Anzahl",
             "Währung",
             #
-            "Erhalten am",
+            "Erhalten am (UTC)",
             "-",
             #
             "-",
@@ -664,8 +664,8 @@ class TransferReportEntry(TaxReportEntry):
             "Anzahl",
             "Währung",
             #
-            "Eingangsdatum",
-            "Ausgangsdatum",
+            "Eingangsdatum (UTC)",
+            "Ausgangsdatum (UTC)",
             #
             "(1) Anzahl Transaktionsgebühr",
             "(1) Währung Transaktionsgebühr",
