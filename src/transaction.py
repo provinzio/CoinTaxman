@@ -274,15 +274,17 @@ class TaxReportEntry:
             - misc.cdecimal(self._total_fee_in_fiat)
         )
 
-    is_taxable: Optional[bool] = None
-    taxation_type: Optional[str] = None
-    remark: Optional[str] = None
+    taxable_gain_in_fiat: decimal.Decimal = dataclasses.field(init=False)
 
     @property
-    def taxable_gain(self) -> decimal.Decimal:
+    def _taxable_gain_in_fiat(self) -> decimal.Decimal:
         if self.is_taxable and self._gain_in_fiat:
             return self._gain_in_fiat
         return decimal.Decimal()
+
+    is_taxable: Optional[bool] = None
+    taxation_type: Optional[str] = None
+    remark: Optional[str] = None
 
     # Copy-paste template for subclasses.
     # def __init__(
@@ -345,30 +347,40 @@ class TaxReportEntry:
         return (field.name for field in cls.fields())
 
     @classmethod
-    def excel_labels(self) -> list[str]:
-        labels = []
-        for label in self.labels():
-            label = label.replace("Transaktionsgebühr", "Transaktions-gebühr")
-            labels.append(label)
-        return labels
-
-    @classmethod
     def _labels(cls) -> list[str]:
         return list(cls.field_names())
 
     @classmethod
     def labels(cls) -> list[str]:
         labels = cls._labels()
-        assert len(labels) == len(dataclasses.fields(cls))
+        assert len(labels) == len(dataclasses.fields(cls)) - 1
         return labels
 
     def values(self) -> Iterator:
         return (getattr(self, f) for f in self.field_names())
 
+    @staticmethod
+    def is_excel_label(label: str) -> bool:
+        return label != "is_taxable"
+
+    @classmethod
+    def excel_fields(cls) -> tuple[dataclasses.Field, ...]:
+        return tuple(field for field in cls.fields() if cls.is_excel_label(field.name))
+
+    @classmethod
+    def excel_labels(self) -> list[str]:
+        return [label for label in self.labels() if self.is_excel_label(label)]
+
+    def excel_values(self) -> Iterator:
+        return (getattr(self, f) for f in self.field_names() if self.is_excel_label(f))
+
 
 # Bypass dataclass machinery, add a custom property function to a dataclass field.
 TaxReportEntry.total_fee_in_fiat = TaxReportEntry._total_fee_in_fiat  # type:ignore
 TaxReportEntry.gain_in_fiat = TaxReportEntry._gain_in_fiat  # type:ignore
+TaxReportEntry.taxable_gain_in_fiat = (
+    TaxReportEntry._taxable_gain_in_fiat  # type:ignore
+)
 
 
 class LendingReportEntry(TaxReportEntry):
@@ -398,7 +410,7 @@ class LendingReportEntry(TaxReportEntry):
             "-",
             #
             "Gewinn/Verlust in EUR",
-            "davon steuerbar",
+            "davon steuerbar in EUR",
             "Einkunftsart",
             "Bemerkung",
         ]
@@ -475,7 +487,7 @@ class SellReportEntry(TaxReportEntry):
             "Gesamt Transaktionsgebühr in EUR",
             #
             "Gewinn/Verlust in EUR",
-            "davon steuerbar",
+            "davon steuerbar in EUR",
             "Einkunftsart",
             "Bemerkung",
         ]
@@ -562,7 +574,7 @@ class InterestReportEntry(TaxReportEntry):
             "-",
             #
             "Gewinn/Verlust in EUR",
-            "davon steuerbar",
+            "davon steuerbar in EUR",
             "Einkunftsart",
             "Bemerkung",
         ]
@@ -624,7 +636,7 @@ class AirdropReportEntry(TaxReportEntry):
             "-",
             #
             "Gewinn/Verlust in EUR",
-            "davon steuerbar",
+            "davon steuerbar in EUR",
             "Einkunftsart",
             "Bemerkung",
         ]

@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import collections
+import dataclasses
 import datetime
 import decimal
 from pathlib import Path
@@ -488,7 +489,7 @@ class Taxman:
             self.tax_report_entries, "taxation_type"
         ).items():
             taxable_gain = misc.dsum(
-                tre.taxable_gain
+                tre.taxable_gain_in_fiat
                 for tre in tax_report_entries
                 if not isinstance(tre, tr.UnrealizedSellReportEntry)
             )
@@ -504,7 +505,7 @@ class Taxman:
             misc.not_none(tre.gain_in_fiat) for tre in unrealized_report_entries
         )
         unrealized_taxable_gain = misc.dsum(
-            tre.taxable_gain for tre in unrealized_report_entries
+            tre.taxable_gain_in_fiat for tre in unrealized_report_entries
         )
         eval_str += (
             "----------------------------------------\n"
@@ -537,33 +538,97 @@ class Taxman:
             config.EXPORT_PATH, str(config.TAX_YEAR), "xlsx"
         )
         wb = xlsxwriter.Workbook(file_path, {"remove_timezone": True})
+        datetime_format = wb.add_format({"num_format": "dd.mm.yyyy hh:mm;@"})
+        date_format = wb.add_format({"num_format": "dd.mm.yyyy;@"})
+        change_format = wb.add_format({"num_format": "#,##0.00000000"})
+        fiat_format = wb.add_format({"num_format": "#,##0.00"})
+        header_format = wb.add_format(
+            {
+                "bold": True,
+                "border": 5,
+                "align": "center",
+                "valign": "center",
+                "text_wrap": True,
+            }
+        )
 
+        def get_format(field: dataclasses.Field) -> Optional[xlsxwriter.format.Format]:
+            if field.type in ("datetime.datetime", "Optional[datetime.datetime]"):
+                return datetime_format
+            if field.type in ("decimal.Decimal", "Optional[decimal.Decimal]"):
+                if field.name.endswith("in_fiat"):
+                    return fiat_format
+                return change_format
+            return None
+
+        # TODO Increase width of columns. Autoresize?
+
+        #
         # General
+        #
         ws_general = wb.add_worksheet("Allgemein")
+        ws_general.write_row(0, 0, ["Allgemeine Daten"], header_format)
+        ws_general.write_row(1, 0, ["Stichtag", TAX_DEADLINE.date()], date_format)
+        ws_general.write_row(
+            2, 0, ["Erstellt am", datetime.datetime.now()], datetime_format
+        )
+        ws_general.write_row(
+            3, 0, ["Software", "CoinTaxman <https://github.com/provinzio/CoinTaxman>"]
+        )
         commit_hash = misc.get_current_commit_hash(default="undetermined")
-        general_data = [
-            ["Allgemeine Daten"],
-            ["Stichtag", TAX_DEADLINE],
-            ["Erstellt am", datetime.datetime.now()],
-            ["Software", "CoinTaxman <https://github.com/provinzio/CoinTaxman>"],
-            ["Commit", commit_hash],
-        ]
-        for row, data in enumerate(general_data):
-            ws_general.write_row(row, 0, data)
+        ws_general.write_row(4, 0, ["Commit", commit_hash])
+        # Set column format and freeze first row.
+        ws_general.freeze_panes(1, 0)
 
+        #
+        # Add summary of tax relevant amounts.
+        #
+        ws_summary = wb.add_worksheet("Zusammenfassung")
+        ws_summary.write_row(
+            0, 0, ["Einkunftsart", "steuerbarer Betrag in EUR"], header_format
+        )
+        ws_summary.set_row(0, 30)
+        for row, (taxation_type, tax_report_entries) in enumerate(
+            misc.group_by(self.tax_report_entries, "taxation_type").items(), 1
+        ):
+            taxable_gain = misc.dsum(
+                tre.taxable_gain_in_fiat
+                for tre in tax_report_entries
+                if not isinstance(tre, tr.UnrealizedSellReportEntry)
+            )
+            ws_summary.write_row(row, 0, [taxation_type, taxable_gain])
+        # Set column format and freeze first row.
+        ws_summary.set_column("B:B", None, fiat_format)
+        ws_summary.freeze_panes(1, 0)
+
+        #
         # Sheets per ReportType
+        #
         for ReportType, tax_report_entries in misc.group_by(
             self.tax_report_entries, "__class__"
         ).items():
-            ws = wb.add_worksheet(ReportType.event_type)
-            # Header
-            # TODO increase height of first row
-            ws.write_row(0, 0, ReportType.labels())
-            # TODO set column width (custom?) and correct format (datetime,
-            #      change up to 8 decimal places, ...)
+            assert issubclass(ReportType, tr.TaxReportEntry)
 
+            ws = wb.add_worksheet(ReportType.event_type)
+
+            # Header
+            ws.write_row(0, 0, ReportType.excel_labels(), header_format)
+            ws.set_row(0, 45)
+
+            # Data
             for row, entry in enumerate(tax_report_entries, 1):
-                ws.write_row(row, 0, entry.values())
+                ws.write_row(row, 0, entry.excel_values())
+
+            # Set column format and freeze first row.
+            for col, field in enumerate(ReportType.excel_fields(), 1):
+                if cell_format := get_format(field):
+                    column = misc.column_num_to_string(col)
+                    ws.set_column(
+                        f"{column}:{column}",
+                        None,
+                        cell_format,
+                    )
+            ws.freeze_panes(1, 0)
 
         wb.close()
         log.info("Saved evaluation in %s.", file_path)
