@@ -453,15 +453,6 @@ class Taxman:
                     sc,
                     ReportType=tr.UnrealizedSellReportEntry,
                 )
-                # TODO UnrealizedSellReportEntry nicht von irgendwas vererben?
-                # TODO _evaluate_sell darf noch nicht hinzufügen, nur anlegen?
-                #      return ReportType
-                # TODO offene Positionen nur platform/coin, wert,... ohne kauf
-                #      und verkaufsdatum
-
-                # TODO ODER Offene  Position bei "Einkunftsart" -> "Herkunft"
-                #      (Kauf, Interest, ...)
-                # TODO dann noch eine Zusammenfassung der offenen Positionen
 
     def evaluate_taxation(self) -> None:
         """Evaluate the taxation using country specific function."""
