@@ -51,7 +51,6 @@ def main() -> None:
     book.match_fees_with_operations()
 
     taxman.evaluate_taxation()
-    # evaluation_file_path = taxman.export_evaluation_as_csv()
     evaluation_file_path = taxman.export_evaluation_as_excel()
     taxman.print_evaluation()
 
