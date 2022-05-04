@@ -337,8 +337,12 @@ class TaxReportEntry:
         )
 
     @classmethod
+    def fields(cls) -> tuple[dataclasses.Field, ...]:
+        return dataclasses.fields(cls)
+
+    @classmethod
     def field_names(cls) -> Iterator[str]:
-        return (field.name for field in dataclasses.fields(cls))
+        return (field.name for field in cls.fields())
 
     @classmethod
     def _labels(cls) -> list[str]:
