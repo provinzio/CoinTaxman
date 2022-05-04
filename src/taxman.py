@@ -455,7 +455,7 @@ class Taxman:
                 )
 
     def evaluate_taxation(self) -> None:
-        """Evaluate the taxation using country specific function."""
+        """Evaluate the taxation using the country specific function."""
         log.debug("Starting evaluation...")
 
         assert all(
