@@ -350,20 +350,10 @@ class Taxman:
             self.add_to_balance(op)
 
             if in_tax_year(op):
-                # TODO do correct taxation.
-                log.warning(
-                    "You received an Airdrop. An airdrop could be taxed as "
-                    "`Einkünfte aus sonstigen Leistungen` or `Schenkung` or "
-                    "something else?, as the case may be. "
-                    "In the current implementation, all airdrops are taxed as "
-                    "`Einkünfte aus sonstigen Leistungen`. "
-                    "This can result in paying more taxes than necessary. "
-                    "Please inform yourself and open a PR to fix this."
-                )
-                if True:
-                    taxation_type = "Einkünfte aus sonstigen Leistungen"
-                else:
+                if config.ALL_AIRDROPS_ARE_GIFTS:
                     taxation_type = "Schenkung"
+                else:
+                    taxation_type = "Einkünfte aus sonstigen Leistungen"
                 report_entry = tr.AirdropReportEntry(
                     platform=op.platform,
                     amount=op.change,
