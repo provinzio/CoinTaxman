@@ -546,7 +546,7 @@ class PriceData:
             try:
                 get_price = getattr(self, f"_get_price_{platform}")
             except AttributeError:
-                raise NotImplementedError("Unable to read data from %s", platform)
+                raise NotImplementedError(f"Unable to read data from {platform=}")
 
             price = get_price(coin, utc_time, reference_coin, **kwargs)
             assert isinstance(price, decimal.Decimal)

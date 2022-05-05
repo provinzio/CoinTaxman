@@ -207,7 +207,8 @@ class BalanceQueue(abc.ABC):
                 "account statement, including these from the last years?\n"
                 "\tThis error may also occur after deposits from unknown "
                 "sources. CoinTaxman requires the full transaction history to "
-                "evaluate taxation (when where these deposited coins bought?).\n"
+                "evaluate taxation (when and where were these deposited coins "
+                "bought?).\n"
             )
             raise RuntimeError
 
@@ -224,7 +225,7 @@ class BalanceQueue(abc.ABC):
             log.warning(
                 "Not enough coins in queue to remove fee. Buffer the fee for "
                 "next adding time... "
-                "This should not happen. You might be missing a account "
+                "This should not happen. You might be missing an account "
                 "statement. Please open issue or PR if you need help."
             )
             self.buffer_fee += left_over_fee
