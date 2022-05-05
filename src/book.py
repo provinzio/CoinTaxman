@@ -193,8 +193,8 @@ class Book:
                 change = abs(change)
 
                 # Validate data.
-                assert account == "Spot", (
-                    "Other types than Spot are currently not supported. "
+                assert account in ("Spot", "Savings"), (
+                    "Other types than Spot or Savings are currently not supported. "
                     "Please create an Issue or PR."
                 )
                 assert operation
