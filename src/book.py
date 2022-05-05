@@ -1238,6 +1238,7 @@ class Book:
             )
 
         withdrawal_queue: list[tr.Withdrawal] = []
+        unmatched_deposits: list[tr.Deposit] = []
 
         for op in sorted_ops:
             if op.coin == config.FIAT:
@@ -1254,15 +1255,7 @@ class Book:
                     # If multiple are found, take the first (regarding utc_time).
                     match = next(w for w in withdrawal_queue if is_match(w, op))
                 except StopIteration:
-                    log.warning(
-                        "No matching withdrawal operation found for deposit of "
-                        f"{op.change} {op.coin} "
-                        f"({op.platform}, {op.utc_time}). "
-                        "The tax evaluation might be wrong. "
-                        "Have you added all account statements? "
-                        "For tax evaluation, it might be importend when "
-                        "and for which price these coins were bought."
-                    )
+                    unmatched_deposits.append(op)
                 else:
                     # Match the found withdrawal and remove it from queue.
                     op.link = match
@@ -1275,6 +1268,18 @@ class Book:
                         f"({op.platform}, {op.utc_time})"
                     )
 
+        if unmatched_deposits:
+            log.warning(
+                "Unable to match all deposits with withdrawals. "
+                "Have you added all account statements? "
+                "Following deposits couldn't be matched:\n"
+                + (
+                    "\n".join(
+                        f" - {op.change} {op.coin} to {op.platform} at {op.utc_time}"
+                        for op in unmatched_deposits
+                    )
+                )
+            )
         if withdrawal_queue:
             log.warning(
                 "Unable to match all withdrawals with deposits. "
