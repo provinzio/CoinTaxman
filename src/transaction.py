@@ -194,12 +194,12 @@ class Deposit(Transaction):
 
 
 class Withdrawal(Transaction):
-    withdrawn_coins: Optional[list[SoldCoin]]
+    withdrawn_coins: Optional[list[SoldCoin]] = None
 
     def partial_withdrawn_coins(self, percent: decimal.Decimal) -> list[SoldCoin]:
         assert self.withdrawn_coins
         withdrawn_coins = [wc.partial(percent) for wc in self.withdrawn_coins]
-        assert self.change == misc.dsum(
+        assert percent * self.change == misc.dsum(
             (wsc.sold for wsc in withdrawn_coins)
         ), "Withdrawn coins total must be equal to the sum if the single coins."
         return withdrawn_coins
@@ -213,11 +213,14 @@ class SoldCoin:
     op: Operation
     sold: decimal.Decimal
 
+    def __post_init__(self):
+        self.validate()
+
+    def validate(self) -> None:
+        assert self.sold <= self.op.change
+
     def partial(self, percent: decimal.Decimal) -> SoldCoin:
-        sc = copy(self)
-        sc.sold *= percent
-        sc.op.change *= percent
-        return sc
+        return SoldCoin(self.op, self.sold * percent)
 
 
 @dataclasses.dataclass
