@@ -333,9 +333,9 @@ class TaxReportEntry:
     def __post_init__(self) -> None:
         """Validate that all required fields (label != '-') are given."""
         missing_field_values = [
-            field_name
-            for label, field_name in zip(self.labels(), self.field_names())
-            if label != "-" and getattr(self, field_name) is None
+            field.name
+            for label, field in zip(self.excel_labels(), self.excel_fields())
+            if label != "-" and getattr(self, field.name) is None
         ]
         assert not missing_field_values, (
             f"{self=} : missing values for fields " f"{', '.join(missing_field_values)}"
