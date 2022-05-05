@@ -45,6 +45,7 @@ class Operation:
     line: list[int]
     file_path: Path
     fees: "Optional[list[Fee]]" = None
+    remark: str = ""
 
     @classmethod
     def type_name_c(cls) -> str:

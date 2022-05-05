@@ -59,6 +59,7 @@ class Book:
         coin: str,
         row: int,
         file_path: Path,
+        remark: str = "",
     ) -> tr.Operation:
 
         try:
@@ -72,7 +73,7 @@ class Book:
             )
             raise RuntimeError
 
-        op = Op(utc_time, platform, change, coin, [row], file_path)
+        op = Op(utc_time, platform, change, coin, [row], file_path, remark=remark)
         assert isinstance(op, tr.Operation)
         return op
 
@@ -94,6 +95,7 @@ class Book:
         coin: str,
         row: int,
         file_path: Path,
+        remark: str = "",
     ) -> None:
         # Discard operations after the `TAX_YEAR`.
         # Ignore operations which make no change.
@@ -106,6 +108,7 @@ class Book:
                 coin,
                 row,
                 file_path,
+                remark=remark,
             )
 
             self._append_operation(op)
@@ -1150,16 +1153,17 @@ class Book:
                         ("Fee", fee_quantity, fee_asset, fee_value_in_fiat)
                     )
 
-                if remark:
-                    log.warning(
-                        "Remarks from custom CSV import will be ignored. "
-                        f"Ignored remark in file {file_path}:{row}: {remark}"
-                    )
-
                 for operation, change, coin, change_in_fiat in add_operations:
                     # Add operation to book.
                     self.append_operation(
-                        operation, utc_time, platform, change, coin, row, file_path
+                        operation,
+                        utc_time,
+                        platform,
+                        change,
+                        coin,
+                        row,
+                        file_path,
+                        remark=remark,
                     )
                     # Add price from csv.
                     if change_in_fiat and coin != fiat:

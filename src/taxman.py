@@ -222,7 +222,7 @@ class Taxman:
             buy_value_in_fiat=buy_value_in_fiat,
             is_taxable=is_taxable,
             taxation_type="Sonstige Einkünfte",
-            remark="",
+            remark=op.remark,
         )
 
         self.tax_report_entries.append(sell_report_entry)
@@ -364,7 +364,7 @@ class Taxman:
                     utc_time=op.utc_time,
                     interest_in_fiat=self.price_data.get_cost(op),
                     taxation_type=taxation_type,
-                    remark="",
+                    remark=op.remark,
                 )
                 self.tax_report_entries.append(report_entry)
 
@@ -386,7 +386,7 @@ class Taxman:
                     utc_time=op.utc_time,
                     in_fiat=self.price_data.get_cost(op),
                     taxation_type=taxation_type,
-                    remark="",
+                    remark=op.remark,
                 )
                 self.tax_report_entries.append(report_entry)
 
@@ -404,7 +404,7 @@ class Taxman:
                     utc_time=op.utc_time,
                     in_fiat=self.price_data.get_cost(op),
                     taxation_type="Einkünfte aus sonstigen Leistungen",
-                    remark="",
+                    remark=op.remark,
                 )
                 self.tax_report_entries.append(report_entry)
 
@@ -424,7 +424,7 @@ class Taxman:
                     first_fee_amount=op.link.change - op.change,
                     first_fee_coin=op.coin,
                     first_fee_in_fiat=self.price_data.get_cost(op),
-                    remark="",
+                    remark=op.remark,
                 )
                 self.tax_report_entries.append(report_entry)
 
