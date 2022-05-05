@@ -200,6 +200,7 @@ class Deposit(Transaction):
 
 class Withdrawal(Transaction):
     withdrawn_coins: Optional[list[SoldCoin]] = None
+    has_link: bool = False
 
     def partial_withdrawn_coins(self, percent: decimal.Decimal) -> list[SoldCoin]:
         assert self.withdrawn_coins
@@ -230,7 +231,8 @@ class SoldCoin:
 
 @dataclasses.dataclass
 class TaxReportEntry:
-    event_type = "virtual"
+    event_type: ClassVar[str] = "virtual"
+    allowed_missing_fields: ClassVar[list[str]] = []
 
     first_platform: Optional[str] = None
     second_platform: Optional[str] = None
@@ -342,7 +344,9 @@ class TaxReportEntry:
         missing_field_values = [
             field.name
             for label, field in zip(self.excel_labels(), self.excel_fields())
-            if label != "-" and getattr(self, field.name) is None
+            if label != "-"
+            and getattr(self, field.name) is None
+            and field.name not in self.allowed_missing_fields
         ]
         assert not missing_field_values, (
             f"{self=} : missing values for fields " f"{', '.join(missing_field_values)}"
@@ -664,7 +668,7 @@ class CommissionReportEntry(AirdropReportEntry):
 
 
 class TransferReportEntry(TaxReportEntry):
-    event_type = "Transfer von Kryptowährung"
+    event_type = "Ein-& Auszahlungen"
 
     def __init__(
         self,
@@ -720,6 +724,60 @@ class TransferReportEntry(TaxReportEntry):
             "-",
             "Bemerkung",
         ]
+
+
+class DepositReportEntry(TransferReportEntry):
+    allowed_missing_fields = ["second_platform", "second_utc_time"]
+
+    def __init__(
+        self,
+        platform: str,
+        amount: decimal.Decimal,
+        coin: str,
+        utc_time: datetime.datetime,
+        first_fee_amount: decimal.Decimal,
+        first_fee_coin: str,
+        first_fee_in_fiat: decimal.Decimal,
+        remark: str,
+    ) -> None:
+        TaxReportEntry.__init__(
+            self,
+            first_platform=platform,
+            amount=amount,
+            coin=coin,
+            first_utc_time=utc_time,
+            first_fee_amount=first_fee_amount,
+            first_fee_coin=first_fee_coin,
+            first_fee_in_fiat=first_fee_in_fiat,
+            remark=remark,
+        )
+
+
+class WithdrawalReportEntry(TransferReportEntry):
+    allowed_missing_fields = ["first_platform", "first_utc_time"]
+
+    def __init__(
+        self,
+        platform: str,
+        amount: decimal.Decimal,
+        coin: str,
+        utc_time: datetime.datetime,
+        first_fee_amount: decimal.Decimal,
+        first_fee_coin: str,
+        first_fee_in_fiat: decimal.Decimal,
+        remark: str,
+    ) -> None:
+        TaxReportEntry.__init__(
+            self,
+            second_platform=platform,
+            amount=amount,
+            coin=coin,
+            second_utc_time=utc_time,
+            first_fee_amount=first_fee_amount,
+            first_fee_coin=first_fee_coin,
+            first_fee_in_fiat=first_fee_in_fiat,
+            remark=remark,
+        )
 
 
 gain_operations = [

@@ -1394,6 +1394,7 @@ class Book:
                 else:
                     # Match the found withdrawal and remove it from queue.
                     op.link = match
+                    match.has_link = True
                     withdrawal_queue.remove(match)
                     log.debug(
                         "Linking withdrawal with deposit: "
