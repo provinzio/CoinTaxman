@@ -497,6 +497,8 @@ class Taxman:
         for taxation_type, tax_report_entries in misc.group_by(
             self.tax_report_entries, "taxation_type"
         ).items():
+            if taxation_type is None:
+                continue
             taxable_gain = misc.dsum(
                 tre.taxable_gain_in_fiat
                 for tre in tax_report_entries
@@ -600,6 +602,8 @@ class Taxman:
         for row, (taxation_type, tax_report_entries) in enumerate(
             misc.group_by(self.tax_report_entries, "taxation_type").items(), 1
         ):
+            if taxation_type is None:
+                continue
             taxable_gain = misc.dsum(
                 tre.taxable_gain_in_fiat
                 for tre in tax_report_entries
