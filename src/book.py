@@ -1223,9 +1223,6 @@ class Book:
         A match is found when:
             A. The coin is the same  and
             B. The deposit amount is between 0.99 and 1 times the withdrawal amount.
-
-        Returns:
-            None
         """
         transfer_operations = (
             op for op in self.operations if isinstance(op, (tr.Deposit, tr.Withdrawal))
