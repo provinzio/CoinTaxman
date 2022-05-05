@@ -1227,7 +1227,15 @@ class Book:
         Returns:
             None
         """
-        sorted_ops = tr.sort_operations(self.operations, ["utc_time"])
+        transfer_operations = (
+            op for op in self.operations if isinstance(op, (tr.Deposit, tr.Withdrawal))
+        )
+        # Sort deposit and withdrawal operations by time so that deposits
+        # come after withdrawal.
+        sorted_transfer_operations = sorted(
+            transfer_operations,
+            key=lambda op: (isinstance(op, tr.Deposit), op.utc_time),
+        )
 
         def is_match(withdrawal: tr.Withdrawal, deposit: tr.Deposit) -> bool:
             return (
@@ -1240,7 +1248,7 @@ class Book:
         withdrawal_queue: list[tr.Withdrawal] = []
         unmatched_deposits: list[tr.Deposit] = []
 
-        for op in sorted_ops:
+        for op in sorted_transfer_operations:
             if op.coin == config.FIAT:
                 # Do not match home fiat deposit/withdrawals.
                 continue
