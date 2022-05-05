@@ -30,6 +30,7 @@ import log_config
 import misc
 import transaction as tr
 from book import Book
+from database import get_sorted_tablename
 from price_data import PriceData
 
 log = log_config.getLogger(__name__)
@@ -184,6 +185,26 @@ class Taxman:
         # TODO Recognized increased speculation period for lended/staked coins?
         is_taxable = not config.IS_LONG_TERM(sc.op.utc_time, op.utc_time)
 
+        try:
+            sell_value_in_fiat = self.price_data.get_partial_cost(op, percent)
+        except NotImplementedError:
+            # Do not raise an error when we are unable to calculate an
+            # unrealized sell value.
+            if ReportType is tr.UnrealizedSellReportEntry:
+                log.warning(
+                    f"Gathering prices for platform {op.platform} is currently "
+                    "not implemented. Therefore I am unable to calculate the "
+                    f"unrealized sell value for your {op.coin} at evaluation "
+                    "deadline. If you want to see your unrealized sell value "
+                    "in the evaluation, please add a price by hand in the "
+                    f"table {get_sorted_tablename(op.coin, config.FIAT)[0]} "
+                    f"at {op.utc_time}; "
+                    "or open an issue/PR to gather prices for your platform."
+                )
+                sell_value_in_fiat = decimal.Decimal()
+            else:
+                raise
+
         sell_report_entry = ReportType(
             sell_platform=op.platform,
             buy_platform=sc.op.platform,
@@ -197,7 +218,7 @@ class Taxman:
             second_fee_amount=second_fee_amount,
             second_fee_coin=second_fee_coin,
             second_fee_in_fiat=second_fee_in_fiat,
-            sell_value_in_fiat=self.price_data.get_partial_cost(op, percent),
+            sell_value_in_fiat=sell_value_in_fiat,
             buy_value_in_fiat=buy_value_in_fiat,
             is_taxable=is_taxable,
             taxation_type="Sonstige Einkünfte",
