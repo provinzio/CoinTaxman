@@ -440,22 +440,28 @@ class Taxman:
     # General tax evaluation functions.
     ###########################################################################
 
-    def _evaluate_taxation(self, operations: list[tr.Operation]) -> None:
-        """Evaluate the taxation for a list of operations using
-        country specific functions.
+    def evaluate_taxation(self) -> None:
+        """Evaluate the taxation using country specific functions."""
+        log.debug("Starting evaluation...")
 
-        Args:
-            operations (list[tr.Operation])
-        """
-        operations = tr.sort_operations(operations, ["utc_time"])
+        assert all(
+            op.utc_time.year <= config.TAX_YEAR for op in self.book.operations
+        ), "For tax evaluation, no operation should happen after the tax year."
+
+        # Sort the operations by time.
+        operations = tr.sort_operations(self.book.operations, ["utc_time"])
+
+        # Evaluate the operations one by one.
+        # Difference between the config.MULTI_DEPOT and "single depot" method
+        # is done by keeping balances per platform and coin or only
+        # per coin (see self.balance).
         for operation in operations:
             self.__evaluate_taxation(operation)
 
-        # Evaluate the balance at deadline.
+        # Evaluate the balance at deadline to calculate unrealized sells.
         for balance in self._balances.values():
             balance.sanity_check()
 
-            # Calculate the unrealized profit/loss.
             sold_coins = balance.remove_all()
             for sc in sold_coins:
                 # Sum up the portfolio at deadline.
@@ -477,24 +483,6 @@ class Taxman:
                     sc,
                     ReportType=tr.UnrealizedSellReportEntry,
                 )
-
-    def evaluate_taxation(self) -> None:
-        """Evaluate the taxation using the country specific function."""
-        log.debug("Starting evaluation...")
-
-        assert all(
-            op.utc_time.year <= config.TAX_YEAR for op in self.book.operations
-        ), "For tax evaluation, no operation should happen after the tax year."
-
-        if config.MULTI_DEPOT:
-            # Evaluate taxation separated by platforms and coins.
-            for _, operations in misc.group_by(
-                self.book.operations, "platform"
-            ).items():
-                self._evaluate_taxation(operations)
-        else:
-            # Evaluate taxation separated by coins "in a single virtual depot".
-            self._evaluate_taxation(self.book.operations)
 
     ###########################################################################
     # Export / Summary
