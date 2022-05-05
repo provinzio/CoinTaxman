@@ -602,15 +602,15 @@ class InterestReportEntry(TaxReportEntry):
 
 
 class LendingInterestReportEntry(InterestReportEntry):
-    event_type = "Coin-Lending"
+    event_type = "Coin-Lending Einkünfte"
 
 
 class StakingInterestReportEntry(InterestReportEntry):
-    event_type = "Staking"
+    event_type = "Staking Einkünfte"
 
 
 class AirdropReportEntry(TaxReportEntry):
-    event_type = "Airdrop"
+    event_type = "Airdrops"
 
     def __init__(
         self,
