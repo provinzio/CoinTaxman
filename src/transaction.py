@@ -45,7 +45,11 @@ class Operation:
     line: list[int]
     file_path: Path
     fees: "Optional[list[Fee]]" = None
-    remark: str = ""
+    remarks: list[str] = dataclasses.field(default_factory=list)
+
+    @property
+    def remark(self) -> str:
+        return ", ".join(self.remarks)
 
     @classmethod
     def type_name_c(cls) -> str:

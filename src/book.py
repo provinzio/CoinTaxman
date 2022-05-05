@@ -59,7 +59,7 @@ class Book:
         coin: str,
         row: int,
         file_path: Path,
-        remark: str = "",
+        remark: Optional[str] = None,
     ) -> tr.Operation:
 
         try:
@@ -73,7 +73,11 @@ class Book:
             )
             raise RuntimeError
 
-        op = Op(utc_time, platform, change, coin, [row], file_path, remark=remark)
+        kwargs = {}
+        if remark:
+            kwargs["remarks"] = [remark]
+
+        op = Op(utc_time, platform, change, coin, [row], file_path, **kwargs)
         assert isinstance(op, tr.Operation)
         return op
 
@@ -95,7 +99,7 @@ class Book:
         coin: str,
         row: int,
         file_path: Path,
-        remark: str = "",
+        remark: Optional[str] = None,
     ) -> None:
         # Discard operations after the `TAX_YEAR`.
         # Ignore operations which make no change.
@@ -1411,6 +1415,8 @@ class Book:
                     )
                 )
             )
+            for op in unmatched_deposits:
+                op.remarks.append("Einzahlung ohne zugehörige Auszahlung!")
         if withdrawal_queue:
             log.warning(
                 "Unable to match all withdrawals with deposits. "
@@ -1423,6 +1429,8 @@ class Book:
                     )
                 )
             )
+            for op in withdrawal_queue:
+                op.remarks.append("Auszahlung ohne zugehörige Einzahlung!")
 
         log.info("Finished withdrawal/deposit matching")
 
