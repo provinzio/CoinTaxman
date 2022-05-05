@@ -1282,7 +1282,7 @@ class Book:
                 "Following withdrawals couldn't be matched:\n"
                 + (
                     "\n".join(
-                        f" - {op.change} {op.coin} from {op.platform} at{op.utc_time}"
+                        f" - {op.change} {op.coin} from {op.platform} at {op.utc_time}"
                         for op in withdrawal_queue
                     )
                 )
