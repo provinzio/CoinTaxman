@@ -1071,6 +1071,112 @@ class Book:
                         file_path,
                     )
 
+    def _read_custom_eur(self, file_path: Path) -> None:
+        fiat = "EUR"
+
+        with open(file_path, encoding="utf8") as f:
+            reader = csv.reader(f)
+
+            # Skip header.
+            next(reader)
+
+            for line in reader:
+                row = reader.line_num
+
+                # Skip empty lines.
+                if not line:
+                    continue
+
+                (
+                    operation_type,
+                    _buy_quantity,
+                    buy_asset,
+                    _buy_value_in_fiat,
+                    _sell_quantity,
+                    sell_asset,
+                    _sell_value_in_fiat,
+                    _fee_quantity,
+                    fee_asset,
+                    _fee_value_in_fiat,
+                    platform,
+                    _timestamp,
+                    remark,
+                ) = line
+
+                # Parse data.
+                try:
+                    utc_time = datetime.datetime.strptime(
+                        _timestamp, "%m/%d/%Y %H:%M:%S"
+                    )
+                except ValueError:
+                    utc_time = datetime.datetime.strptime(
+                        _timestamp, "%m/%d/%Y %H:%M:%S.%f"
+                    )
+                utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
+                buy_quantity = misc.xdecimal(_buy_quantity)
+                buy_value_in_fiat = misc.xdecimal(_buy_value_in_fiat)
+                sell_quantity = misc.xdecimal(_sell_quantity)
+                sell_value_in_fiat = misc.xdecimal(_sell_value_in_fiat)
+                fee_quantity = misc.xdecimal(_fee_quantity)
+                fee_value_in_fiat = misc.xdecimal(_fee_value_in_fiat)
+
+                # ... and define which operation to add.
+                add_operations: list[
+                    tuple[str, decimal.Decimal, str, Optional[decimal.Decimal]]
+                ] = []
+                if operation_type != "Withdrawal":
+                    assert buy_quantity
+                    assert buy_asset
+
+                    op = "Buy" if operation_type == "Trade" else operation_type
+                    add_operations.append(
+                        (op, buy_quantity, buy_asset, buy_value_in_fiat)
+                    )
+
+                if operation_type != "Deposit":
+                    assert sell_quantity
+                    assert sell_asset
+
+                    op = "Sell" if operation_type == "Trade" else operation_type
+                    add_operations.append(
+                        (op, sell_quantity, sell_asset, sell_value_in_fiat)
+                    )
+
+                if fee_asset:
+                    assert fee_quantity
+                    assert fee_value_in_fiat
+
+                    add_operations.append(
+                        ("Fee", fee_quantity, fee_asset, fee_value_in_fiat)
+                    )
+
+                if remark:
+                    log.warning(
+                        "Remarks from custom CSV import will be ignored. "
+                        f"Ignored remark in file {file_path}:{row}: {remark}"
+                    )
+
+                for operation, change, coin, change_in_fiat in add_operations:
+                    # Add operation to book.
+                    self.append_operation(
+                        operation, utc_time, platform, change, coin, row, file_path
+                    )
+                    # Add price from csv.
+                    if change_in_fiat and coin != fiat:
+                        price = change_in_fiat / change
+                        log.debug(
+                            f"Adding {fiat}/{coin} price from custom CSV: "
+                            f"{price} for {platform} at {utc_time}"
+                        )
+                        set_price_db(
+                            platform,
+                            coin,
+                            fiat,
+                            utc_time,
+                            price,
+                            overwrite=True,
+                        )
+
     def detect_exchange(self, file_path: Path) -> Optional[str]:
         if file_path.suffix == ".csv":
 
@@ -1085,6 +1191,7 @@ class Book:
                 "kraken_trades": 1,
                 "bitpanda_pro_trades": 4,
                 "bitpanda": 7,
+                "custom_eur": 1,
             }
 
             expected_headers = {
@@ -1200,6 +1307,21 @@ class Book:
                     "Fee asset",
                     "Spread",
                     "Spread Currency",
+                ],
+                "custom_eur": [
+                    "Type",
+                    "Buy Quantity",
+                    "Buy Asset",
+                    "Buy Value in EUR",
+                    "Sell Quantity",
+                    "Sell Asset",
+                    "Sell Value in EUR",
+                    "Fee Quantity",
+                    "Fee Asset",
+                    "Fee Value in EUR",
+                    "Wallet",
+                    "Timestamp UTC",
+                    "Note",
                 ],
             }
             with open(file_path, encoding="utf8") as f:
