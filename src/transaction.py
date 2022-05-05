@@ -280,9 +280,11 @@ class TaxReportEntry:
     taxable_gain_in_fiat: decimal.Decimal = dataclasses.field(init=False)
 
     @property
-    def _taxable_gain_in_fiat(self) -> decimal.Decimal:
+    def _taxable_gain_in_fiat(self) -> Optional[decimal.Decimal]:
         if self.is_taxable and self._gain_in_fiat:
             return self._gain_in_fiat
+        if self.get_label("taxable_gain_in_fiat") == "-":
+            return None
         return decimal.Decimal()
 
     is_taxable: Optional[bool] = None
@@ -358,6 +360,13 @@ class TaxReportEntry:
         labels = cls._labels()
         assert len(labels) == len(dataclasses.fields(cls)) - 1
         return labels
+
+    @classmethod
+    def get_label(cls, field_name: str) -> str:
+        for label, field in zip(cls.labels(), cls.fields()):
+            if field.name == field_name:
+                return label
+        raise ValueError(f"{field_name} is not a field of {cls=}")
 
     def values(self) -> Iterator:
         return (getattr(self, f) for f in self.field_names())
