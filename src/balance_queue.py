@@ -20,6 +20,7 @@ import dataclasses
 import decimal
 from typing import Union
 
+import config
 import log_config
 import transaction as tr
 
@@ -197,20 +198,32 @@ class BalanceQueue(abc.ABC):
 
         if unsold_change:
             # Queue ran out of items to sell and not all coins could be sold.
-            log.error(
+            msg = (
                 f"Not enough {op.coin} in queue to sell: "
                 f"missing {unsold_change} {op.coin} "
                 f"(transaction from {op.utc_time} on {op.platform}, "
                 f"see {op.file_path.name} lines {op.line})\n"
-                "\tThis error occurs when you sold more coins than you have "
+                f"This can happen when you sold more {op.coin} than you have "
                 "according to your account statements. Have you added every "
-                "account statement, including these from the last years?\n"
-                "\tThis error may also occur after deposits from unknown "
-                "sources. CoinTaxman requires the full transaction history to "
-                "evaluate taxation (when and where were these deposited coins "
-                "bought?).\n"
+                "account statement including these from last years and the "
+                f"all deposits of {op.coin}?"
             )
-            raise RuntimeError
+            if self.coin == config.FIAT:
+                log.warning(
+                    f"{msg}\n"
+                    "Tracking of your home fiat is not important for tax "
+                    f"evaluation but the {op.coin} in your portfolio at "
+                    "deadline will be wrong."
+                )
+            else:
+                log.error(
+                    f"{msg}\n"
+                    "\tThis error may also occur after deposits from unknown "
+                    "sources. CoinTaxman requires the full transaction history to "
+                    "evaluate taxation (when and where were these deposited coins "
+                    "bought?).\n"
+                )
+                raise RuntimeError
 
         return sold_coins
 
