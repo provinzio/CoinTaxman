@@ -57,6 +57,7 @@ class PriceData:
         quote_asset: str,
         swapped_symbols: bool = False,
         fallback_mode: bool = False,
+        minute_interval: int = 1,
     ) -> decimal.Decimal:
         """Retrieve price from binance official REST API.
 
@@ -86,7 +87,7 @@ class PriceData:
         root_url = "https://api.binance.com/api/v3/aggTrades"
         symbol = f"{base_asset}{quote_asset}"
         startTime, endTime = misc.get_offset_timestamps(
-            utc_time, datetime.timedelta(minutes=1)
+            utc_time, datetime.timedelta(minutes=minute_interval)
         )
         url = f"{root_url}?{symbol=:}&{startTime=:}&{endTime=:}"
 
@@ -104,6 +105,7 @@ class PriceData:
             # Check if binance offers prices against our fallback coins as
             # intermediate coin (e.g. SHIB/EUR = SHIB/BTC * BTC/EUR)
             fallback_assets = ["BTC", "BNB", "BUSD", "USDT"]
+            fallback_intervalls = [1, 3, 5, 10, 15, 30, 60]
 
             # Are we already comparing against an fallback coin?
             if fallback_mode:
@@ -122,48 +124,50 @@ class PriceData:
                     base_asset,
                     swapped_symbols=True,
                     fallback_mode=fallback_mode,
+                    minute_interval=minute_interval,
                 )
                 return misc.reciprocal(price)
 
             assert swapped_symbols is False
 
             # Check against all fallback coins.
-            for fallback_asset in fallback_assets:
-                if base_asset != fallback_asset and quote_asset != fallback_asset:
-                    try:
-                        base = self.get_price(
-                            "binance",
-                            base_asset,
-                            utc_time,
-                            fallback_asset,
-                            fallback_mode=True,
-                        )
-                        quote = self.get_price(
-                            "binance",
-                            fallback_asset,
-                            utc_time,
-                            quote_asset,
-                            fallback_mode=True,
-                        )
-                    except FallbackPriceNotFound:
-                        # Unable to fetch prices with our intermediate fallback
-                        # coin. Lets checkout the next fallback coin.
-                        continue
-                    else:
-                        return base * quote
+            for fallback_intervall in fallback_intervalls:
+                for fallback_asset in fallback_assets:
+                    if base_asset != fallback_asset and quote_asset != fallback_asset:
+                        try:
+                            base = self.get_price(
+                                "binance",
+                                base_asset,
+                                utc_time,
+                                fallback_asset,
+                                fallback_mode=True,
+                                minute_interval=fallback_intervall,
+                            )
+                            quote = self.get_price(
+                                "binance",
+                                fallback_asset,
+                                utc_time,
+                                quote_asset,
+                                fallback_mode=True,
+                                minute_interval=fallback_intervall,
+                            )
+                        except FallbackPriceNotFound:
+                            # Unable to fetch prices with our intermediate fallback
+                            # coin. Lets checkout the next fallback coin.
+                            continue
+                        else:
+                            return base * quote
 
             log.warning(
                 f"Unable to retrieve price for {symbol=} from binance at "
-                f"{utc_time=} even though multiple fallback coins were checked "
-                f"against ({fallback_assets}). "
+                f"{utc_time=} even though multiple {fallback_assets=} and "
+                f"multiple {fallback_intervalls=}  were checked against. "
                 "Assumption: The coin couldn't been traded at that time. "
                 "Set the price to 0. "
                 "This will be saved to the database and used again without "
                 "further warnings. "
-                "Keep in mind, that a price could exist for another time "
-                "or for the date, but not the exact utc_time. "
                 "Please edit the price entry in the database by hand, "
-                "if you want to avoid that. "
+                "if you want to avoid that or use make check-db. "
                 "Feel free to open a PR to improve the binance fallback strategy."
             )
 
