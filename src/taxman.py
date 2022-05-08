@@ -296,7 +296,7 @@ class Taxman:
             sell_value_in_fiat=sell_value_in_fiat,
             buy_cost_in_fiat=buy_cost_in_fiat,
             is_taxable=is_taxable,
-            taxation_type="Sonstige Einkünfte",
+            taxation_type="Einkünfte aus privaten Veräußerungsgeschäften",
             remark=op.remark,
         )
 
