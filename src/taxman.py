@@ -544,22 +544,23 @@ class Taxman:
                 self.multi_depot_portfolio[sc.op.platform][sc.op.coin] += sc.sold
                 self.single_depot_portfolio[sc.op.coin] += sc.sold
 
-                # "Sell" these coins which makes it possible to calculate the
-                # unrealized gain afterwards.
-                unrealized_sell = tr.Sell(
-                    utc_time=TAX_DEADLINE,
-                    platform=sc.op.platform,
-                    change=sc.sold,
-                    coin=sc.op.coin,
-                    line=[-1],
-                    file_path=Path(),
-                    fees=None,
-                )
-                self._evaluate_sell(
-                    unrealized_sell,
-                    sc,
-                    ReportType=tr.UnrealizedSellReportEntry,
-                )
+                if sc.op.coin != config.FIAT:
+                    # "Sell" these coins which makes it possible to calculate
+                    # the unrealized gain afterwards.
+                    unrealized_sell = tr.Sell(
+                        utc_time=TAX_DEADLINE,
+                        platform=sc.op.platform,
+                        change=sc.sold,
+                        coin=sc.op.coin,
+                        line=[-1],
+                        file_path=Path(),
+                        fees=None,
+                    )
+                    self._evaluate_sell(
+                        unrealized_sell,
+                        sc,
+                        ReportType=tr.UnrealizedSellReportEntry,
+                    )
 
     ###########################################################################
     # General tax evaluation functions.
