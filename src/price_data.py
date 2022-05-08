@@ -626,13 +626,16 @@ class PriceData:
                 stats[platform] = {"fix": 0, "rem": 0}
                 try:
                     get_price = getattr(self, f"_get_price_{platform}")
-                except AttributeError:
+                except AttributeError as e:
                     if platform == "coinbase":
                         get_price = self._get_price_coinbase_pro
                     else:
-                        raise NotImplementedError(
-                            "Unable to read data from %s", platform
+                        log.warning(
+                            f"excepted NotImplementedError: {e}, "
+                            "checking will be ignored in this case"
                         )
+                        del stats[platform]
+                        continue
 
                 with sqlite3.connect(db_path) as conn:
                     cur = conn.cursor()
