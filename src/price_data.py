@@ -648,15 +648,56 @@ class PriceData:
                                 utc_time = datetime.datetime.strptime(
                                     row[0], "%Y-%m-%d %H:%M:%S%z"
                                 )
+                                timezone_aware = True
                             except ValueError:
-                                # Missing timezone information in database.
-                                # Set as utc time.
                                 utc_time = datetime.datetime.strptime(
                                     row[0], "%Y-%m-%d %H:%M:%S"
                                 )
-                                utc_time = utc_time.astimezone(datetime.timezone.utc)
+                                timezone_aware = False
 
                             price = get_price(base_asset, utc_time, quote_asset)
+
+                            if not timezone_aware:
+                                timezone_aware_utc_time = utc_time.astimezone(
+                                    datetime.timezone.utc
+                                )
+                                timezone_aware_price = get_price(
+                                    base_asset,
+                                    timezone_aware_utc_time,
+                                    quote_asset,
+                                )
+                                if timezone_aware_price:
+                                    log.info(
+                                        "Delete timezone unaware price of "
+                                        f"{tablename=} on {platform=} at {utc_time=} "
+                                        "because there already exists a timezone "
+                                        "aware price for the same (utc) time"
+                                    )
+                                    query = (
+                                        f"DELETE FROM `{tablename}`" "WHERE utc_time=?"
+                                    )
+                                    conn.execute(query, (utc_time,))
+                                    conn.commit()
+                                else:
+                                    log.info(
+                                        "Update timezone unaware price of "
+                                        f"{tablename=} on {platform=} at {utc_time=}"
+                                        "to utc-timezone aware price"
+                                    )
+                                    query = (
+                                        f"UPDATE `{tablename}` "
+                                        "SET utc_time=? "
+                                        "WHERE utc_time=?;"
+                                    )
+                                    conn.execute(
+                                        query,
+                                        (
+                                            timezone_aware_utc_time,
+                                            utc_time,
+                                        ),
+                                    )
+                                    conn.commit()
+                                continue
 
                             if price == 0.0:
                                 log.warning(
