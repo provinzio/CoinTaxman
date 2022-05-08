@@ -154,7 +154,12 @@ class Taxman:
             # Gains of combinations like below are not correctly calculated:
             #   1 BTC=1€, 1ETH=2€, 1BTC=1ETH
             # e.g. buy 1 BTC for 1 €, buy 1 ETH for 1 BTC, buy 2 € for 1 ETH.
-            if sc.op.link is None:
+            if sc.op.buying_cost:
+                buy_value = sc.op.buying_cost * percent
+            elif sc.op.link:
+                prev_sell_value = self.price_data.get_partial_cost(sc.op.link, percent)
+                buy_value = prev_sell_value
+            else:
                 log.warning(
                     "Unable to correctly determine buy cost of bought coins "
                     "because the link to the corresponding previous sell could "
@@ -166,9 +171,6 @@ class Taxman:
                     f"{sc.op}"
                 )
                 buy_value = self.price_data.get_cost(sc)
-            else:
-                prev_sell_value = self.price_data.get_partial_cost(sc.op.link, percent)
-                buy_value = prev_sell_value
         else:
             # All other operations "begin their existence" as that coin and
             # weren't traded/exchanged before.

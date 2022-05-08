@@ -175,6 +175,7 @@ class Sell(Transaction):
 
 class Buy(Transaction):
     link: Optional[Sell] = None
+    buying_cost: Optional[decimal.Decimal] = None
 
 
 class CoinLendInterest(Transaction):
