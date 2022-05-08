@@ -767,7 +767,7 @@ class Taxman:
         # Sheets per ReportType
         #
         for event_type, tax_report_entries in misc.group_by(
-            self.tax_report_entries, "event_type"
+            tr.sort_tax_report_entries(self.tax_report_entries), "event_type"
         ).items():
             ReportType = type(tax_report_entries[0])
 

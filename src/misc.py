@@ -30,6 +30,7 @@ from typing import (
     SupportsFloat,
     SupportsInt,
     Tuple,
+    Type,
     TypeVar,
     Union,
     cast,
@@ -221,6 +222,38 @@ def group_by(lst: L, key: Union[str, list[str]]) -> dict[Any, L]:
     else:
         raise TypeError
     return dict(d)
+
+
+T = TypeVar("T")
+
+
+def sort_by_order_and_key(
+    order: list[Type[T]],
+    list_: list[T],
+    keys: Optional[list[str]] = None,
+) -> list[T]:
+    """Sort a list by list of existing types and arbitrary keys/members.
+
+    If the type is missing in order list. The entry will be placed first.
+
+    Args:
+        order (list[Type[T]]): List with types in correct order.
+        operations (list[T]): List with entries to be sorted.
+        keys (list[str], optional): List of members which will be considered
+                                    when sorting. Defaults to None.
+
+    Returns:
+        list[T]: Sorted entries by `order` and specific keys.
+    """
+
+    def key_function(op: T) -> tuple:
+        try:
+            idx = order.index(type(op))
+        except ValueError:
+            idx = 0
+        return tuple(([getattr(op, key) for key in keys] if keys else []) + [idx])
+
+    return sorted(list_, key=key_function)
 
 
 __delayed: dict[int, datetime.datetime] = {}

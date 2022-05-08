@@ -907,6 +907,22 @@ loss_operations = [
 ]
 operations_order = gain_operations + loss_operations
 
+tax_report_entry_order = [
+    BuyReportEntry,
+    SellReportEntry,
+    LendingInterestReportEntry,
+    StakingInterestReportEntry,
+    InterestReportEntry,
+    AirdropReportEntry,
+    CommissionReportEntry,
+    TransferReportEntry,
+    DepositReportEntry,
+    WithdrawalReportEntry,
+    LendingReportEntry,
+    StakingReportEntry,
+    UnrealizedSellReportEntry,
+]
+
 
 def sort_operations(
     operations: list[Operation],
@@ -925,12 +941,10 @@ def sort_operations(
     Returns:
         list[Operation]: Sorted operations by `operations_order` and specific keys.
     """
+    return misc.sort_by_order_and_key(operations_order, operations, keys=keys)
 
-    def key_function(op: Operation) -> tuple:
-        try:
-            idx = operations_order.index(type(op))
-        except ValueError:
-            idx = 0
-        return tuple(([getattr(op, key) for key in keys] if keys else []) + [idx])
 
-    return sorted(operations, key=key_function)
+def sort_tax_report_entries(
+    tax_report_entries: list[TaxReportEntry],
+) -> list[TaxReportEntry]:
+    return misc.sort_by_order_and_key(tax_report_entry_order, tax_report_entries)
