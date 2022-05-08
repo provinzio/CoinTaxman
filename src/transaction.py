@@ -406,7 +406,11 @@ class TaxReportEntry:
                     width = 35.0
                 elif field.name == "taxable_gain_in_fiat":
                     width = 13.0
-                elif field.name.endswith("_in_fiat") or "coin" in field.name:
+                elif (
+                    field.name.endswith("_in_fiat")
+                    or "coin" in field.name
+                    or "platform" in field.name
+                ):
                     width = 15.0
                 elif field.type in ("datetime.datetime", "Optional[datetime.datetime]"):
                     width = 18.43
