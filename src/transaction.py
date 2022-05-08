@@ -494,7 +494,7 @@ class SellReportEntry(TaxReportEntry):
     def _labels(cls) -> list[str]:
         return [
             "Verkauf auf Börse",
-            "Erworben von Börse",
+            "Erworben auf Börse",
             #
             "Anzahl",
             "Währung",
@@ -527,7 +527,7 @@ class UnrealizedSellReportEntry(SellReportEntry):
     def _labels(cls) -> list[str]:
         return [
             "Virtueller Verkauf auf Börse",
-            "Erworben von Börse",
+            "Erworben auf Börse",
             #
             "Anzahl",
             "Währung",
@@ -549,6 +549,69 @@ class UnrealizedSellReportEntry(SellReportEntry):
             "Virtueller Gewinn/Verlust in EUR",
             "davon wären steuerbar",
             "Einkunftsart",
+            "Bemerkung",
+        ]
+
+
+class BuyReportEntry(TaxReportEntry):
+    event_type = "Kauf"
+
+    def __init__(
+        self,
+        platform: str,
+        amount: decimal.Decimal,
+        coin: str,
+        utc_time: datetime.datetime,
+        first_fee_amount: decimal.Decimal,
+        first_fee_coin: str,
+        first_fee_in_fiat: decimal.Decimal,
+        second_fee_amount: decimal.Decimal,
+        second_fee_coin: str,
+        second_fee_in_fiat: decimal.Decimal,
+        buy_value_in_fiat: decimal.Decimal,
+        remark: str,
+    ) -> None:
+        super().__init__(
+            second_platform=platform,
+            amount=amount,
+            coin=coin,
+            second_utc_time=utc_time,
+            first_fee_amount=first_fee_amount,
+            first_fee_coin=first_fee_coin,
+            first_fee_in_fiat=first_fee_in_fiat,
+            second_fee_amount=second_fee_amount,
+            second_fee_coin=second_fee_coin,
+            second_fee_in_fiat=second_fee_in_fiat,
+            second_value_in_fiat=buy_value_in_fiat,
+            remark=remark,
+        )
+
+    @classmethod
+    def _labels(cls) -> list[str]:
+        return [
+            "-",
+            "Erworben auf Börse",
+            #
+            "Anzahl",
+            "Währung",
+            #
+            "-",
+            "Erwerbsdatum",
+            #
+            "(1) Anzahl Transaktionsgebühr",
+            "(1) Währung Transaktionsgebühr",
+            "(1) Transaktionsgebühr in EUR",
+            "(2) Anzahl Transaktionsgebühr",
+            "(2) Währung Transaktionsgebühr",
+            "(2) Transaktionsgebühr in EUR",
+            #
+            "-",
+            "Kaufpreis in EUR",
+            "Gesamt Transaktionsgebühr in EUR",
+            #
+            "Anschaffungskosten in EUR",
+            "-",
+            "-",
             "Bemerkung",
         ]
 

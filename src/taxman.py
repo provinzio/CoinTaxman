@@ -178,6 +178,37 @@ class Taxman:
 
         return buy_value + buying_fees
 
+    def _get_fee_param_dict(self, op: tr.Operation, percent: decimal.Decimal) -> dict:
+
+        # fee amount/coin/in_fiat
+        first_fee_amount = decimal.Decimal(0)
+        first_fee_coin = ""
+        first_fee_in_fiat = decimal.Decimal(0)
+        second_fee_amount = decimal.Decimal(0)
+        second_fee_coin = ""
+        second_fee_in_fiat = decimal.Decimal(0)
+        if op.fees is None or len(op.fees) == 0:
+            pass
+        elif len(op.fees) >= 1:
+            first_fee_amount, first_fee_coin, first_fee_in_fiat = self._evaluate_fee(
+                op.fees[0], percent
+            )
+        elif len(op.fees) >= 2:
+            second_fee_amount, second_fee_coin, second_fee_in_fiat = self._evaluate_fee(
+                op.fees[1], percent
+            )
+        else:
+            raise NotImplementedError("More than two fee coins are not supported")
+
+        return dict(
+            first_fee_amount=first_fee_amount,
+            first_fee_coin=first_fee_coin,
+            first_fee_in_fiat=first_fee_in_fiat,
+            second_fee_amount=second_fee_amount,
+            second_fee_coin=second_fee_coin,
+            second_fee_in_fiat=second_fee_in_fiat,
+        )
+
     def _evaluate_sell(
         self,
         op: tr.Sell,
@@ -202,26 +233,7 @@ class Taxman:
         # Share the fees and sell_value proportionally to the coins sold.
         percent = sc.sold / op.change
 
-        # fee amount/coin/in_fiat
-        first_fee_amount = decimal.Decimal(0)
-        first_fee_coin = ""
-        first_fee_in_fiat = decimal.Decimal(0)
-        second_fee_amount = decimal.Decimal(0)
-        second_fee_coin = ""
-        second_fee_in_fiat = decimal.Decimal(0)
-        if op.fees is None or len(op.fees) == 0:
-            pass
-        elif len(op.fees) >= 1:
-            first_fee_amount, first_fee_coin, first_fee_in_fiat = self._evaluate_fee(
-                op.fees[0], percent
-            )
-        elif len(op.fees) >= 2:
-            second_fee_amount, second_fee_coin, second_fee_in_fiat = self._evaluate_fee(
-                op.fees[1], percent
-            )
-        else:
-            raise NotImplementedError("More than two fee coins are not supported")
-
+        fee_params = self._get_fee_param_dict(op, percent)
         buy_cost_in_fiat = self.get_buy_cost(sc)
 
         # TODO Recognized increased speculation period for lended/staked coins?
@@ -254,12 +266,7 @@ class Taxman:
             coin=op.coin,
             sell_utc_time=op.utc_time,
             buy_utc_time=sc.op.utc_time,
-            first_fee_amount=first_fee_amount,
-            first_fee_coin=first_fee_coin,
-            first_fee_in_fiat=first_fee_in_fiat,
-            second_fee_amount=second_fee_amount,
-            second_fee_coin=second_fee_coin,
-            second_fee_in_fiat=second_fee_in_fiat,
+            **fee_params,
             sell_value_in_fiat=sell_value_in_fiat,
             buy_cost_in_fiat=buy_cost_in_fiat,
             is_taxable=is_taxable,
@@ -365,6 +372,19 @@ class Taxman:
             # detemining the acquisition cost of the bought coins.
             # For now we'll just add our bought coins to the balance.
             self.add_to_balance(op)
+
+            # Add tp export for informational purpose.
+            fee_params = self._get_fee_param_dict(op, decimal.Decimal(1))
+            tax_report_entry = tr.BuyReportEntry(
+                platform=op.platform,
+                amount=op.change,
+                coin=op.coin,
+                utc_time=op.utc_time,
+                **fee_params,
+                buy_value_in_fiat=self.price_data.get_cost(op),
+                remark=op.remark,
+            )
+            self.tax_report_entries.append(tax_report_entry)
 
         elif isinstance(op, tr.Sell):
             # Buys and sells always come in a pair. The selling/redeeming
