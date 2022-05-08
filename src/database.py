@@ -265,7 +265,7 @@ def __set_price_db(
 
     with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
-        query = f"INSERT INTO `{tablename}`" "('utc_time', 'price') VALUES (?, ?);"
+        query = f"INSERT INTO `{tablename}` ('utc_time', 'price') VALUES (?, ?);"
         try:
             cur.execute(query, (utc_time, str(price)))
         except sqlite3.OperationalError as e:
@@ -280,6 +280,7 @@ def __set_price_db(
             else:
                 raise e
         conn.commit()
+        cur.close()
 
 
 def set_price_db(
