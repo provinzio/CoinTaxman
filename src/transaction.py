@@ -757,7 +757,7 @@ class AirdropReportEntry(TaxReportEntry):
 
 
 class CommissionReportEntry(AirdropReportEntry):
-    event_type = "Kommission"  # TODO gibt es eine bessere Bezeichnung?
+    event_type = "Werbeprämien"
 
 
 class TransferReportEntry(TaxReportEntry):
