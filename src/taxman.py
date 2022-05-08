@@ -179,6 +179,49 @@ class Taxman:
 
         return buy_value + buying_fees
 
+    def get_sell_value(
+        self, op: tr.Sell, sc: tr.SoldCoin, ReportType: Type[tr.SellReportEntry]
+    ) -> decimal.Decimal:
+        """Calculate the sell value by determining the market price for the
+        with that sell bought coins.
+
+        Args:
+            sc (tr.SoldCoin): The sold coin.
+            ReportType (Type[tr.SellReportEntry])
+
+        Returns:
+            decimal.Decimal: The sell value.
+        """
+        assert sc.op.coin == op.coin
+        percent = sc.sold / op.change
+
+        if op.selling_value:
+            sell_value = op.selling_value * percent
+        elif op.link:
+            sell_value = self.price_data.get_partial_cost(op.link, percent)
+        else:
+            try:
+                sell_value = self.price_data.get_partial_cost(op, percent)
+            except NotImplementedError:
+                # Do not raise an error when we are unable to calculate an
+                # unrealized sell value.
+                if ReportType is tr.UnrealizedSellReportEntry:
+                    log.warning(
+                        f"Gathering prices for platform {op.platform} is currently "
+                        "not implemented. Therefore I am unable to calculate the "
+                        f"unrealized sell value for your {op.coin} at evaluation "
+                        "deadline. If you want to see your unrealized sell value "
+                        "in the evaluation, please add a price by hand in the "
+                        f"table {get_sorted_tablename(op.coin, config.FIAT)[0]} "
+                        f"at {op.utc_time}; "
+                        "or open an issue/PR to gather prices for your platform."
+                    )
+                    sell_value = decimal.Decimal()
+                else:
+                    raise
+
+        return sell_value
+
     def _get_fee_param_dict(self, op: tr.Operation, percent: decimal.Decimal) -> dict:
 
         # fee amount/coin/in_fiat
@@ -240,25 +283,7 @@ class Taxman:
         # TODO Recognized increased speculation period for lended/staked coins?
         is_taxable = not config.IS_LONG_TERM(sc.op.utc_time, op.utc_time)
 
-        try:
-            sell_value_in_fiat = self.price_data.get_partial_cost(op, percent)
-        except NotImplementedError:
-            # Do not raise an error when we are unable to calculate an
-            # unrealized sell value.
-            if ReportType is tr.UnrealizedSellReportEntry:
-                log.warning(
-                    f"Gathering prices for platform {op.platform} is currently "
-                    "not implemented. Therefore I am unable to calculate the "
-                    f"unrealized sell value for your {op.coin} at evaluation "
-                    "deadline. If you want to see your unrealized sell value "
-                    "in the evaluation, please add a price by hand in the "
-                    f"table {get_sorted_tablename(op.coin, config.FIAT)[0]} "
-                    f"at {op.utc_time}; "
-                    "or open an issue/PR to gather prices for your platform."
-                )
-                sell_value_in_fiat = decimal.Decimal()
-            else:
-                raise
+        sell_value_in_fiat = self.get_sell_value(op, sc, ReportType)
 
         sell_report_entry = ReportType(
             sell_platform=op.platform,

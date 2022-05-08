@@ -169,13 +169,14 @@ class Transaction(Operation):
     pass
 
 
-class Sell(Transaction):
-    pass
-
-
 class Buy(Transaction):
     link: Optional[Sell] = None
     buying_cost: Optional[decimal.Decimal] = None
+
+
+class Sell(Transaction):
+    link: Optional[Buy] = None
+    selling_value: Optional[decimal.Decimal] = None
 
 
 class CoinLendInterest(Transaction):
