@@ -209,7 +209,7 @@ class Book:
                 assert change
 
                 # Check for problems.
-                if remark:
+                if remark and remark not in ("Withdraw fee is included",):
                     log.warning(
                         "I may have missed a remark in %s:%i: `%s`.",
                         file_path,
@@ -1617,7 +1617,10 @@ class Book:
 
             log.info("Reading file from exchange %s at %s", exchange, file_path)
             read_file(file_path)
-        else:
+        elif file_path.suffix not in (
+            ".zip",
+            ".rar",
+        ):
             log.warning(
                 f"Unable to detect the exchange of file `{file_path}`. "
                 "Skipping file."
