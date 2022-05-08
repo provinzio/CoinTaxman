@@ -642,7 +642,6 @@ class PriceData:
                         query = f"SELECT utc_time FROM `{tablename}` WHERE price<=0.0;"
                         cur = conn.execute(query)
                         data = cur.fetchall()
-                        cur.close()
 
                         for row in data:
                             try:
