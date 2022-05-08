@@ -1499,7 +1499,7 @@ class Book:
         grouped_ops = misc.group_by(self.operations, tr.Operation.identical_columns)
         self.operations = [tr.Operation.merge(*ops) for ops in grouped_ops.values()]
 
-    def match_fees_and_resolve_trades(self) -> None:
+    def match_fees(self) -> None:
         # Split operations in fees and other operations.
         operations = []
         all_fees: list[tr.Fee] = []
@@ -1553,10 +1553,6 @@ class Book:
                     assert self.operations[buy_idx].fees is None
                     self.operations[sell_idx].fees = fees
                     self.operations[buy_idx].fees = fees
-                    # Add link that this is a trade pair.
-                    self.operations[  # type: ignore[attr-defined]
-                        buy_idx
-                    ].link = self.operations[sell_idx]
                 else:
                     log.warning(
                         "Fee matching is not implemented for this case. "
@@ -1565,6 +1561,37 @@ class Book:
                         "Please create an Issue or PR.\n\n"
                         f"{matching_operations=}\n{fees=}"
                     )
+
+    def resolve_trades(self) -> None:
+        # Match trades which belong together (traded at same time).
+        for platform, _operations in misc.group_by(self.operations, "platform").items():
+            for utc_time, matching_operations in misc.group_by(
+                _operations, "utc_time"
+            ).items():
+                # Count matching operations by type with dict
+                # { operation typename: list of operations }
+                t_op = collections.defaultdict(list)
+                for op in matching_operations:
+                    t_op[op.type_name].append(op)
+
+                # Check if this is a buy/sell-pair.
+                # Fees might occure by other operation types,
+                # but this is currently not implemented.
+                is_buy_sell_pair = all(
+                    (
+                        len(matching_operations) == 2,
+                        len(t_op[tr.Buy.type_name_c()]) == 1,
+                        len(t_op[tr.Sell.type_name_c()]) == 1,
+                    )
+                )
+                if is_buy_sell_pair:
+                    # Add link that this is a trade pair.
+                    (sell_op,) = t_op[tr.Sell.type_name_c()]
+                    assert isinstance(sell_op, tr.Sell)
+                    (buy_op,) = t_op[tr.Buy.type_name_c()]
+                    assert isinstance(buy_op, tr.Buy)
+                    assert buy_op.link is None
+                    buy_op.link = sell_op
 
     def read_file(self, file_path: Path) -> None:
         """Import transactions form an account statement.
