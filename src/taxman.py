@@ -742,25 +742,70 @@ class Taxman:
         #
         ws_summary = wb.add_worksheet("Zusammenfassung")
         ws_summary.write_row(
-            0, 0, ["Einkunftsart", "steuerbarer Betrag in EUR"], header_format
+            0,
+            0,
+            [
+                "Einkunftsart",
+                "Veräußerungserlös",
+                "Anschaffungskosten",
+                "Werbungskosten",
+                "steuerbarer Betrag in EUR",
+            ],
+            header_format,
         )
-        ws_summary.set_row(0, 30)
         row = 1
         for taxation_type, tax_report_entries in misc.group_by(
             self.tax_report_entries, "taxation_type"
         ).items():
             if taxation_type is None:
                 continue
+            first_value_in_fiat = None
+            second_value_in_fiat = None
+            total_fee_in_fiat = None
+            if taxation_type == "Einkünfte aus privaten Veräußerungsgeschäften":
+                first_value_in_fiat = misc.dsum(
+                    misc.cdecimal(tre.first_value_in_fiat)
+                    for tre in tax_report_entries
+                    if tre.taxable_gain_in_fiat
+                    and not isinstance(tre, tr.UnrealizedSellReportEntry)
+                )
+                second_value_in_fiat = misc.dsum(
+                    misc.cdecimal(tre.second_value_in_fiat)
+                    for tre in tax_report_entries
+                    if (
+                        not isinstance(tre, tr.UnrealizedSellReportEntry)
+                        and tre.taxable_gain_in_fiat
+                    )
+                )
+                total_fee_in_fiat = misc.dsum(
+                    misc.cdecimal(tre.total_fee_in_fiat)
+                    for tre in tax_report_entries
+                    if (
+                        not isinstance(tre, tr.UnrealizedSellReportEntry)
+                        and tre.taxable_gain_in_fiat
+                    )
+                )
             taxable_gain = misc.dsum(
                 tre.taxable_gain_in_fiat
                 for tre in tax_report_entries
                 if not isinstance(tre, tr.UnrealizedSellReportEntry)
             )
-            ws_summary.write_row(row, 0, [taxation_type, taxable_gain])
+            ws_summary.write_row(
+                row,
+                0,
+                [
+                    taxation_type,
+                    first_value_in_fiat,
+                    second_value_in_fiat,
+                    total_fee_in_fiat,
+                    taxable_gain,
+                ],
+            )
             row += 1
         # Set column format and freeze first row.
-        ws_summary.set_column(0, 0, 35)
-        ws_summary.set_column(1, 1, 13, fiat_format)
+        ws_summary.set_row(0, 30)
+        ws_summary.set_column(0, 0, 43)
+        ws_summary.set_column(1, 4, 13, fiat_format)
         ws_summary.freeze_panes(1, 0)
 
         #
