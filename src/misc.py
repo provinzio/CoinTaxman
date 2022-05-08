@@ -342,9 +342,6 @@ def get_current_commit_hash(default: Optional[str] = None) -> str:
         return default
 
 
-T = TypeVar("T")
-
-
 def not_none(v: Optional[T]) -> T:
     if v is None:
         raise ValueError()
