@@ -539,7 +539,7 @@ class SellReportEntry(TaxReportEntry):
             #
             "Veräußerungserlös in EUR",
             "Anschaffungskosten in EUR",
-            "Gesamt Transaktionsgebühr in EUR",
+            "Werbungskosten in EUR",
             #
             "Gewinn/Verlust in EUR",
             "davon steuerbar in EUR",
@@ -572,7 +572,7 @@ class UnrealizedSellReportEntry(SellReportEntry):
             #
             "Virtueller Veräußerungserlös in EUR",
             "Virtuelle Anschaffungskosten in EUR",
-            "Virtuelle Gesamt Transaktionsgebühr in EUR",
+            "Virtuelle Werbungskosten in EUR",
             #
             "Virtueller Gewinn/Verlust in EUR",
             "davon wären steuerbar",
@@ -614,6 +614,12 @@ class BuyReportEntry(TaxReportEntry):
             remark=remark,
         )
 
+    @property
+    def _gain_in_fiat(self) -> Optional[decimal.Decimal]:
+        gain_in_fiat = super()._gain_in_fiat
+        assert isinstance(gain_in_fiat, decimal.Decimal)
+        return decimal.Decimal(-1) * gain_in_fiat
+
     @classmethod
     def _labels(cls) -> list[str]:
         return [
@@ -635,7 +641,7 @@ class BuyReportEntry(TaxReportEntry):
             #
             "-",
             "Kaufpreis in EUR",
-            "Gesamt Transaktionsgebühr in EUR",
+            "Werbungskosten in EUR",
             #
             "Anschaffungskosten in EUR",
             "-",
@@ -814,7 +820,7 @@ class TransferReportEntry(TaxReportEntry):
             #
             "-",
             "-",
-            "Gesamt Transaktionsgebühr in EUR",
+            "Werbungskosten in EUR",
             #
             "Gewinn/Verlust in EUR",
             "-",
