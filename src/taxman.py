@@ -130,7 +130,7 @@ class Taxman:
         self,
         op: tr.Sell,
         sc: tr.SoldCoin,
-        additional_fee: Optional[decimal.Decimal] = None,
+        add_fee_in_fiat: Optional[decimal.Decimal] = None,
         ReportType: Type[tr.SellReportEntry] = tr.SellReportEntry,
     ) -> None:
         """Evaluate a (partial) sell operation.
@@ -138,7 +138,7 @@ class Taxman:
         Args:
             op (tr.Sell): The sell operation.
             sc (tr.SoldCoin): The sold coin.
-            additional_fee (Optional[decimal.Decimal], optional):
+            add_fee_in_fiat (Optional[decimal.Decimal], optional):
                 The additional fee. Defaults to None.
             ReportType (Type[tr.SellReportEntry], optional):
                 The type of the report entry. Defaults to tr.SellReportEntry.
@@ -147,8 +147,8 @@ class Taxman:
             NotImplementedError: When there are more than two different fee coins.
         """
         assert op.coin == sc.op.coin
-        if additional_fee is None:
-            additional_fee = decimal.Decimal()
+        if add_fee_in_fiat is None:
+            add_fee_in_fiat = decimal.Decimal()
 
         # Share the fees and sell_value proportionally to the coins sold.
         percent = sc.sold / op.change
@@ -183,7 +183,7 @@ class Taxman:
             )
 
         # buy_value_in_fiat
-        buy_value_in_fiat = self.price_data.get_cost(sc) + buying_fees + additional_fee
+        buy_value_in_fiat = self.price_data.get_cost(sc) + buying_fees + add_fee_in_fiat
 
         # TODO Recognized increased speculation period for lended/staked coins?
         is_taxable = not config.IS_LONG_TERM(sc.op.utc_time, op.utc_time)
