@@ -743,8 +743,11 @@ class Taxman:
             ws = wb.add_worksheet(event_type)
 
             # Header
-            ws.write_row(0, 0, ReportType.excel_labels(), header_format)
+            labels = ReportType.excel_labels()
+            ws.write_row(0, 0, labels, header_format)
+            # Set height
             ws.set_row(0, 45)
+            ws.autofilter(f"A1:{misc.column_num_to_string(len(labels))}1")
 
             # Data
             for row, entry in enumerate(tax_report_entries, 1):
