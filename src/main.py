@@ -48,7 +48,10 @@ def main() -> None:
     # necessary to correctly fetch prices and to calculate p/l.
     book.resolve_deposits()
     book.get_price_from_csv()
-    book.match_fees_with_operations()
+    # Match fees with operations  AND
+    # Resolve dependencies between sells and buys, which is
+    # necessary to correctly calculate the buying cost of a sold coin
+    book.match_fees_and_resolve_trades()
 
     taxman.evaluate_taxation()
     evaluation_file_path = taxman.export_evaluation_as_excel()

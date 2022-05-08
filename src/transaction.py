@@ -169,12 +169,12 @@ class Transaction(Operation):
     pass
 
 
-class Buy(Transaction):
-    pass
-
-
 class Sell(Transaction):
     pass
+
+
+class Buy(Transaction):
+    link: Optional[Sell] = None
 
 
 class CoinLendInterest(Transaction):

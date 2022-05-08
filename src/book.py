@@ -1499,7 +1499,7 @@ class Book:
         grouped_ops = misc.group_by(self.operations, tr.Operation.identical_columns)
         self.operations = [tr.Operation.merge(*ops) for ops in grouped_ops.values()]
 
-    def match_fees_with_operations(self) -> None:
+    def match_fees_and_resolve_trades(self) -> None:
         # Split operations in fees and other operations.
         operations = []
         all_fees: list[tr.Fee] = []
@@ -1553,6 +1553,10 @@ class Book:
                     assert self.operations[buy_idx].fees is None
                     self.operations[sell_idx].fees = fees
                     self.operations[buy_idx].fees = fees
+                    # Add link that this is a trade pair.
+                    self.operations[  # type: ignore[attr-defined]
+                        buy_idx
+                    ].link = self.operations[sell_idx]
                 else:
                     log.warning(
                         "Fee matching is not implemented for this case. "
