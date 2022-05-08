@@ -639,9 +639,18 @@ class PriceData:
                         cur = conn.execute(query)
 
                         for row in cur.fetchall():
-                            utc_time = datetime.datetime.strptime(
-                                row[0], "%Y-%m-%d %H:%M:%S%z"
-                            )
+                            try:
+                                utc_time = datetime.datetime.strptime(
+                                    row[0], "%Y-%m-%d %H:%M:%S%z"
+                                )
+                            except ValueError:
+                                # Missing timezone information in database.
+                                # Set as utc time.
+                                utc_time = datetime.datetime.strptime(
+                                    row[0], "%Y-%m-%d %H:%M:%S"
+                                )
+                                utc_time = utc_time.astimezone(datetime.timezone.utc)
+
                             price = get_price(base_asset, utc_time, quote_asset)
 
                             if price == 0.0:
