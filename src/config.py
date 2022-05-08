@@ -17,6 +17,7 @@
 import configparser
 import datetime as dt
 import locale
+import zoneinfo
 from os import environ
 from pathlib import Path
 
@@ -66,7 +67,8 @@ if _env_tax_year := environ.get("TAX_YEAR"):
 if COUNTRY == core.Country.GERMANY:
     FIAT_CLASS = core.Fiat.EUR
     PRINCIPLE = core.Principle.FIFO
-    LOCAL_TIMEZONE = dt.datetime.now(dt.timezone.utc).astimezone().tzinfo
+    LOCAL_TIMEZONE = zoneinfo.ZoneInfo("CET")
+    LOCAL_TIMEZONE_KEY = "MEZ"
     locale_str = "de_DE"
 
     def IS_LONG_TERM(buy: dt.datetime, sell: dt.datetime) -> bool:

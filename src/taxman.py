@@ -637,13 +637,17 @@ class Taxman:
         ws_general.write_row(0, 0, ["Allgemeine Daten"], header_format)
         ws_general.write_row(1, 0, ["Stichtag", TAX_DEADLINE.date()], date_format)
         ws_general.write_row(
-            2, 0, ["Erstellt am", datetime.datetime.now()], datetime_format
+            2,
+            0,
+            ["Erstellt am", datetime.datetime.now(config.LOCAL_TIMEZONE)],
+            datetime_format,
         )
         ws_general.write_row(
             3, 0, ["Software", "CoinTaxman <https://github.com/provinzio/CoinTaxman>"]
         )
         commit_hash = misc.get_current_commit_hash(default="undetermined")
         ws_general.write_row(4, 0, ["Commit", commit_hash])
+        ws_general.write_row(5, 0, ["Alle Zeiten in", config.LOCAL_TIMEZONE_KEY])
         # Set column format and freeze first row.
         ws_general.freeze_panes(1, 0)
 

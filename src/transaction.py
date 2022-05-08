@@ -25,6 +25,7 @@ from copy import copy
 from pathlib import Path
 from typing import ClassVar, Iterator, Optional
 
+import config
 import log_config
 import misc
 
@@ -393,7 +394,12 @@ class TaxReportEntry:
         return [label for label in self.labels() if self.is_excel_label(label)]
 
     def excel_values(self) -> Iterator:
-        return (getattr(self, f) for f in self.field_names() if self.is_excel_label(f))
+        for f in self.field_names():
+            if self.is_excel_label(f):
+                value = getattr(self, f)
+                if isinstance(value, datetime.datetime):
+                    value = value.astimezone(config.LOCAL_TIMEZONE)
+                yield value
 
 
 # Bypass dataclass machinery, add a custom property function to a dataclass field.
@@ -416,8 +422,8 @@ class LendingReportEntry(TaxReportEntry):
             "Anzahl",
             "Währung",
             #
-            "Wiedererhalten am (UTC)",
-            "Verliehen am (UTC)",
+            "Wiedererhalten am",
+            "Verliehen am",
             #
             "-",
             "-",
@@ -493,8 +499,8 @@ class SellReportEntry(TaxReportEntry):
             "Anzahl",
             "Währung",
             #
-            "Verkaufsdatum (UTC)",
-            "Erwerbsdatum (UTC)",
+            "Verkaufsdatum",
+            "Erwerbsdatum",
             #
             "(1) Anzahl Transaktionsgebühr",
             "(1) Währung Transaktionsgebühr",
@@ -526,8 +532,8 @@ class UnrealizedSellReportEntry(SellReportEntry):
             "Anzahl",
             "Währung",
             #
-            "Virtuelles Verkaufsdatum (UTC)",
-            "Erwerbsdatum (UTC)",
+            "Virtuelles Verkaufsdatum",
+            "Erwerbsdatum",
             #
             "(1) Anzahl Transaktionsgebühr",
             "(1) Währung Transaktionsgebühr",
@@ -580,7 +586,7 @@ class InterestReportEntry(TaxReportEntry):
             "Anzahl",
             "Währung",
             #
-            "Erhalten am (UTC)",
+            "Erhalten am",
             "-",
             #
             "-",
@@ -642,7 +648,7 @@ class AirdropReportEntry(TaxReportEntry):
             "Anzahl",
             "Währung",
             #
-            "Erhalten am (UTC)",
+            "Erhalten am",
             "-",
             #
             "-",
@@ -705,8 +711,8 @@ class TransferReportEntry(TaxReportEntry):
             "Anzahl",
             "Währung",
             #
-            "Eingangsdatum (UTC)",
-            "Ausgangsdatum (UTC)",
+            "Eingangsdatum",
+            "Ausgangsdatum",
             #
             "(1) Anzahl Transaktionsgebühr",
             "(1) Währung Transaktionsgebühr",

@@ -6,3 +6,4 @@ requests==2.25.1
 six==1.15.0
 urllib3==1.26.5
 xlsxwriter==3.0.3
+tzdata==2022.1
