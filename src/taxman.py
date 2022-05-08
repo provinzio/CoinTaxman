@@ -126,20 +126,60 @@ class Taxman:
             self.price_data.get_partial_cost(fee, percent),
         )
 
+    def get_buy_cost(self, sc: tr.SoldCoin) -> decimal.Decimal:
+        """Calculate the buy cost of a sold coin.
+
+        Args:
+            sc (tr.SoldCoin): The sold coin.
+
+        Raises:
+            NotImplementedError: Calculation is currently not implemented
+                for buy operations.
+
+        Returns:
+            decimal.Decimal: The buy value of the sold coin in fiat
+        """
+        # Fees paid when buying the now sold coins.
+        buying_fees = decimal.Decimal()
+        if sc.op.fees:
+            assert sc.sold <= sc.op.change
+            sc_percent = sc.sold / sc.op.change
+            buying_fees = misc.dsum(
+                self.price_data.get_partial_cost(f, sc_percent) for f in sc.op.fees
+            )
+
+        if isinstance(sc.op, tr.Buy):
+            # BUG Buy cost of a bought coin should be the sell value of the
+            # previously sold coin and not the sell value of the bought coin.
+            # Gains of combinations like below are not correctly calculated:
+            #   1 BTC=1€, 1ETH=2€, 1BTC=1ETH
+            # e.g. buy 1 BTC for 1 €, buy 1 ETH for 1 BTC, buy 2 € for 1 ETH.
+            # Program sees - 1 €, +1 BTC, -1 BTC, +1 ETH, -1 ETH, +2 €
+            # gains from holding x, 1-1€, 2-2€
+            # gains from "fortunate" trade 1BTC=1ETH are not recognized
+            # TODO Matching of buy and sell pairs ( trades ) necessary.
+            # Currently not implemented? But kind of!
+            buy_value = self.price_data.get_cost(sc)
+        else:
+            # All other operations "begin their existence" as that coin and
+            # weren't traded/exchanged before.
+            # The buy cost of these coins is the value from when yout got them.
+            buy_value = self.price_data.get_cost(sc)
+
+        return buy_value + buying_fees
+
     def _evaluate_sell(
         self,
         op: tr.Sell,
         sc: tr.SoldCoin,
-        add_fee_in_fiat: Optional[decimal.Decimal] = None,
         ReportType: Type[tr.SellReportEntry] = tr.SellReportEntry,
     ) -> None:
         """Evaluate a (partial) sell operation.
 
         Args:
-            op (tr.Sell): The sell operation.
-            sc (tr.SoldCoin): The sold coin.
-            add_fee_in_fiat (Optional[decimal.Decimal], optional):
-                The additional fee. Defaults to None.
+            op (tr.Sell): The general sell operation.
+            sc (tr.SoldCoin): The specific sold coins with their origin (sc.op).
+                `sc.sold` can be a partial sell of `op.change`.
             ReportType (Type[tr.SellReportEntry], optional):
                 The type of the report entry. Defaults to tr.SellReportEntry.
 
@@ -147,8 +187,7 @@ class Taxman:
             NotImplementedError: When there are more than two different fee coins.
         """
         assert op.coin == sc.op.coin
-        if add_fee_in_fiat is None:
-            add_fee_in_fiat = decimal.Decimal()
+        assert op.change >= sc.sold
 
         # Share the fees and sell_value proportionally to the coins sold.
         percent = sc.sold / op.change
@@ -173,17 +212,7 @@ class Taxman:
         else:
             raise NotImplementedError("More than two fee coins are not supported")
 
-        # buying_fees
-        buying_fees = decimal.Decimal()
-        if sc.op.fees:
-            assert sc.sold <= sc.op.change
-            sc_percent = sc.sold / sc.op.change
-            buying_fees = misc.dsum(
-                self.price_data.get_partial_cost(f, sc_percent) for f in sc.op.fees
-            )
-
-        # buy_value_in_fiat
-        buy_value_in_fiat = self.price_data.get_cost(sc) + buying_fees + add_fee_in_fiat
+        buy_cost_in_fiat = self.get_buy_cost(sc)
 
         # TODO Recognized increased speculation period for lended/staked coins?
         is_taxable = not config.IS_LONG_TERM(sc.op.utc_time, op.utc_time)
@@ -222,7 +251,7 @@ class Taxman:
             second_fee_coin=second_fee_coin,
             second_fee_in_fiat=second_fee_in_fiat,
             sell_value_in_fiat=sell_value_in_fiat,
-            buy_value_in_fiat=buy_value_in_fiat,
+            buy_cost_in_fiat=buy_cost_in_fiat,
             is_taxable=is_taxable,
             taxation_type="Sonstige Einkünfte",
             remark=op.remark,
@@ -253,7 +282,6 @@ class Taxman:
                     wsc_percent = wsc.sold / sc.op.link.change
                     wsc_deposit_fee = sold_deposit_fee * wsc_percent
 
-                    wsc_fee_in_fiat = decimal.Decimal()
                     if wsc_deposit_fee:
                         # TODO Are withdrawal/deposit fees tax relevant?
                         log.warning(
@@ -274,7 +302,7 @@ class Taxman:
                         #     * wsc_deposit_fee
                         # )
 
-                    self._evaluate_sell(op, wsc, wsc_fee_in_fiat)
+                    self._evaluate_sell(op, wsc)
 
             else:
 
