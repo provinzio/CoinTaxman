@@ -771,7 +771,7 @@ class AirdropReportEntry(TaxReportEntry):
 
 
 class CommissionReportEntry(AirdropReportEntry):
-    event_type = "Werbeprämien"
+    event_type = "Belohnungen-Bonus"
 
 
 class TransferReportEntry(TaxReportEntry):
