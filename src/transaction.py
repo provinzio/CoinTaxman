@@ -427,12 +427,16 @@ class TaxReportEntry:
                 yield field, width, hidden
 
     def excel_values(self) -> Iterator:
-        for f in self.field_names():
-            if self.is_excel_label(f):
-                value = getattr(self, f)
-                if isinstance(value, datetime.datetime):
-                    value = value.astimezone(config.LOCAL_TIMEZONE)
-                yield value
+        for field_name in self.field_names():
+            if self.is_excel_label(field_name):
+                value = getattr(self, field_name)
+                label = self.get_excel_label(field_name)
+                if label == "-":
+                    yield None
+                else:
+                    if isinstance(value, datetime.datetime):
+                        value = value.astimezone(config.LOCAL_TIMEZONE)
+                    yield value
 
 
 # Bypass dataclass machinery, add a custom property function to a dataclass field.
