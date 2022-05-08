@@ -1547,8 +1547,8 @@ class Book:
                     #    and which gets removed from the account balance
                     # 2. Fees on buys increase the buy-in price of the coins
                     #    which is relevant when selling these (not buying)
-                    (sell_idx,) = t_op[tr.Buy.type_name_c()]
-                    (buy_idx,) = t_op[tr.Sell.type_name_c()]
+                    (sell_idx,) = t_op[tr.Sell.type_name_c()]
+                    (buy_idx,) = t_op[tr.Buy.type_name_c()]
                     assert self.operations[sell_idx].fees is None
                     assert self.operations[buy_idx].fees is None
                     self.operations[sell_idx].fees = fees
