@@ -521,7 +521,7 @@ class SellReportEntry(TaxReportEntry):
 
 
 class UnrealizedSellReportEntry(SellReportEntry):
-    event_type = "Offene Positionen"
+    event_type = "Unrealizierter Gewinn-Verlust"
 
     @classmethod
     def _labels(cls) -> list[str]:
