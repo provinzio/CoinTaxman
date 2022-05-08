@@ -258,7 +258,9 @@ def is_fiat(symbol: Union[str, core.Fiat]) -> bool:
     return isinstance(symbol, core.Fiat) or symbol in core.Fiat.__members__
 
 
-def get_next_file_path(path: Path, base_filename: str, extension: str) -> Path:
+def get_next_file_path(
+    path: Path, base_filename: str, extensions: Union[str, list[str]]
+) -> Path:
     """Looking for the next free filename in format {base_filename}_revXXX.
 
     The revision number starts with 001 and will always be +1 from the highest
@@ -267,7 +269,7 @@ def get_next_file_path(path: Path, base_filename: str, extension: str) -> Path:
     Args:
         path (Path)
         base_filename (str)
-        extension (str)
+        extension (Union[str, list[str]])
 
     Raises:
         AssertitionError: When {base_filename}_rev999.{extension}
@@ -277,7 +279,10 @@ def get_next_file_path(path: Path, base_filename: str, extension: str) -> Path:
         Path: Path to next free file.
     """
     i = 1
-    regex = re.compile(base_filename + r"_rev(\d{3})." + extension)
+    extensions = [extensions] if isinstance(extensions, str) else extensions
+    extension = extensions[0]
+    regex = re.compile(base_filename + r"_rev(\d{3}).(" + "|".join(extensions) + ")")
+
     for p in path.iterdir():
         if p.is_file():
             if m := regex.match(p.name):

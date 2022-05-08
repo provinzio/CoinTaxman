@@ -581,7 +581,7 @@ class Taxman:
             Path: Path to the exported file.
         """
         file_path = misc.get_next_file_path(
-            config.EXPORT_PATH, str(config.TAX_YEAR), "xlsx"
+            config.EXPORT_PATH, str(config.TAX_YEAR), ["xlsx", "log"]
         )
         wb = xlsxwriter.Workbook(file_path, {"remove_timezone": True})
         datetime_format = wb.add_format({"num_format": "dd.mm.yyyy hh:mm;@"})

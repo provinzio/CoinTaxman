@@ -59,6 +59,7 @@ def main() -> None:
     log_config.shutdown()
     os.rename(TMP_LOG_FILEPATH, log_file_path)
 
+    print(f"Detailed export saved at {evaluation_file_path} and {log_file_path}")
     print("If you want to archive the evaluation, run `make archive`.")
 
 
