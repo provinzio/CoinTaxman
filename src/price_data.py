@@ -41,6 +41,10 @@ log = log_config.getLogger(__name__)
 #      - Tables in database stay the same
 
 
+class FallbackPriceNotFound(Exception):
+    pass
+
+
 class PriceData:
     # list of Kraken pairs that returned invalid arguments error
     kraken_invalid_pairs: list[str] = []
@@ -52,6 +56,7 @@ class PriceData:
         utc_time: datetime.datetime,
         quote_asset: str,
         swapped_symbols: bool = False,
+        fallback_mode: bool = False,
     ) -> decimal.Decimal:
         """Retrieve price from binance official REST API.
 
@@ -77,6 +82,7 @@ class PriceData:
         Returns:
             decimal.Decimal: Price of asset pair.
         """
+        assert base_asset != quote_asset
         root_url = "https://api.binance.com/api/v3/aggTrades"
         symbol = f"{base_asset}{quote_asset}"
         startTime, endTime = misc.get_offset_timestamps(
@@ -88,49 +94,83 @@ class PriceData:
         response = requests.get(url)
         data = json.loads(response.text)
 
-        # Some combinations do not exist (e.g. `TWTEUR`), but almost anything
-        # is paired with BTC. Calculate `TWTEUR` as `TWTBTC * BTCEUR`.
         if (
             isinstance(data, dict)
             and data.get("code") == -1121
             and data.get("msg") == "Invalid symbol."
-        ):
-            if quote_asset == "BTC":
-                # If we are already comparing with BTC, we might have to swap
-                # the assets to generate the correct symbol.
+        ) or len(data) == 0:
+            # Some combinations do not exist (e.g. `TWTEUR`), but almost anything
+            # is paired with our fallback coins.
+            # Check if binance offers prices against our fallback coins as
+            # intermediate coin (e.g. SHIB/EUR = SHIB/BTC * BTC/EUR)
+            fallback_assets = ["BTC", "BNB", "BUSD", "USDT"]
+
+            # Are we already comparing against an fallback coin?
+            if fallback_mode:
+                # We could also try to swap the coins...
                 # Check a last time, if we find the pair by changing the symbol
                 # order.
-                # If this does not help, we need to think of something else.
                 if swapped_symbols:
-                    raise RuntimeError(f"Can not retrieve {symbol=} from binance")
-                # Changing the order of the assets require to
-                # invert the price.
+                    # We have already swapped the symbols.
+                    # Raise an exception.
+                    raise FallbackPriceNotFound
+                # Changing the order of the assets require to invert the price.
                 price = self.get_price(
-                    "binance", quote_asset, utc_time, base_asset, swapped_symbols=True
+                    "binance",
+                    quote_asset,
+                    utc_time,
+                    base_asset,
+                    swapped_symbols=True,
+                    fallback_mode=fallback_mode,
                 )
                 return misc.reciprocal(price)
 
-            btc = self.get_price("binance", base_asset, utc_time, "BTC")
-            quote = self.get_price("binance", "BTC", utc_time, quote_asset)
-            return btc * quote
+            assert swapped_symbols is False
+
+            # Check against all fallback coins.
+            for fallback_asset in fallback_assets:
+                if base_asset != fallback_asset and quote_asset != fallback_asset:
+                    try:
+                        base = self.get_price(
+                            "binance",
+                            base_asset,
+                            utc_time,
+                            fallback_asset,
+                            fallback_mode=True,
+                        )
+                        quote = self.get_price(
+                            "binance",
+                            fallback_asset,
+                            utc_time,
+                            quote_asset,
+                            fallback_mode=True,
+                        )
+                    except FallbackPriceNotFound:
+                        # Unable to fetch prices with our intermediate fallback
+                        # coin. Lets checkout the next fallback coin.
+                        continue
+                    else:
+                        return base * quote
+
+            log.warning(
+                f"Unable to retrieve price for {symbol=} from binance at "
+                f"{utc_time=} even though multiple fallback coins were checked "
+                f"against ({fallback_assets}). "
+                "Assumption: The coin couldn't been traded at that time. "
+                "Set the price to 0. "
+                "This will be saved to the database and used again without "
+                "further warnings. "
+                "Keep in mind, that a price could exist for another time "
+                "or for the date, but not the exact utc_time. "
+                "Please edit the price entry in the database by hand, "
+                "if you want to avoid that. "
+                "Feel free to open a PR to improve the binance fallback strategy."
+            )
+
+            return decimal.Decimal()
 
         response.raise_for_status()
-
-        if len(data) == 0:
-            log.warning(
-                "Binance offers no price for %s at %s. Trying %s/USDT and %s/USDT",
-                symbol,
-                utc_time,
-                base_asset,
-                quote_asset,
-            )
-            if quote_asset == "USDT":
-                return decimal.Decimal()
-            quote = self.get_price("binance", quote_asset, utc_time, "USDT")
-            if quote == 0.0:
-                return quote
-            usdt = self.get_price("binance", base_asset, utc_time, "USDT")
-            return usdt / quote
+        assert data
 
         # Calculate average price.
         total_cost = decimal.Decimal()
