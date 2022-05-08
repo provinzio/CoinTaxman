@@ -236,6 +236,7 @@ class SoldCoin:
 class TaxReportEntry:
     event_type: ClassVar[str] = "virtual"
     allowed_missing_fields: ClassVar[list[str]] = []
+    abs_gain_loss: ClassVar[bool] = False
 
     first_platform: Optional[str] = None
     second_platform: Optional[str] = None
@@ -280,11 +281,14 @@ class TaxReportEntry:
             and self._total_fee_in_fiat is None
         ):
             return None
-        return (
+        gain_in_fiat = (
             misc.cdecimal(self.first_value_in_fiat)
             - misc.cdecimal(self.second_value_in_fiat)
             - misc.cdecimal(self._total_fee_in_fiat)
         )
+        if self.abs_gain_loss:
+            gain_in_fiat = abs(gain_in_fiat)
+        return gain_in_fiat
 
     taxable_gain_in_fiat: decimal.Decimal = dataclasses.field(init=False)
 
@@ -584,6 +588,7 @@ class UnrealizedSellReportEntry(SellReportEntry):
 
 class BuyReportEntry(TaxReportEntry):
     event_type = "Kauf"
+    abs_gain_loss = True
 
     def __init__(
         self,
@@ -614,12 +619,6 @@ class BuyReportEntry(TaxReportEntry):
             second_value_in_fiat=buy_value_in_fiat,
             remark=remark,
         )
-
-    @property
-    def _gain_in_fiat(self) -> Optional[decimal.Decimal]:
-        gain_in_fiat = super()._gain_in_fiat
-        assert isinstance(gain_in_fiat, decimal.Decimal)
-        return decimal.Decimal(-1) * gain_in_fiat
 
     @classmethod
     def _labels(cls) -> list[str]:
@@ -773,6 +772,7 @@ class CommissionReportEntry(AirdropReportEntry):
 
 class TransferReportEntry(TaxReportEntry):
     event_type = "Ein-& Auszahlungen"
+    abs_gain_loss = True
 
     def __init__(
         self,
@@ -821,9 +821,9 @@ class TransferReportEntry(TaxReportEntry):
             #
             "-",
             "-",
-            "Werbungskosten in EUR",
+            "-",
             #
-            "Gewinn/Verlust in EUR",
+            "Kosten in EUR",
             "-",
             "-",
             "Bemerkung",
