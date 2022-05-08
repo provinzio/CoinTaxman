@@ -717,9 +717,10 @@ class Taxman:
             0, 0, ["Einkunftsart", "steuerbarer Betrag in EUR"], header_format
         )
         ws_summary.set_row(0, 30)
-        for row, (taxation_type, tax_report_entries) in enumerate(
-            misc.group_by(self.tax_report_entries, "taxation_type").items(), 1
-        ):
+        row = 1
+        for taxation_type, tax_report_entries in misc.group_by(
+            self.tax_report_entries, "taxation_type"
+        ).items():
             if taxation_type is None:
                 continue
             taxable_gain = misc.dsum(
@@ -728,6 +729,7 @@ class Taxman:
                 if not isinstance(tre, tr.UnrealizedSellReportEntry)
             )
             ws_summary.write_row(row, 0, [taxation_type, taxable_gain])
+            row += 1
         # Set column format and freeze first row.
         ws_summary.set_column("B:B", None, fiat_format)
         ws_summary.freeze_panes(1, 0)
