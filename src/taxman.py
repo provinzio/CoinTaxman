@@ -139,27 +139,37 @@ class Taxman:
         Returns:
             decimal.Decimal: The buy value of the sold coin in fiat
         """
+        assert sc.sold <= sc.op.change
+        percent = sc.sold / sc.op.change
+
         # Fees paid when buying the now sold coins.
         buying_fees = decimal.Decimal()
         if sc.op.fees:
-            assert sc.sold <= sc.op.change
-            sc_percent = sc.sold / sc.op.change
             buying_fees = misc.dsum(
-                self.price_data.get_partial_cost(f, sc_percent) for f in sc.op.fees
+                self.price_data.get_partial_cost(f, percent) for f in sc.op.fees
             )
 
         if isinstance(sc.op, tr.Buy):
-            # BUG Buy cost of a bought coin should be the sell value of the
+            # Buy cost of a bought coin should be the sell value of the
             # previously sold coin and not the sell value of the bought coin.
             # Gains of combinations like below are not correctly calculated:
             #   1 BTC=1€, 1ETH=2€, 1BTC=1ETH
             # e.g. buy 1 BTC for 1 €, buy 1 ETH for 1 BTC, buy 2 € for 1 ETH.
-            # Program sees - 1 €, +1 BTC, -1 BTC, +1 ETH, -1 ETH, +2 €
-            # gains from holding x, 1-1€, 2-2€
-            # gains from "fortunate" trade 1BTC=1ETH are not recognized
-            # TODO Matching of buy and sell pairs ( trades ) necessary.
-            # Currently not implemented? But kind of!
-            buy_value = self.price_data.get_cost(sc)
+            if sc.op.link is None:
+                log.warning(
+                    "Unable to correctly determine buy cost of bought coins "
+                    "because the link to the corresponding previous sell could "
+                    "not be estalished. Buying cost will be set to the buy "
+                    "value of the bought coins instead of the sell value of the "
+                    "previously sold coins of the trade. "
+                    "The calculated buy cost might be wrong. "
+                    "This may lead to a false tax evaluation.\n"
+                    f"{sc.op}"
+                )
+                buy_value = self.price_data.get_cost(sc)
+            else:
+                prev_sell_value = self.price_data.get_partial_cost(sc.op.link, percent)
+                buy_value = prev_sell_value
         else:
             # All other operations "begin their existence" as that coin and
             # weren't traded/exchanged before.
