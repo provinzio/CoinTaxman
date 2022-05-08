@@ -291,7 +291,7 @@ class TaxReportEntry:
     def _taxable_gain_in_fiat(self) -> Optional[decimal.Decimal]:
         if self.is_taxable and self._gain_in_fiat:
             return self._gain_in_fiat
-        if self.get_label("taxable_gain_in_fiat") == "-":
+        if self.get_excel_label("taxable_gain_in_fiat") == "-":
             return None
         return decimal.Decimal()
 
@@ -352,6 +352,7 @@ class TaxReportEntry:
         assert not missing_field_values, (
             f"{self=} : missing values for fields " f"{', '.join(missing_field_values)}"
         )
+        assert len(self.excel_labels()) == len(self.excel_fields())
 
     @classmethod
     def fields(cls) -> tuple[dataclasses.Field, ...]:
@@ -372,8 +373,9 @@ class TaxReportEntry:
         return labels
 
     @classmethod
-    def get_label(cls, field_name: str) -> str:
-        for label, field in zip(cls.labels(), cls.fields()):
+    def get_excel_label(cls, field_name: str) -> str:
+        assert len(cls.excel_labels()) == len(cls.excel_fields())
+        for label, field in zip(cls.excel_labels(), cls.excel_fields()):
             if field.name == field_name:
                 return label
         raise ValueError(f"{field_name} is not a field of {cls=}")
@@ -392,6 +394,28 @@ class TaxReportEntry:
     @classmethod
     def excel_labels(self) -> list[str]:
         return [label for label in self.labels() if self.is_excel_label(label)]
+
+    @classmethod
+    def excel_field_and_width(cls) -> Iterator[tuple[dataclasses.Field, float, bool]]:
+        for field in cls.fields():
+            if cls.is_excel_label(field.name):
+                label = cls.get_excel_label(field.name)
+                if label == "-":
+                    width = 15.0
+                elif field.name == "taxation_type":
+                    width = 35.0
+                elif field.name == "taxable_gain_in_fiat":
+                    width = 13.0
+                elif field.name.endswith("_in_fiat") or "coin" in field.name:
+                    width = 15.0
+                elif field.type in ("datetime.datetime", "Optional[datetime.datetime]"):
+                    width = 18.43
+                elif field.type in ("decimal.Decimal", "Optional[decimal.Decimal]"):
+                    width = 20.0
+                else:
+                    width = 18.0
+                hidden = label == "-"
+                yield field, width, hidden
 
     def excel_values(self) -> Iterator:
         for f in self.field_names():

@@ -686,13 +686,11 @@ class Taxman:
                 return change_format
             return None
 
-        # TODO Increase width of columns. Autoresize?
-
         #
         # General
         #
         ws_general = wb.add_worksheet("Allgemein")
-        ws_general.write_row(0, 0, ["Allgemeine Daten"], header_format)
+        ws_general.merge_range(0, 0, 0, 1, "Allgemeine Daten", header_format)
         ws_general.write_row(1, 0, ["Stichtag", TAX_DEADLINE.date()], date_format)
         ws_general.write_row(
             2,
@@ -707,6 +705,8 @@ class Taxman:
         ws_general.write_row(4, 0, ["Commit", commit_hash])
         ws_general.write_row(5, 0, ["Alle Zeiten in", config.LOCAL_TIMEZONE_KEY])
         # Set column format and freeze first row.
+        ws_general.set_column(0, 0, 13)
+        ws_general.set_column(1, 1, 20)
         ws_general.freeze_panes(1, 0)
 
         #
@@ -731,7 +731,8 @@ class Taxman:
             ws_summary.write_row(row, 0, [taxation_type, taxable_gain])
             row += 1
         # Set column format and freeze first row.
-        ws_summary.set_column("B:B", None, fiat_format)
+        ws_summary.set_column(0, 0, 35)
+        ws_summary.set_column(1, 1, 13, fiat_format)
         ws_summary.freeze_panes(1, 0)
 
         #
@@ -756,14 +757,17 @@ class Taxman:
                 ws.write_row(row, 0, entry.excel_values())
 
             # Set column format and freeze first row.
-            for col, field in enumerate(ReportType.excel_fields(), 1):
-                if cell_format := get_format(field):
-                    column = misc.column_num_to_string(col)
-                    ws.set_column(
-                        f"{column}:{column}",
-                        None,
-                        cell_format,
-                    )
+            for col, (field, width, hidden) in enumerate(
+                ReportType.excel_field_and_width()
+            ):
+                cell_format = get_format(field)
+                ws.set_column(
+                    col,
+                    col,
+                    width,
+                    cell_format,
+                    dict(hidden=hidden),
+                )
             ws.freeze_panes(1, 0)
 
         wb.close()
