@@ -637,8 +637,10 @@ class PriceData:
                         base_asset, quote_asset = tablename.split("/")
                         query = f"SELECT utc_time FROM `{tablename}` WHERE price<=0.0;"
                         cur = conn.execute(query)
+                        data = cur.fetchall()
+                        cur.close()
 
-                        for row in cur.fetchall():
+                        for row in data:
                             try:
                                 utc_time = datetime.datetime.strptime(
                                     row[0], "%Y-%m-%d %H:%M:%S%z"
@@ -669,6 +671,7 @@ class PriceData:
                                     "WHERE utc_time=?;"
                                 )
                                 conn.execute(query, (str(price), utc_time))
+                                conn.commit()
                                 stats[platform]["fix"] += 1
 
                     conn.commit()

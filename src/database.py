@@ -280,6 +280,7 @@ def __set_price_db(
             else:
                 raise e
         conn.commit()
+        cur.close()
 
 
 def set_price_db(
