@@ -646,20 +646,19 @@ class PriceData:
 
                             if price == 0.0:
                                 log.warning(
-                                    f"""
-                                    Could not fetch price for
-                                    pair {tablename} on {platform} at {utc_time}
-                                    """
+                                    "Could not fetch price for pair "
+                                    f"{tablename} on {platform} at {utc_time}"
                                 )
                                 stats[platform]["rem"] += 1
                             else:
                                 log.info(
                                     f"Updating {tablename} at {utc_time} to {price}"
                                 )
-                                query = f"""
-                                UPDATE `{tablename}`
-                                SET price=?
-                                WHERE utc_time=?;"""
+                                query = (
+                                    f"UPDATE `{tablename}` "
+                                    "SET price=? "
+                                    "WHERE utc_time=?;"
+                                )
                                 conn.execute(query, (str(price), utc_time))
                                 stats[platform]["fix"] += 1
 
