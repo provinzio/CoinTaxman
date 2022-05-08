@@ -35,12 +35,6 @@ from database import get_price_db, get_tablenames_from_db, mean_price_db, set_pr
 log = log_config.getLogger(__name__)
 
 
-# TODO Keep database connection open?
-# TODO Combine multiple exchanges in one file?
-#      - Add a database for each exchange (added with ATTACH DATABASE)
-#      - Tables in database stay the same
-
-
 class FallbackPriceNotFound(Exception):
     pass
 

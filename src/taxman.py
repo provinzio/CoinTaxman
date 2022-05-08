@@ -84,8 +84,7 @@ class Taxman:
         self._balances: dict[Any, balance_queue.BalanceQueue] = {}
 
     ###########################################################################
-    # Helper functions for balances.
-    # TODO Refactor this into separated BalanceDict class?
+    # Helper functions for balances
     ###########################################################################
 
     def balance(self, platform: str, coin: str) -> balance_queue.BalanceQueue:

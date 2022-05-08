@@ -33,8 +33,8 @@ log = log_config.getLogger(__name__)
 
 
 # TODO Implementation might be cleaner, when we add a class AbstractOperation
-# which gets inherited by Fee and Operation
-# Currently it might be possible for fees to have fees, which is unwanted.
+#      which gets inherited by Fee and Operation
+#      Currently it might be possible for fees to have fees, which is unwanted.
 
 
 @dataclasses.dataclass
@@ -84,8 +84,8 @@ class Operation:
             actual_value = getattr(self, field.name)
 
             if field.name == "fees":
-                # BUG currently kind of ignored, would be nice when
-                # implemented correctly.
+                # TODO currently kind of ignored, would be nice when
+                #      implemented correctly.
                 assert actual_value is None
                 continue
 
@@ -263,7 +263,6 @@ class TaxReportEntry:
             return None
         return misc.dsum(
             map(
-                # TODO Report mypy bug
                 misc.cdecimal,
                 (self.first_fee_in_fiat, self.second_fee_in_fiat),
             )
