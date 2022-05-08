@@ -1564,8 +1564,8 @@ class Book:
 
     def resolve_trades(self) -> None:
         # Match trades which belong together (traded at same time).
-        for platform, _operations in misc.group_by(self.operations, "platform").items():
-            for utc_time, matching_operations in misc.group_by(
+        for _, _operations in misc.group_by(self.operations, "platform").items():
+            for _, matching_operations in misc.group_by(
                 _operations, "utc_time"
             ).items():
                 # Count matching operations by type with dict
