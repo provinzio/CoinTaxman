@@ -53,9 +53,12 @@ class Taxman:
         self.price_data = price_data
 
         self.tax_report_entries: list[tr.TaxReportEntry] = []
-        self.portfolio_at_deadline: dict[
+        self.multi_depot_portfolio: dict[
             str, dict[str, decimal.Decimal]
         ] = collections.defaultdict(lambda: collections.defaultdict(decimal.Decimal))
+        self.single_depot_portfolio: dict[
+            str, decimal.Decimal
+        ] = collections.defaultdict(decimal.Decimal)
 
         # Determine used functions/classes depending on the config.
         country = config.COUNTRY.name
@@ -471,6 +474,36 @@ class Taxman:
         else:
             raise NotImplementedError
 
+    def _evaluate_unrealized_sells(self) -> None:
+        """Evaluate the unrealized sells at taxation deadline."""
+        for balance in self._balances.values():
+            # Get all left over coins from the balance.
+            sold_coins = balance.remove_all()
+            for sc in sold_coins:
+                # Sum up the portfolio at deadline.
+                # If the evaluation was done with a virtual single depot,
+                # the values per platform might not match the real values at
+                # platform.
+                self.multi_depot_portfolio[sc.op.platform][sc.op.coin] += sc.sold
+                self.single_depot_portfolio[sc.op.coin] += sc.sold
+
+                # "Sell" these coins which makes it possible to calculate the
+                # unrealized gain afterwards.
+                unrealized_sell = tr.Sell(
+                    utc_time=TAX_DEADLINE,
+                    platform=sc.op.platform,
+                    change=sc.sold,
+                    coin=sc.op.coin,
+                    line=[-1],
+                    file_path=Path(),
+                    fees=None,
+                )
+                self._evaluate_sell(
+                    unrealized_sell,
+                    sc,
+                    ReportType=tr.UnrealizedSellReportEntry,
+                )
+
     ###########################################################################
     # General tax evaluation functions.
     ###########################################################################
@@ -493,31 +526,13 @@ class Taxman:
         for operation in operations:
             self.__evaluate_taxation(operation)
 
-        # Evaluate the balance at deadline to calculate unrealized sells.
+        # Make sure, that all fees were paid.
         for balance in self._balances.values():
             balance.sanity_check()
 
-            sold_coins = balance.remove_all()
-            for sc in sold_coins:
-                # Sum up the portfolio at deadline.
-                self.portfolio_at_deadline[sc.op.platform][sc.op.coin] += sc.sold
-
-                # "Sell" these coins which makes it possible to calculate the
-                # unrealized gain afterwards.
-                unrealized_sell = tr.Sell(
-                    utc_time=TAX_DEADLINE,
-                    platform=sc.op.platform,
-                    change=sc.sold,
-                    coin=sc.op.coin,
-                    line=[-1],
-                    file_path=Path(),
-                    fees=None,
-                )
-                self._evaluate_sell(
-                    unrealized_sell,
-                    sc,
-                    ReportType=tr.UnrealizedSellReportEntry,
-                )
+        # Evaluate the balance at deadline to calculate unrealized sells.
+        if config.CALCULATE_UNREALIZED_GAINS:
+            self._evaluate_unrealized_sells()
 
     ###########################################################################
     # Export / Summary
@@ -553,18 +568,24 @@ class Taxman:
         unrealized_taxable_gain = misc.dsum(
             tre.taxable_gain_in_fiat for tre in unrealized_report_entries
         )
-        eval_str += (
-            "----------------------------------------\n"
-            f"Unrealized gain: {unrealized_gain:.2f} {config.FIAT}\n"
-            "Unrealized taxable gain at deadline: "
-            f"{unrealized_taxable_gain:.2f} {config.FIAT}\n"
-            "----------------------------------------\n"
-            f"Your portfolio on {TAX_DEADLINE.strftime('%x')} was:\n"
-        )
 
-        for platform, platform_portfolio in self.portfolio_at_deadline.items():
-            for coin, amount in platform_portfolio.items():
-                eval_str += f"{platform} {coin}: {amount:.2f}\n"
+        if config.CALCULATE_UNREALIZED_GAINS:
+            eval_str += (
+                "----------------------------------------\n"
+                f"Unrealized gain: {unrealized_gain:.2f} {config.FIAT}\n"
+                "Unrealized taxable gain at deadline: "
+                f"{unrealized_taxable_gain:.2f} {config.FIAT}\n"
+                "----------------------------------------\n"
+                f"Your portfolio on {TAX_DEADLINE.strftime('%x')} was:\n"
+            )
+
+        if config.MULTI_DEPOT:
+            for platform, platform_portfolio in self.multi_depot_portfolio.items():
+                for coin, amount in platform_portfolio.items():
+                    eval_str += f"{platform} {coin}: {amount:.2f}\n"
+        else:
+            for coin, amount in self.single_depot_portfolio.items():
+                eval_str += f"{coin}: {amount:.2f}\n"
 
         log.info(eval_str)
 
