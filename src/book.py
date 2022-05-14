@@ -336,6 +336,12 @@ class Book:
                 change = misc.force_decimal(_change)
                 # `eur_subtotal` and `eur_fee` are None for withdrawals.
                 eur_subtotal = misc.xdecimal(_eur_subtotal)
+                if eur_subtotal is None:
+                    # Cost without fees from CSV is missing. This can happen for
+                    # old transactions (<2018), event though something was bought.
+                    # Calculate the `eur_subtotal` from `eur_spot`.
+                    if eur_spot := misc.xdecimal(_eur_spot):
+                        eur_subtotal = eur_spot * change
                 eur_fee = misc.xdecimal(_eur_fee)
 
                 # Validate data.
@@ -386,10 +392,13 @@ class Book:
                         platform, convert_coin, "EUR", utc_time, convert_eur_spot
                     )
                 else:
+                    # Add operation normally to the list.
                     self.append_operation(
                         operation, utc_time, platform, change, coin, row, file_path
                     )
 
+                    # If it's a sell, add the corresponding buy to complement
+                    # the trading pair.
                     if operation == "Sell":
                         assert isinstance(eur_subtotal, decimal.Decimal)
                         self.append_operation(
@@ -401,6 +410,8 @@ class Book:
                             row,
                             file_path,
                         )
+                    # If it's a buy, add the corresponding sell to complement
+                    # the trading pair.
                     elif operation == "Buy":
                         assert isinstance(eur_subtotal, decimal.Decimal)
                         self.append_operation(
@@ -412,14 +423,13 @@ class Book:
                             row,
                             file_path,
                         )
-                    else:
-                        raise NotImplementedError(f"unknown operation type {operation}")
 
-                    if eur_fee:
-                        assert isinstance(eur_fee, decimal.Decimal)
-                        self.append_operation(
-                            "Fee", utc_time, platform, eur_fee, "EUR", row, file_path
-                        )
+                # Add paid fees to the list.
+                if eur_fee:
+                    assert isinstance(eur_fee, decimal.Decimal)
+                    self.append_operation(
+                        "Fee", utc_time, platform, eur_fee, "EUR", row, file_path
+                    )
 
     def _read_coinbase_v2(self, file_path: Path) -> None:
         self._read_coinbase(file_path=file_path)
