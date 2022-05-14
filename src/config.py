@@ -20,6 +20,9 @@ import zoneinfo
 from os import environ
 from pathlib import Path
 
+# Make sure, that module `tzdata` is installed.
+import tzdata  # noqa: F401
+
 import core
 
 # Dir and file paths
