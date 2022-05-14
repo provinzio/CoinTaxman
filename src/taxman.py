@@ -59,6 +59,7 @@ class Taxman:
         self.single_depot_portfolio: dict[
             str, decimal.Decimal
         ] = collections.defaultdict(decimal.Decimal)
+        self.unrealized_sells_faulty = False
 
         # Determine used functions/classes depending on the config.
         country = config.COUNTRY.name
@@ -183,7 +184,6 @@ class Taxman:
         self,
         op: tr.Sell,
         sc: tr.SoldCoin,
-        ReportType: Union[Type[tr.SellReportEntry], Type[tr.UnrealizedSellReportEntry]],
     ) -> decimal.Decimal:
         """Calculate the sell value by determining the market price for the
         with that sell bought coins.
@@ -204,25 +204,7 @@ class Taxman:
         elif op.link:
             sell_value = self.price_data.get_partial_cost(op.link, percent)
         else:
-            try:
-                sell_value = self.price_data.get_partial_cost(op, percent)
-            except NotImplementedError:
-                # Do not raise an error when we are unable to calculate an
-                # unrealized sell value.
-                if ReportType is tr.UnrealizedSellReportEntry:
-                    log.warning(
-                        f"Gathering prices for platform {op.platform} is currently "
-                        "not implemented. Therefore I am unable to calculate the "
-                        f"unrealized sell value for your {op.coin} at evaluation "
-                        "deadline. If you want to see your unrealized sell value "
-                        "in the evaluation, please add a price by hand in the "
-                        f"table {get_sorted_tablename(op.coin, config.FIAT)[0]} "
-                        f"at {op.utc_time}; "
-                        "or open an issue/PR to gather prices for your platform."
-                    )
-                    sell_value = decimal.Decimal()
-                else:
-                    raise
+            sell_value = self.price_data.get_partial_cost(op, percent)
 
         return sell_value
 
@@ -296,18 +278,24 @@ class Taxman:
         is_taxable = not config.IS_LONG_TERM(sc.op.utc_time, op.utc_time)
 
         try:
-            sell_value_in_fiat = self.get_sell_value(op, sc, ReportType)
+            sell_value_in_fiat = self.get_sell_value(op, sc)
         except Exception as e:
             if ReportType is tr.UnrealizedSellReportEntry:
                 log.warning(
                     "Catched the following exception while trying to query an "
-                    f"unrealized sell value for {sc.sold} {sc.op.coin} at deadline. "
-                    "The sell value will be set to 0. "
+                    f"unrealized sell value for {sc.sold} {sc.op.coin} at deadline "
+                    f"on platform {sc.op.platform}. "
+                    "If you want to see your unrealized sell value "
+                    "in the evaluation, please add a price by hand in the "
+                    f"table {get_sorted_tablename(op.coin, config.FIAT)[0]} "
+                    f"at {op.utc_time}; "
+                    "The sell value for this calculation will be set to 0. "
                     "Your unrealized sell summary will be wrong and will not "
-                    "be exported\n"
+                    "be exported.\n"
                     f"Catched exception: {e}"
                 )
                 sell_value_in_fiat = decimal.Decimal()
+                self.unrealized_sells_faulty = True
             else:
                 raise e
 
@@ -855,60 +843,65 @@ class Taxman:
             )
             row += 1
         row += 2
-        ws_summary.merge_range(row, 0, row, 4, "Unrealisierte Einkünfte", header_format)
-        ws_summary.write_row(
-            row + 1,
-            0,
-            [
-                "Einkunftsart",
-                "Unrealisierter Veräußerungserlös in EUR",
-                "steuerbare Anschaffungskosten in EUR",
-                "Unrealisierter Gewinn/Verlust in EUR",
-                "davon wären steuerbar in EUR",
-            ],
-            header_format,
-        )
-        taxation_type = "Einkünfte aus privaten Veräußerungsgeschäften"
-        unrealized_report_entries = [
-            tre
-            for tre in self.tax_report_entries
-            if isinstance(tre, tr.UnrealizedSellReportEntry)
-        ]
-        assert all(
-            taxation_type == tre.taxation_type for tre in unrealized_report_entries
-        )
-        assert all(tre.gain_in_fiat is not None for tre in unrealized_report_entries)
-        first_value_in_fiat = misc.dsum(
-            misc.cdecimal(tre.first_value_in_fiat)
-            for tre in tax_report_entries
-            if isinstance(tre, tr.UnrealizedSellReportEntry)
-        )
-        second_value_in_fiat = misc.dsum(
-            misc.cdecimal(tre.second_value_in_fiat)
-            for tre in tax_report_entries
-            if isinstance(tre, tr.UnrealizedSellReportEntry)
-        )
-        total_gain_fiat = misc.dsum(
-            misc.cdecimal(tre.gain_in_fiat)
-            for tre in tax_report_entries
-            if isinstance(tre, tr.UnrealizedSellReportEntry)
-        )
-        taxable_gain = misc.dsum(
-            tre.taxable_gain_in_fiat
-            for tre in tax_report_entries
-            if isinstance(tre, tr.UnrealizedSellReportEntry)
-        )
-        ws_summary.write_row(
-            row + 2,
-            0,
-            [
-                taxation_type,
-                first_value_in_fiat,
-                second_value_in_fiat,
-                total_gain_fiat,
-                taxable_gain,
-            ],
-        )
+        if not self.unrealized_sells_faulty:
+            ws_summary.merge_range(
+                row, 0, row, 4, "Unrealisierte Einkünfte", header_format
+            )
+            ws_summary.write_row(
+                row + 1,
+                0,
+                [
+                    "Einkunftsart",
+                    "Unrealisierter Veräußerungserlös in EUR",
+                    "steuerbare Anschaffungskosten in EUR",
+                    "Unrealisierter Gewinn/Verlust in EUR",
+                    "davon wären steuerbar in EUR",
+                ],
+                header_format,
+            )
+            taxation_type = "Einkünfte aus privaten Veräußerungsgeschäften"
+            unrealized_report_entries = [
+                tre
+                for tre in self.tax_report_entries
+                if isinstance(tre, tr.UnrealizedSellReportEntry)
+            ]
+            assert all(
+                taxation_type == tre.taxation_type for tre in unrealized_report_entries
+            )
+            assert all(
+                tre.gain_in_fiat is not None for tre in unrealized_report_entries
+            )
+            first_value_in_fiat = misc.dsum(
+                misc.cdecimal(tre.first_value_in_fiat)
+                for tre in tax_report_entries
+                if isinstance(tre, tr.UnrealizedSellReportEntry)
+            )
+            second_value_in_fiat = misc.dsum(
+                misc.cdecimal(tre.second_value_in_fiat)
+                for tre in tax_report_entries
+                if isinstance(tre, tr.UnrealizedSellReportEntry)
+            )
+            total_gain_fiat = misc.dsum(
+                misc.cdecimal(tre.gain_in_fiat)
+                for tre in tax_report_entries
+                if isinstance(tre, tr.UnrealizedSellReportEntry)
+            )
+            taxable_gain = misc.dsum(
+                tre.taxable_gain_in_fiat
+                for tre in tax_report_entries
+                if isinstance(tre, tr.UnrealizedSellReportEntry)
+            )
+            ws_summary.write_row(
+                row + 2,
+                0,
+                [
+                    taxation_type,
+                    first_value_in_fiat,
+                    second_value_in_fiat,
+                    total_gain_fiat,
+                    taxable_gain,
+                ],
+            )
         # Set column format and freeze first row.
         ws_summary.set_column(0, 0, 43)
         ws_summary.set_column(1, 2, 18.29, fiat_format)
@@ -922,6 +915,12 @@ class Taxman:
             tr.sort_tax_report_entries(self.tax_report_entries), "event_type"
         ).items():
             ReportType = type(tax_report_entries[0])
+
+            if (
+                self.unrealized_sells_faulty
+                and ReportType is tr.UnrealizedSellReportEntry
+            ):
+                continue
 
             ws = wb.add_worksheet(event_type)
 
