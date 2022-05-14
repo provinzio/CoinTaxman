@@ -128,6 +128,10 @@ class Book:
             "POS savings purchase": "Staking",
             "POS savings redemption": "StakingEnd",
             "Withdraw": "Withdrawal",
+            #
+            "Rewards Distribution": "Airdrop",
+            "Liquid Swap rewards": "CoinLendInterest",
+            "Liquid Swap add/sell": "CoinLend",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -216,6 +220,7 @@ class Book:
             "Receive": "Deposit",
             "Send": "Withdrawal",
             "Coinbase Earn": "Buy",
+            "Rewards Income": "Staking",
         }
 
         with open(file_path, encoding="utf8") as f:
