@@ -142,6 +142,9 @@ class Book:
             "POS savings redemption": "StakingEnd",
             #
             "Withdraw": "Withdrawal",
+            #
+            "Rewards Distribution": "Airdrop",
+            "Liquid Swap rewards": "CoinLendInterest",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -183,6 +186,9 @@ class Book:
                     "Buy",
                 ):
                     operation = "Sell" if change < 0 else "Buy"
+
+                if operation == "Liquid Swap add/sell":
+                    operation = "CoinLendEnd" if change < 0 else "CoinLend"
 
                 if operation == "Commission" and account != "Spot":
                     # All comissions will be handled the same way.
@@ -230,6 +236,7 @@ class Book:
             "Receive": "Deposit",
             "Send": "Withdrawal",
             "Coinbase Earn": "Buy",
+            "Rewards Income": "Staking",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -313,8 +320,8 @@ class Book:
                         operation,
                         coin,
                         _change,
-                        _eur_spot,
-                        _eur_subtotal,
+                        _eur_spot,  # Rounded price from CSV, unused
+                        _eur_subtotal,  # Cost without fees
                         _eur_total,
                         _eur_fee,
                         remark,
@@ -328,10 +335,8 @@ class Book:
                 utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
                 operation = operation_mapping.get(operation, operation)
                 change = misc.force_decimal(_change)
-                # Rounded price from CSV
-                # eur_spot = misc.force_decimal(_eur_spot)
-                # Cost without fees
-                eur_subtotal = misc.force_decimal(_eur_subtotal)
+                # `eur_subtotal` and `eur_fee` are None for withdrawals.
+                eur_subtotal = misc.xdecimal(_eur_subtotal)
                 eur_fee = misc.xdecimal(_eur_fee)
 
                 # Validate data.
@@ -341,9 +346,11 @@ class Book:
                 assert _currency_spot == "EUR"
 
                 # Calculated price
-                price_calc = eur_subtotal / change
-                # Save price in our local database for later.
-                set_price_db(platform, coin, "EUR", utc_time, price_calc)
+                if eur_subtotal:
+                    assert isinstance(eur_subtotal, decimal.Decimal)
+                    price_calc = eur_subtotal / change
+                    # Save price in our local database for later.
+                    set_price_db(platform, coin, "EUR", utc_time, price_calc)
 
                 if operation == "Convert":
                     # Parse change + coin from remark, which is
@@ -406,8 +413,11 @@ class Book:
                             row,
                             file_path,
                         )
+                    else:
+                        raise NotImplementedError(f"unknown operation type {operation}")
 
                     if eur_fee:
+                        assert isinstance(eur_fee, decimal.Decimal)
                         self.append_operation(
                             "Fee", utc_time, platform, eur_fee, "EUR", row, file_path
                         )
