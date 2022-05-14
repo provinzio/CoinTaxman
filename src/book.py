@@ -1436,7 +1436,7 @@ class Book:
                 )
             )
             for op in unmatched_deposits:
-                op.remarks.append("Einzahlung ohne zugehörige Auszahlung!")
+                op.remarks.append("Herkunft der Einzahlung unbekannt")
         if withdrawal_queue:
             log.warning(
                 "Unable to match all withdrawals with deposits. "
@@ -1450,7 +1450,7 @@ class Book:
                 )
             )
             for op in withdrawal_queue:
-                op.remarks.append("Auszahlung ohne zugehörige Einzahlung!")
+                op.remarks.append("Ziel der Auszahlung unbekannt")
 
         log.info("Finished withdrawal/deposit matching")
 
