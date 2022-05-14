@@ -373,10 +373,13 @@ class Book:
                         platform, convert_coin, "EUR", utc_time, convert_eur_spot
                     )
                 else:
+                    # Add operation normally to the list.
                     self.append_operation(
                         operation, utc_time, platform, change, coin, row, file_path
                     )
 
+                    # If it's a sell, add the corresponding buy to complement
+                    # the trading pair.
                     if operation == "Sell":
                         assert isinstance(eur_subtotal, decimal.Decimal)
                         self.append_operation(
@@ -388,6 +391,8 @@ class Book:
                             row,
                             file_path,
                         )
+                    # If it's a buy, add the corresponding sell to complement
+                    # the trading pair.
                     elif operation == "Buy":
                         assert isinstance(eur_subtotal, decimal.Decimal)
                         self.append_operation(
