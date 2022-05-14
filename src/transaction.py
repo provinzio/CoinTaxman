@@ -557,34 +557,62 @@ class SellReportEntry(TaxReportEntry):
         ]
 
 
-class UnrealizedSellReportEntry(SellReportEntry):
-    event_type = "Unrealizierter Gewinn-Verlust"
+class UnrealizedSellReportEntry(TaxReportEntry):
+    event_type = "Bestände"
+
+    def __init__(
+        self,
+        sell_platform: str,
+        buy_platform: str,
+        amount: decimal.Decimal,
+        coin: str,
+        sell_utc_time: datetime.datetime,
+        buy_utc_time: datetime.datetime,
+        sell_value_in_fiat: decimal.Decimal,
+        buy_cost_in_fiat: decimal.Decimal,
+        is_taxable: bool,
+        taxation_type: str,
+        remark: str,
+    ) -> None:
+        super().__init__(
+            first_platform=sell_platform,
+            second_platform=buy_platform,
+            amount=amount,
+            coin=coin,
+            first_utc_time=sell_utc_time,
+            second_utc_time=buy_utc_time,
+            first_value_in_fiat=sell_value_in_fiat,
+            second_value_in_fiat=buy_cost_in_fiat,
+            is_taxable=is_taxable,
+            taxation_type=taxation_type,
+            remark=remark,
+        )
 
     @classmethod
     def _labels(cls) -> list[str]:
         return [
-            "Virtueller Verkauf auf Börse",
+            "Bestand auf Börse zum Stichtag",
             "Erworben auf Börse",
             #
             "Anzahl",
             "Währung",
             #
-            "Virtuelles Verkaufsdatum",
+            "Unrealisiertes Verkaufsdatum",
             "Erwerbsdatum",
             #
-            "(1) Anzahl Transaktionsgebühr",
-            "(1) Währung Transaktionsgebühr",
-            "(1) Transaktionsgebühr in EUR",
-            "(2) Anzahl Transaktionsgebühr",
-            "(2) Währung Transaktionsgebühr",
-            "(2) Transaktionsgebühr in EUR",
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
             #
-            "Virtueller Veräußerungserlös in EUR",
-            "Virtuelle Anschaffungskosten in EUR",
-            "Virtuelle Werbungskosten in EUR",
+            "Unrealisierter Veräußerungserlös in EUR",
+            "Anschaffungskosten in EUR",
+            "-",
             #
-            "Virtueller Gewinn/Verlust in EUR",
-            "davon wären steuerbar",
+            "Unrealisierter Gewinn/Verlust in EUR",
+            "davon wären steuerbar in EUR",
             "Einkunftsart",
             "Bemerkung",
         ]

@@ -19,7 +19,7 @@ import dataclasses
 import datetime
 import decimal
 from pathlib import Path
-from typing import Any, Optional, Type
+from typing import Any, Optional, Type, Union
 
 import xlsxwriter
 
@@ -180,14 +180,18 @@ class Taxman:
         return buy_value + buying_fees
 
     def get_sell_value(
-        self, op: tr.Sell, sc: tr.SoldCoin, ReportType: Type[tr.SellReportEntry]
+        self,
+        op: tr.Sell,
+        sc: tr.SoldCoin,
+        ReportType: Union[Type[tr.SellReportEntry], Type[tr.UnrealizedSellReportEntry]],
     ) -> decimal.Decimal:
         """Calculate the sell value by determining the market price for the
         with that sell bought coins.
 
         Args:
             sc (tr.SoldCoin): The sold coin.
-            ReportType (Type[tr.SellReportEntry])
+            ReportType (Union[Type[tr.SellReportEntry],
+                Type[tr.UnrealizedSellReportEntry]])
 
         Returns:
             decimal.Decimal: The sell value.
@@ -257,7 +261,9 @@ class Taxman:
         self,
         op: tr.Sell,
         sc: tr.SoldCoin,
-        ReportType: Type[tr.SellReportEntry] = tr.SellReportEntry,
+        ReportType: Union[
+            Type[tr.SellReportEntry], Type[tr.UnrealizedSellReportEntry]
+        ] = tr.SellReportEntry,
     ) -> None:
         """Evaluate a (partial) sell operation.
 
@@ -265,7 +271,8 @@ class Taxman:
             op (tr.Sell): The general sell operation.
             sc (tr.SoldCoin): The specific sold coins with their origin (sc.op).
                 `sc.sold` can be a partial sell of `op.change`.
-            ReportType (Type[tr.SellReportEntry], optional):
+            ReportType (Union[Type[tr.SellReportEntry],
+                Type[tr.UnrealizedSellReportEntry]], optional):
                 The type of the report entry. Defaults to tr.SellReportEntry.
 
         Raises:
@@ -277,7 +284,13 @@ class Taxman:
         # Share the fees and sell_value proportionally to the coins sold.
         percent = sc.sold / op.change
 
+        # Ignore fees for UnrealizedSellReportEntry.
         fee_params = self._get_fee_param_dict(op, percent)
+        if ReportType is tr.UnrealizedSellReportEntry:
+            # Make sure, that the unrealized sell has no fees.
+            assert not any(v for v in fee_params.values())
+            # Do not give fee parameters to ReportEntry object.
+            fee_params = {}
         buy_cost_in_fiat = self.get_buy_cost(sc)
 
         is_taxable = not config.IS_LONG_TERM(sc.op.utc_time, op.utc_time)
@@ -291,7 +304,7 @@ class Taxman:
             coin=op.coin,
             sell_utc_time=op.utc_time,
             buy_utc_time=sc.op.utc_time,
-            **fee_params,
+            **fee_params,  # type: ignore[call-arg]
             sell_value_in_fiat=sell_value_in_fiat,
             buy_cost_in_fiat=buy_cost_in_fiat,
             is_taxable=is_taxable,
