@@ -256,17 +256,29 @@ class BalanceQueue(abc.ABC):
             RuntimeError: Not all fees were paid.
         """
         if self.buffer_fee:
-            log.error(
+            msg = (
                 f"Not enough {self.coin} in queue to pay left over fees: "
                 f"missing {self.buffer_fee} {self.coin}.\n"
                 "\tThis error occurs when you sold more coins than you have "
                 "according to your account statements. Have you added every "
                 "account statement, including these from the last years?\n"
                 "\tThis error may also occur after deposits from unknown "
-                "sources. CoinTaxman requires the full transaction history to "
-                "evaluate taxation (when where these deposited coins bought?).\n"
+                "sources. "
             )
-            raise RuntimeError
+            if self.coin == config.FIAT:
+                log.warning(
+                    f"{msg}"
+                    "Tracking of your home fiat is not important for tax "
+                    f"evaluation but the {self.coin} in your portfolio at "
+                    "deadline will be wrong."
+                )
+            else:
+                log.error(
+                    "{msg}"
+                    "CoinTaxman requires the full transaction history to "
+                    "evaluate taxation (when where these deposited coins bought?).\n"
+                )
+                raise RuntimeError
 
     def remove_all(self) -> list[tr.SoldCoin]:
         sold_coins = []
