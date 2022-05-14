@@ -131,7 +131,6 @@ class Book:
             #
             "Rewards Distribution": "Airdrop",
             "Liquid Swap rewards": "CoinLendInterest",
-            "Liquid Swap add/sell": "CoinLend",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -173,6 +172,9 @@ class Book:
                     "Buy",
                 ):
                     operation = "Sell" if change < 0 else "Buy"
+
+                if operation == "Liquid Swap add/sell":
+                    operation = "CoinLendEnd" if change < 0 else "CoinLend"
 
                 if operation == "Commission" and account != "Spot":
                     # All comissions will be handled the same way.
