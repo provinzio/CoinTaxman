@@ -129,114 +129,21 @@ Feel free to commit details about the taxation in your country.
 
 ## Taxation in Germany
 
-Meine Interpretation rund um die Besteuerung von Kryptowährung in Deutschland wird durch die Texte von den [Rechtsanwälten und Steuerberatern WINHELLER](https://www.winheller.com/) sehr gut artikuliert.
+Nach langer Unklarheit über die Besteuerung von Kryptowährung wurde am 10.05.2022 durch das Bundesministerium für Finanzen (BMF) [ein Schreiben](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Einkommensteuer/2022-05-09-einzelfragen-zur-ertragsteuerrechtlichen-behandlung-von-virtuellen-waehrungen-und-von-sonstigen-token.html) mit rechtsverbindlichen Vorgaben zur Versteuerung veröffentlicht.
 
-Zusätzlich hat das Bundesministerium für Finanzen (BMF) am 17.06.2021 einen Entwurf über [Einzelfragen zur ertragssteuerrechtlichen Behandlung von virtuellen Währungen und von Token](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Einkommensteuer/2021-06-17-est-kryptowaehrungen.html) veröffentlicht.
+Die ursprünglich hier stehenden Vermutungen und Interpretationen meinerseits habe ich aus der aktuellen `README.md` entfernt.
+Für Interessierte findet sich das in der Versionshistorie.
+Dieses Tool richtet sich nach bestem Wissen nach dem BMF Schreiben.
 
-Beide Verweise geben schon einmal einen guten Einblick in die Versteuerung von Kryptowährung.
-Viele Kleinigkeiten könnten jedoch noch steuerlich ungeklärt oder in einen Graubereich fallen.
-Insofern ist es wichtig, sich über die genaue Besteuerung seines eigenen Sachverhaltes zu informieren oder (noch besser) einen Steuerberater diesbezüglich zu kontaktieren.
+An dieser Stelle sei explizit erwähnt, dass ich trotzdem keine Haftung für die Anwendung dieses Programms übernehme.
+Es ist weder sichergestellt, dass ich es aktuell noch nutze (falls ich das Repo in Zukunft nicht mehr aktiv pflege), noch ob die tatsächliche Umsetzung des Programms gesetzlich zulässig ist.
+Issues und Pull Requests sind gerne gesehen.
 
-Im Folgenden werde ich einen groben Überblick über die Besteuerungs-Methode in diesem Tool geben.
-Genauere Informationen finden sich im Source-Code in `src\taxman.py`.
+Weitere Besonderheiten die sich so nicht im BMF-Schreiben wiederfinden, sind im folgenden aufgelistet.
 
-An dieser Stelle sei explizit erwähnt, dass dies meine Interpretation ist.
-Es ist weder sichergestellt, dass ich aktuell noch nach diesen praktiziere (falls ich das Repo in Zukunft nicht mehr aktiv pflege), noch ob diese Art der Versteuerung gesetzlich zulässig ist.
-Meine Interpretation steht gerne zur Debatte.
 
-### Allgemein
+### Binance Referral Rewards (Referral System)
 
-> Kryptowährungen sind kein gesetzliches Zahlungsmittel. Vielmehr werden sie – zumindest im Ertragsteuerrecht – als immaterielle Wirtschaftsgüter betrachtet. 
->
-> Wird der An- und Verkauf von Kryptowährungen als Privatperson unternommen, sind § 22 Nr. 2, § 23 Abs. 1 Nr. 2 EStG einschlägig. Es handelt sich hierbei um ein privates Veräußerungsgeschäft von „anderen Wirtschaftsgütern“. Gemäß § 23 Abs. 3 Satz 1 EStG ist der Gewinn oder Verlust der Unterschied zwischen Veräußerungspreis einerseits und den Anschaffungs- und Werbungskosten andererseits. Es muss also nur der Anschaffungspreis vom Veräußerungspreis abgezogen werden. Die Gebühren beim Handel auf den Börsen sind Werbungskosten und damit abzugsfähig.
->
-> In § 23 Abs. 3 Satz 5 EStG ist zudem eine Freigrenze von 600 € vorgesehen, bis zu deren Erreichen alle privaten Veräußerungsgeschäfte des Veranlagungszeitraums steuerfrei bleiben. Wird die Grenze überschritten, muss allerdings der gesamte Betrag ab dem ersten Euro versteuert werden. Die Einkommensteuer fällt dabei nicht erst beim Umtausch von Kryptowährungen in Euro oder eine andere Fremdwährung an, sondern bereits bei einem Tausch in eine beliebige andere Kryptowährung oder auch beim Kauf von Waren oder Dienstleistungen mit einer solchen. Vergeht aber zwischen Anschaffung und Veräußerung mehr als ein Jahr (ggf. zehn Jahre nach § 23 Abs. 1 Nr. 2 Satz 4 EStG), greift die Haltefrist des § 23 Abs. 1 Nr. 2 Satz 1 EStG. In diesen Fällen ist der gesamte Veräußerungsgewinn nicht steuerbar.  
->
-> Zur Bestimmung der Anschaffungskosten und des Veräußerungsgewinns sowie zur Bestimmung der Einhaltung der Haltefrist wird in der Regel die sogenannte FIFO-Methode aus § 23 Abs. 1 Nr. 2 Satz 3 EStG herangezogen. Zwar schreibt das Gesetz diese First-In-First-Out-Methode nicht für Kryptowährungen vor, in der Praxis wird sie aber weitgehend angewendet. Es werden allerdings auch andere Meinungen vertreten und eine Berechnung nach der LIFO-Methode oder – zur Bestimmung der Anschaffungskosten – nach Durchschnittswerten vorgeschlagen.
-
-[Quelle](https://www.winheller.com/bankrecht-finanzrecht/bitcointrading/bitcoinundsteuer/besteuerung-kryprowaehrungen.html)
-[Wörtlich zitiert vom 14.02.2021]
-
-Zusammenfassung in meinen Worten:
-- Kryptowährung sind immaterielle Wirtschaftsgüter.
-- Der Verkauf innerhalb der Spekulationsfirst gilt als privates Veräußerungsgeschäft und ist als Sonstiges Einkommen zu versteuern (Freigrenze 600 €).
-- Jeder Tausch von Kryptowährung wird (wie ein Verkauf) versteuert, indem der getauschte Betrag virtuell in EUR umgewandelt wird.
-- Gebühren zum Handel sind steuerlich abzugsfähig.
-- Es kann einmalig entschieden werden, ob nach FIFO oder LIFO versteuert werden soll.
-
-Weitere Grundsätze, die oben nicht angesprochen wurden:
-- Versteuerung kann getrennt nach Depots (Wallets, Exchanges, etc.) erfolgen (Multi-Depot-Methode) [cryptotax](https://cryptotax.io/fifo-oder-lifo-bitcoin-gewinnermittlung/).
-
-### Airdrops
-
-> Der Erhalt zusätzlicher Einheiten einer virtuellen Währung oder von Token kann zu
-Einkünften aus einer Leistung im Sinne des § 22 Nummer 3 EStG führen. Beim Airdrop
-werden Einheiten einer virtuellen Währung oder Token „unentgeltlich“ verteilt. In der Regel
-handelt es sich dabei um eine Marketingmaßnahme. Allerdings müssen sich Kunden für die
-Teilnahme am Airdrop anmelden und Daten von sich preisgeben. Als Belohnung erhalten
-diese Kunden Einheiten einer virtuellen Währung oder Token zugeteilt. Hängt die Zuteilung
-der Einheiten einer virtuellen Währung oder Token davon ab, dass der Steuerpflichtige Daten
-von sich angibt, die über die Informationen hinausgehen, die für die schlichte technische Zuteilung/Bereitstellung erforderlich sind, liegt in der Datenüberlassung eine Leistung des
-Steuerpflichtigen im Sinne des § 22 Nummer 3 EStG, für die er als Gegenleistung Einheiten
-einer virtuellen Währung oder Token erhält. Davon ist im Zusammenhang mit einem Airdrop
-jedenfalls dann auszugehen, wenn der Steuerpflichtige verpflichtet ist oder sich bereit
-erklären muss, dem Emittenten als Gegenleistung für die Einheiten einer virtuellen Währung
-oder Token personenbezogene Daten zur Verfügung zu stellen.
-Die Einheiten der virtuellen Währung oder Token sind mit dem Marktkurs im Zeitpunkt des
-Erwerbs anzusetzen (vgl. zur Ermittlung des Marktkurses Rz. 32).
-Erfolgt keine Gegenleistung, kommt eine Schenkung in Betracht, für die die
-schenkungssteuerrechtlichen Regelungen gelten.
-Eine Leistung im Sinne des § 22 Nummer 3 EStG erbringt der Steuerpflichtige auch dann,
-wenn er eigene Bilder/Fotos oder private Filme (Videos) auf einer Plattform hochlädt und
-hierfür Einheiten einer virtuellen Währung oder Token erhält, sofern das Eigentum an den
-Bildern/Fotos/Filmen beim Steuerpflichtigen verbleibt.
-
-[Quelle 79-80](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Einkommensteuer/2021-06-17-est-kryptowaehrungen.html)
-[Wörtlich zitiert vom 04.05.2022]
-
-Zusammenfassung in meinen Worten:
-- Falls man etwas gemacht hat, um die Airdrops zu erhalten (bspw. sich irgendwo angemeldet oder anderweitig Daten preisgegeben), handelt es sich um Einkünfte aus sonstigen Leistungen; ansonsten handelt es sich um eine Schenkung
-
-### Coin Lending
-
-> Handelt es sich bei den durch Krypto-Lending erhaltenen Zinserträgen um Einkünfte aus sonstigen Leistungen gem. § 22 Nr. 3 EStG, so gilt eine Freigrenze von 256 Euro. Beträge darüber werden mit dem perönlichen Einkommensteuersatz von 18 bis 45 % versteuert. Außerdem wäre die spätere Veräußerung gem. § 23 Abs. 1 Nr. 2 EStG der durch das Lending erlangten Kryptowährung mangels Anschaffungsvorgangs nicht steuerbar.
->
-> In Deutschland ist die Besteuerung der durch das Krypto-Lending erhaltenen Zinsen jedoch nicht abschließend geklärt. Zum einem wird diskutiert, ob es sich dabei um Kapitaleinkünfte gem. § 20 Abs. 1 Nr. 7 EStG handelt, da es sich bei der Hingabe der Kryptowährung um ein klassisches, verzinsliches Darlehen handelt. Anderseits wird von Finanzämtern immer wieder angenommen, dass es sich bei den erzielten Zinserträgen durch Lending um Einkünfte aus sonstigen Leistungen gem. § 22 Nr. 3 EStG handelt.
->
-> Die erhaltene Kryptowährung in Form von Zinsen ist im Zeitpunkt des Zuflusses zu bewerten. Es handele sich deshalb nicht um Kapitaleinkünfte, da die Hingabe der Kryptowährung gerade keine Hingabe von Kapital, sondern vielmehr eine Sachleistung darstelle. Begründet wird dies damit, dass sich eine Kapitalforderung auf eine Geldleistung beziehen muss, nicht aber auf eine Sachleistung, wie es bei Kryptowährungen der Fall ist.
->
-> Kontrovers diskutiert wird auch, ob der Verleih einer Kryptowährung zu einer Verlängerung der Haltefrist nach § 23 Abs. 1 Nr. 2 Satz 4 EStG führt. Eine Verlängerung der Haltefrist tritt danach nur dann ein, wenn ein Wirtschaftsgut
-> - nach dem 31.12.08 angeschafft wurde,
-> - als Einkunftsquelle genutzt wird und
-> - damit Einkünfte erzielt werden.
-> Unter Nutzung als Einkunftsquelle ist zu verstehen, dass die betroffenen Wirtschaftsgüter eine eigenständige Erwerbsgrundlage bilden. Maßgeblich ist also die Frage, ob mit der Kryptowährung Einkünften erzielt werden.
-> 
-> Beim Lending werden jedoch in der Regel keine Einkünfte aus dem Wirtschaftsgut (der Kryptowährung), sondern aus dem Verleihgeschäft erzielt (als Ertrag aus der Forderung). Weil in diesen Fällen kein Missbrauch vorliegt, kann es bei der Haltefrist von einem Jahr bleiben. Auch das Bayrische Landesamt für Steuern hat bestätigt, dass die erhaltenen Zinsen nicht Ausfluss des „anderen Wirtschaftsgutes Fremdwährungsguthaben“, sondern vielmehr Ausfluss der eigentlichen Kapitalforderungen sind.
-
-[Quelle](https://www.winheller.com/bankrecht-finanzrecht/bitcointrading/bitcoinundsteuer/besteuerung-lending.html)
-[Wörtlich zitiert vom 14.02.2021]
-
-Zusammenfassung in meinen Worten:
-- Erhaltene Kryptowährung durch Coin Lending wird im Zeitpunkt des Zuflusses als Einkunft aus sonstigen Leistungen versteuert (Freigrenze 256 €).
-- Der Verkauf ist steuerbar.
-- Coin Lending beeinflusst nicht die Haltefrist der verliehenen Coins (vgl. [Anwalt.de vom 29.04.2022](https://www.anwalt.de/rechtstipps/neuer-sachstand-bmf-schreiben-zu-kryptowaehrungen-und-10-jahres-frist-finanzamt-bitcoin-nft-token-200209.html)
-
-### Staking
-
-> Ebenso [wie beim Coin Lending] verhält es sich bei Kryptowährungen, die für Staking oder Masternodes genutzt werden. Nutzer müssen bei proof-of-stake-basierten Kryptowährungen oder beim Betreiben von Masternodes einen bestimmten Teil ihrer Kryptowährung der Verfügungsmacht entziehen und dem Netzwerk als Sicherheit bereitstellen. Die Sicherheit des Netzwerkes wird dadurch gewährleistet, dass regelwidriges Verhalten den dem Verlust der Sicherheitsleistung (Kryptowährung) zur Folge hat. Auch in diesen Fällen werden keine Einkünfte aus dem Wirtschaftsgut selbst, sondern für das Blockieren der Verfügungsmacht, also als Ertrag aus der Forderung, erzielt. Auch hier bleibt es bei der Haltefrist von einem Jahr.
-
-[Quelle](https://www.winheller.com/bankrecht-finanzrecht/bitcointrading/bitcoinundsteuer/besteuerung-von-staking.html)
-[Wörtlich zitiert vom 19.02.2021]
-
-Zusammenfassung:
-- siehe Coin Lending
-
-### Kommission (Referral System)
-
-Wenn man denkt, dass man den Steuerdschungel endlich durchquert hat, kommt Binance mit seinem Referral System daher.
-Über das Werbungs-System erhält man einen prozentualen Anteil an den Trading-Gebühren der Geworbenen auf sein Konto gutgeschrieben.
-(lebenslang, logischerweise in BTC.)
-Es ist also keine typische Kunden-werben-Kunden-Prämie sondern eher eine Kommission und damit bin ich mir unsicher, wie das einzuordnen ist.
-
-Für das Erste handhabe ich es wie eine Kunden-werben-Kunden-Prämie in Form eines Sachwerts.
-Sprich, die BTC werden zum Zeitpunkt des Erhalts in ihren EUR-Gegenwert umgerechnet und den Einkünften aus sonstigen Leistungen hinzugefügt.
+Bei Binance gibt es die Möglichkeit, andere Personen über einen Link zu werben.
+Bei jeder Transaktion der Person erhält man einen kleinen Anteil derer Gebühren als Reward gutgeschrieben.
+Die Einkünfte durch diese Rewards werden durch CoinTaxman als Einkünfte aus sonstigen Leistungen ausgewiesen und damit wie eine übliche Kunden-werben-Kunden-Prämie erfasst.
