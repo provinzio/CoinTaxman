@@ -405,11 +405,12 @@ class Book:
                             file_path,
                         )
 
-                    if eur_fee:
-                        assert isinstance(eur_fee, decimal.Decimal)
-                        self.append_operation(
-                            "Fee", utc_time, platform, eur_fee, "EUR", row, file_path
-                        )
+                # Add paid fees to the list.
+                if eur_fee:
+                    assert isinstance(eur_fee, decimal.Decimal)
+                    self.append_operation(
+                        "Fee", utc_time, platform, eur_fee, "EUR", row, file_path
+                    )
 
     def _read_coinbase_v2(self, file_path: Path) -> None:
         self._read_coinbase(file_path=file_path)
