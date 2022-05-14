@@ -323,6 +323,12 @@ class Book:
                 change = misc.force_decimal(_change)
                 # `eur_subtotal` and `eur_fee` are None for withdrawals.
                 eur_subtotal = misc.xdecimal(_eur_subtotal)
+                if eur_subtotal is None:
+                    # Cost without fees from CSV is missing. This can happen for
+                    # old transactions (<2018), event though something was bought.
+                    # Calculate the `eur_subtotal` from `eur_spot`.
+                    if eur_spot := misc.xdecimal(_eur_spot):
+                        eur_subtotal = eur_spot * change
                 eur_fee = misc.xdecimal(_eur_fee)
 
                 # Validate data.
