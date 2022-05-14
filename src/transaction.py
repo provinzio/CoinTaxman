@@ -408,7 +408,7 @@ class TaxReportEntry:
                 if label == "-":
                     width = 15.0
                 elif field.name == "taxation_type":
-                    width = 35.0
+                    width = 43.0
                 elif field.name == "taxable_gain_in_fiat":
                     width = 13.0
                 elif (
