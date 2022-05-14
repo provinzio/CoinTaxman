@@ -399,8 +399,6 @@ class Book:
                             row,
                             file_path,
                         )
-                    else:
-                        raise NotImplementedError(f"unknown operation type {operation}")
 
                     if eur_fee:
                         assert isinstance(eur_fee, decimal.Decimal)
