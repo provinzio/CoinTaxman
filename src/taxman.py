@@ -730,24 +730,47 @@ class Taxman:
         #
         # General
         #
+        last_day = TAX_DEADLINE.date()
+        first_day = last_day.replace(month=1, day=1)
+        time_period = f"{first_day.strftime('%x')}–{last_day.strftime('%x')}"
         ws_general = wb.add_worksheet("Allgemein")
-        ws_general.merge_range(0, 0, 0, 1, "Allgemeine Daten", header_format)
-        ws_general.write_row(1, 0, ["Stichtag", TAX_DEADLINE.date()], date_format)
+        row = 0
+        ws_general.merge_range(row, 0, 0, 1, "Allgemeine Daten", header_format)
+        row += 1
         ws_general.write_row(
-            2,
+            row, 0, ["Zeitraum des Steuerberichts", time_period], date_format
+        )
+        row += 1
+        ws_general.write_row(
+            row, 0, ["Verbrauchsfolgeverfahren", config.PRINCIPLE.name], date_format
+        )
+        row += 1
+        ws_general.write_row(
+            row,
+            0,
+            ["Methode", "Multi-Depot" if config.MULTI_DEPOT else "Single-Depot"],
+            date_format,
+        )
+        row += 1
+        ws_general.write_row(row, 0, ["Alle Zeiten in", config.LOCAL_TIMEZONE_KEY])
+        row += 1
+        ws_general.write_row(
+            row,
             0,
             ["Erstellt am", datetime.datetime.now(config.LOCAL_TIMEZONE)],
             datetime_format,
         )
+        row += 1
         ws_general.write_row(
-            3, 0, ["Software", "CoinTaxman <https://github.com/provinzio/CoinTaxman>"]
+            row, 0, ["Software", "CoinTaxman <https://github.com/provinzio/CoinTaxman>"]
         )
+        row += 1
         commit_hash = misc.get_current_commit_hash(default="undetermined")
-        ws_general.write_row(4, 0, ["Version (Commit)", commit_hash])
-        ws_general.write_row(5, 0, ["Alle Zeiten in", config.LOCAL_TIMEZONE_KEY])
+        ws_general.write_row(row, 0, ["Version (Commit)", commit_hash])
+        row += 1
         # Set column format and freeze first row.
-        ws_general.set_column(0, 0, 17)
-        ws_general.set_column(1, 1, 20)
+        ws_general.set_column(0, 0, 26)
+        ws_general.set_column(1, 1, 21)
         ws_general.freeze_panes(1, 0)
 
         #
