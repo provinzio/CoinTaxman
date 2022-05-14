@@ -280,7 +280,6 @@ class Taxman:
         fee_params = self._get_fee_param_dict(op, percent)
         buy_cost_in_fiat = self.get_buy_cost(sc)
 
-        # TODO Recognized increased speculation period for lended/staked coins?
         is_taxable = not config.IS_LONG_TERM(sc.op.utc_time, op.utc_time)
 
         sell_value_in_fiat = self.get_sell_value(op, sc, ReportType)
@@ -384,7 +383,6 @@ class Taxman:
             #     not the first and second
             # TODO mark them as not lended/etc. anymore, so they could be sold
             # again
-            # TODO lending/etc might increase the tax-free speculation period!
             # TODO Add Lending/Staking TaxReportEntry (duration of lend)
             # TODO maybe add total accumulated fees?
             #      might be impossible to match CoinInterest with CoinLend periods

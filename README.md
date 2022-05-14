@@ -219,7 +219,7 @@ Zusammenfassung in meinen Worten:
 Zusammenfassung in meinen Worten:
 - Erhaltene Kryptowährung durch Coin Lending wird im Zeitpunkt des Zuflusses als Einkunft aus sonstigen Leistungen versteuert (Freigrenze 256 €).
 - Der Verkauf ist steuerbar.
-- Coin Lending beeinflusst nicht die Haltefrist der verliehenen Coins.
+- Coin Lending beeinflusst nicht die Haltefrist der verliehenen Coins (vgl. [Anwalt.de vom 29.04.2022](https://www.anwalt.de/rechtstipps/neuer-sachstand-bmf-schreiben-zu-kryptowaehrungen-und-10-jahres-frist-finanzamt-bitcoin-nft-token-200209.html)
 
 ### Staking
 
