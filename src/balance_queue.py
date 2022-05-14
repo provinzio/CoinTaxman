@@ -234,7 +234,7 @@ class BalanceQueue(abc.ABC):
             fee: decimal.Decimal
         """
         _, left_over_fee = self._remove(fee)
-        if left_over_fee:
+        if left_over_fee and self.coin != config.FIAT:
             log.warning(
                 "Not enough coins in queue to remove fee. Buffer the fee for "
                 "next adding time... "
