@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Optional, Type, Union
 
 import xlsxwriter
+from dateutil.relativedelta import relativedelta
 
 import balance_queue
 import config
@@ -275,7 +276,8 @@ class Taxman:
             fee_params = {}
         buy_cost_in_fiat = self.get_buy_cost(sc)
 
-        is_taxable = not config.IS_LONG_TERM(sc.op.utc_time, op.utc_time)
+        # Taxable when sell is not more than one year after buy.
+        is_taxable = sc.op.utc_time + relativedelta(years=1) >= op.utc_time
 
         try:
             sell_value_in_fiat = self.get_sell_value(op, sc)

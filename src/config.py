@@ -15,13 +15,10 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import configparser
-import datetime as dt
 import locale
 import zoneinfo
 from os import environ
 from pathlib import Path
-
-from dateutil.relativedelta import relativedelta
 
 import core
 
@@ -70,10 +67,6 @@ if COUNTRY == core.Country.GERMANY:
     LOCAL_TIMEZONE = zoneinfo.ZoneInfo("CET")
     LOCAL_TIMEZONE_KEY = "MEZ"
     locale_str = "de_DE"
-
-    def IS_LONG_TERM(buy: dt.datetime, sell: dt.datetime) -> bool:
-        return buy + relativedelta(years=1) < sell
-
 
 else:
     raise NotImplementedError(
