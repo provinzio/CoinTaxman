@@ -134,7 +134,7 @@ class Book:
             # DeFi yield farming
             "Liquid Swap add": "CoinLend",
             "Liquid Swap remove": "CoinLendEnd",
-            "Launchpool Interest": "CoindLendInterest",
+            "Launchpool Interest": "CoinLendInterest",
             #
             "Super BNB Mining": "StakingInterest",
             "POS savings interest": "StakingInterest",

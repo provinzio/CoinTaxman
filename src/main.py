@@ -42,7 +42,7 @@ def main() -> None:
     # Merge identical operations together, which makes it easier to match
     # buy/sell to get prices from csv, match fees and reduces database access
     # (as long as there are only one buy/sell pair per time,
-    # might be problematic otherwhise).
+    # might be problematic otherwise).
     book.merge_identical_operations()
     # Resolve dependencies between withdrawals and deposits, which is
     # necessary to correctly fetch prices and to calculate p/l.
