@@ -41,9 +41,9 @@ append_files(DATA_PATH, price_databases)
 
 # Evaluation and log file
 log.debug("Archive latest evaluation and log file")
-eval_regex = re.compile(str(TAX_YEAR) + r"\_rev\d{3}\.csv")
+eval_regex = re.compile(str(TAX_YEAR) + r"\_rev\d{3}\.xlsx")
 evaluation = max((f for f in os.listdir(EXPORT_PATH) if eval_regex.match(f)))
-log_file = evaluation.removesuffix(".csv") + ".log"
+log_file = evaluation.removesuffix(".xlsx") + ".log"
 log.debug("Found: %s", ", ".join((evaluation, log_file)))
 append_files(EXPORT_PATH, [evaluation, log_file])
 

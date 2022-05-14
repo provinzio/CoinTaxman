@@ -14,22 +14,38 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import csv
+import collections
+import dataclasses
 import datetime
 import decimal
 from pathlib import Path
-from typing import Optional, Type
+from typing import Any, Optional, Type, Union
+
+import xlsxwriter
+from dateutil.relativedelta import relativedelta
 
 import balance_queue
 import config
 import core
 import log_config
 import misc
-import transaction
+import transaction as tr
 from book import Book
+from database import get_sorted_tablename
 from price_data import PriceData
 
 log = log_config.getLogger(__name__)
+
+TAX_DEADLINE = min(
+    datetime.datetime.now().replace(tzinfo=config.LOCAL_TIMEZONE),  # now
+    datetime.datetime(
+        config.TAX_YEAR, 12, 31, 23, 59, 59, tzinfo=config.LOCAL_TIMEZONE
+    ),  # end of year
+)
+
+
+def in_tax_year(op: tr.Operation) -> bool:
+    return op.utc_time.year == config.TAX_YEAR
 
 
 class Taxman:
@@ -37,9 +53,14 @@ class Taxman:
         self.book = book
         self.price_data = price_data
 
-        self.tax_events: list[transaction.TaxEvent] = []
-        # Tax Events which would occur if all left over coins were sold now.
-        self.virtual_tax_events: list[transaction.TaxEvent] = []
+        self.tax_report_entries: list[tr.TaxReportEntry] = []
+        self.multi_depot_portfolio: dict[
+            str, dict[str, decimal.Decimal]
+        ] = collections.defaultdict(lambda: collections.defaultdict(decimal.Decimal))
+        self.single_depot_portfolio: dict[
+            str, decimal.Decimal
+        ] = collections.defaultdict(decimal.Decimal)
+        self.unrealized_sells_faulty = False
 
         # Determine used functions/classes depending on the config.
         country = config.COUNTRY.name
@@ -48,6 +69,7 @@ class Taxman:
         except AttributeError:
             raise NotImplementedError(f"Unable to evaluate taxation for {country=}.")
 
+        # Determine the BalanceType.
         if config.PRINCIPLE == core.Principle.FIFO:
             # Explicity define type for BalanceType on first declaration
             # to avoid mypy errors.
@@ -61,324 +83,874 @@ class Taxman:
                 f"Unable to evaluate taxation for {config.PRINCIPLE=}."
             )
 
-    def in_tax_year(self, op: transaction.Operation) -> bool:
-        return op.utc_time.year == config.TAX_YEAR
+        self._balances: dict[Any, balance_queue.BalanceQueue] = {}
 
-    def tax_deadline(self) -> datetime.datetime:
-        return min(
-            datetime.datetime(config.TAX_YEAR, 12, 31, 23, 59, 59),
-            datetime.datetime.now(),
-        ).astimezone()
+    ###########################################################################
+    # Helper functions for balances
+    ###########################################################################
 
-    def _evaluate_taxation_GERMANY(
+    def balance(self, platform: str, coin: str) -> balance_queue.BalanceQueue:
+        key = (platform, coin) if config.MULTI_DEPOT else coin
+        try:
+            return self._balances[key]
+        except KeyError:
+            self._balances[key] = self.BalanceType(coin)
+            return self._balances[key]
+
+    def balance_op(self, op: tr.Operation) -> balance_queue.BalanceQueue:
+        balance = self.balance(op.platform, op.coin)
+        return balance
+
+    def add_to_balance(self, op: tr.Operation) -> None:
+        self.balance_op(op).add(op)
+
+    def remove_from_balance(self, op: tr.Operation) -> list[tr.SoldCoin]:
+        return self.balance_op(op).remove(op)
+
+    def remove_fees_from_balance(self, fees: Optional[list[tr.Fee]]) -> None:
+        if fees is not None:
+            for fee in fees:
+                self.balance_op(fee).remove_fee(fee)
+
+    ###########################################################################
+    # Country specific evaluation functions.
+    ###########################################################################
+
+    def _evaluate_fee(
         self,
-        coin: str,
-        operations: list[transaction.Operation],
-    ) -> None:
-        balance = self.BalanceType()
+        fee: tr.Fee,
+        percent: decimal.Decimal,
+    ) -> tuple[decimal.Decimal, str, decimal.Decimal]:
+        return (
+            fee.change * percent,
+            fee.coin,
+            self.price_data.get_partial_cost(fee, percent),
+        )
 
-        def evaluate_sell(
-            op: transaction.Operation, force: bool = False
-        ) -> Optional[transaction.TaxEvent]:
-            # Remove coins from queue.
-            sold_coins, unsold_coins = balance.sell(op.change)
-
-            if coin == config.FIAT:
-                # Not taxable.
-                return None
-
-            if unsold_coins:
-                # Queue ran out of items to sell and not all coins
-                # could be sold.
-                log.error(
-                    f"{op.file_path.name}: Line {op.line}: "
-                    f"Not enough {coin} in queue to sell: "
-                    f"missing {unsold_coins} {coin} "
-                    f"(transaction from {op.utc_time} "
-                    f"on {op.platform})\n"
-                    "\tThis error occurs if your account statements "
-                    "have unmatched buy/sell positions.\n"
-                    "\tHave you added all your account statements "
-                    "of the last years?\n"
-                    "\tThis error may also occur after deposits "
-                    "from unknown sources.\n"
-                )
-                raise RuntimeError
-
-            if not self.in_tax_year(op) and not force:
-                # Sell is only taxable in the respective year.
-                return None
-
-            taxation_type = "Sonstige Einkünfte"
-            # Price of the sell.
-            sell_price = self.price_data.get_cost(op)
-            taxed_gain = decimal.Decimal()
-            real_gain = decimal.Decimal()
-            # Coins which are older than (in this case) one year or
-            # which come from an Airdrop, CoinLend or Commission (in an
-            # foreign currency) will not be taxed.
-            for sc in sold_coins:
-                is_taxable = not config.IS_LONG_TERM(
-                    sc.op.utc_time, op.utc_time
-                ) and not (
-                    isinstance(
-                        sc.op,
-                        (
-                            transaction.Airdrop,
-                            transaction.CoinLendInterest,
-                            transaction.StakingInterest,
-                            transaction.Commission,
-                        ),
-                    )
-                    and not sc.op.coin == config.FIAT
-                )
-                # Only calculate the gains if necessary.
-                if is_taxable or config.CALCULATE_UNREALIZED_GAINS:
-                    partial_sell_price = (sc.sold / op.change) * sell_price
-                    sold_coin_cost = self.price_data.get_cost(sc)
-                    gain = partial_sell_price - sold_coin_cost
-                    if is_taxable:
-                        taxed_gain += gain
-                    if config.CALCULATE_UNREALIZED_GAINS:
-                        real_gain += gain
-            remark = ", ".join(
-                f"{sc.sold} from {sc.op.utc_time} " f"({sc.op.__class__.__name__})"
-                for sc in sold_coins
-            )
-            return transaction.TaxEvent(
-                taxation_type,
-                taxed_gain,
-                op,
-                sell_price,
-                real_gain,
-                remark,
-            )
-
-        for op in operations:
-            if isinstance(op, transaction.Fee):
-                balance.remove_fee(op.change)
-                if self.in_tax_year(op):
-                    # Fees reduce taxed gain.
-                    taxation_type = "Sonstige Einkünfte"
-                    taxed_gain = -self.price_data.get_cost(op)
-                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
-                    self.tax_events.append(tx)
-            elif isinstance(op, transaction.CoinLend):
-                pass
-            elif isinstance(op, transaction.CoinLendEnd):
-                pass
-            elif isinstance(op, transaction.Staking):
-                pass
-            elif isinstance(op, transaction.StakingEnd):
-                pass
-            elif isinstance(op, transaction.Buy):
-                balance.put(op)
-            elif isinstance(op, transaction.Sell):
-                if tx_ := evaluate_sell(op):
-                    self.tax_events.append(tx_)
-            elif isinstance(
-                op, (transaction.CoinLendInterest, transaction.StakingInterest)
-            ):
-                balance.put(op)
-                if self.in_tax_year(op):
-                    if misc.is_fiat(coin):
-                        assert not isinstance(
-                            op, transaction.StakingInterest
-                        ), "You can not stake fiat currencies."
-                        taxation_type = "Einkünfte aus Kapitalvermögen"
-                    else:
-                        taxation_type = "Einkünfte aus sonstigen Leistungen"
-                    taxed_gain = self.price_data.get_cost(op)
-                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
-                    self.tax_events.append(tx)
-            elif isinstance(op, transaction.Airdrop):
-                balance.put(op)
-            elif isinstance(op, transaction.Commission):
-                balance.put(op)
-                if self.in_tax_year(op):
-                    taxation_type = "Einkünfte aus sonstigen Leistungen"
-                    taxed_gain = self.price_data.get_cost(op)
-                    tx = transaction.TaxEvent(taxation_type, taxed_gain, op)
-                    self.tax_events.append(tx)
-            elif isinstance(op, transaction.Deposit):
-                if coin != config.FIAT:
-                    log.warning(
-                        f"Unresolved deposit of {op.change} {coin} "
-                        f"on {op.platform} at {op.utc_time}. "
-                        "The evaluation might be wrong."
-                    )
-            elif isinstance(op, transaction.Withdrawal):
-                if coin != config.FIAT:
-                    log.warning(
-                        f"Unresolved withdrawal of {op.change} {coin} "
-                        f"from {op.platform} at {op.utc_time}. "
-                        "The evaluation might be wrong."
-                    )
-            else:
-                raise NotImplementedError
-
-        # Check that all relevant positions were considered.
-        if balance.buffer_fee:
-            log.warning(
-                "Balance has outstanding fees which were not considered: "
-                f"{balance.buffer_fee} {coin}"
-            )
-
-        # Calculate the amount of coins which should be left on the platform
-        # and evaluate the (taxed) gain, if the coin would be sold right now.
-        if config.CALCULATE_UNREALIZED_GAINS and (
-            (left_coin := sum(((bop.op.change - bop.sold) for bop in balance.queue)))
-        ):
-            assert isinstance(left_coin, decimal.Decimal)
-            # Calculate unrealized gains for the last time of `TAX_YEAR`.
-            # If we are currently in ´TAX_YEAR` take now.
-            virtual_sell = transaction.Sell(
-                self.tax_deadline(),
-                op.platform,
-                left_coin,
-                coin,
-                -1,
-                Path(""),
-            )
-            if tx_ := evaluate_sell(virtual_sell, force=True):
-                self.virtual_tax_events.append(tx_)
-
-    def _evaluate_taxation_per_coin(
-        self,
-        operations: list[transaction.Operation],
-    ) -> None:
-        """Evaluate the taxation for a list of operations per coin using
-        country specific functions.
+    def get_buy_cost(self, sc: tr.SoldCoin) -> decimal.Decimal:
+        """Calculate the buy cost of a sold coin.
 
         Args:
-            operations (list[transaction.Operation])
+            sc (tr.SoldCoin): The sold coin.
+
+        Raises:
+            NotImplementedError: Calculation is currently not implemented
+                for buy operations.
+
+        Returns:
+            decimal.Decimal: The buy value of the sold coin in fiat
         """
-        for coin, coin_operations in misc.group_by(operations, "coin").items():
-            coin_operations = transaction.sort_operations(coin_operations, ["utc_time"])
-            self.__evaluate_taxation(coin, coin_operations)
+        assert sc.sold <= sc.op.change
+        percent = sc.sold / sc.op.change
+
+        # Fees paid when buying the now sold coins.
+        buying_fees = decimal.Decimal()
+        if sc.op.fees:
+            buying_fees = misc.dsum(
+                self.price_data.get_partial_cost(f, percent) for f in sc.op.fees
+            )
+
+        if isinstance(sc.op, tr.Buy):
+            # Buy cost of a bought coin should be the sell value of the
+            # previously sold coin and not the sell value of the bought coin.
+            # Gains of combinations like below are not correctly calculated:
+            #   1 BTC=1€, 1ETH=2€, 1BTC=1ETH
+            # e.g. buy 1 BTC for 1 €, buy 1 ETH for 1 BTC, buy 2 € for 1 ETH.
+            if sc.op.buying_cost:
+                buy_value = sc.op.buying_cost * percent
+            elif sc.op.link:
+                prev_sell_value = self.price_data.get_partial_cost(sc.op.link, percent)
+                buy_value = prev_sell_value
+            else:
+                log.warning(
+                    "Unable to correctly determine buy cost of bought coins "
+                    "because the link to the corresponding previous sell could "
+                    "not be estalished. Buying cost will be set to the buy "
+                    "value of the bought coins instead of the sell value of the "
+                    "previously sold coins of the trade. "
+                    "The calculated buy cost might be wrong. "
+                    "This may lead to a false tax evaluation.\n"
+                    f"{sc.op}"
+                )
+                buy_value = self.price_data.get_cost(sc)
+        else:
+            # All other operations "begin their existence" as that coin and
+            # weren't traded/exchanged before.
+            # The buy cost of these coins is the value from when yout got them.
+            buy_value = self.price_data.get_cost(sc)
+
+        return buy_value + buying_fees
+
+    def get_sell_value(
+        self,
+        op: tr.Sell,
+        sc: tr.SoldCoin,
+    ) -> decimal.Decimal:
+        """Calculate the sell value by determining the market price for the
+        with that sell bought coins.
+
+        Args:
+            sc (tr.SoldCoin): The sold coin.
+            ReportType (Union[Type[tr.SellReportEntry],
+                Type[tr.UnrealizedSellReportEntry]])
+
+        Returns:
+            decimal.Decimal: The sell value.
+        """
+        assert sc.op.coin == op.coin
+        percent = sc.sold / op.change
+
+        if op.selling_value:
+            sell_value = op.selling_value * percent
+        elif op.link:
+            sell_value = self.price_data.get_partial_cost(op.link, percent)
+        else:
+            sell_value = self.price_data.get_partial_cost(op, percent)
+
+        return sell_value
+
+    def _get_fee_param_dict(self, op: tr.Operation, percent: decimal.Decimal) -> dict:
+
+        # fee amount/coin/in_fiat
+        first_fee_amount = decimal.Decimal(0)
+        first_fee_coin = ""
+        first_fee_in_fiat = decimal.Decimal(0)
+        second_fee_amount = decimal.Decimal(0)
+        second_fee_coin = ""
+        second_fee_in_fiat = decimal.Decimal(0)
+        if op.fees is None or len(op.fees) == 0:
+            pass
+        elif len(op.fees) >= 1:
+            first_fee_amount, first_fee_coin, first_fee_in_fiat = self._evaluate_fee(
+                op.fees[0], percent
+            )
+        elif len(op.fees) >= 2:
+            second_fee_amount, second_fee_coin, second_fee_in_fiat = self._evaluate_fee(
+                op.fees[1], percent
+            )
+        else:
+            raise NotImplementedError("More than two fee coins are not supported")
+
+        return dict(
+            first_fee_amount=first_fee_amount,
+            first_fee_coin=first_fee_coin,
+            first_fee_in_fiat=first_fee_in_fiat,
+            second_fee_amount=second_fee_amount,
+            second_fee_coin=second_fee_coin,
+            second_fee_in_fiat=second_fee_in_fiat,
+        )
+
+    def _evaluate_sell(
+        self,
+        op: tr.Sell,
+        sc: tr.SoldCoin,
+        ReportType: Union[
+            Type[tr.SellReportEntry], Type[tr.UnrealizedSellReportEntry]
+        ] = tr.SellReportEntry,
+    ) -> None:
+        """Evaluate a (partial) sell operation.
+
+        Args:
+            op (tr.Sell): The general sell operation.
+            sc (tr.SoldCoin): The specific sold coins with their origin (sc.op).
+                `sc.sold` can be a partial sell of `op.change`.
+            ReportType (Union[Type[tr.SellReportEntry],
+                Type[tr.UnrealizedSellReportEntry]], optional):
+                The type of the report entry. Defaults to tr.SellReportEntry.
+
+        Raises:
+            NotImplementedError: When there are more than two different fee coins.
+        """
+        assert op.coin == sc.op.coin
+        assert op.change >= sc.sold
+
+        # Share the fees and sell_value proportionally to the coins sold.
+        percent = sc.sold / op.change
+
+        # Ignore fees for UnrealizedSellReportEntry.
+        fee_params = self._get_fee_param_dict(op, percent)
+        if ReportType is tr.UnrealizedSellReportEntry:
+            # Make sure, that the unrealized sell has no fees.
+            assert not any(v for v in fee_params.values())
+            # Do not give fee parameters to ReportEntry object.
+            fee_params = {}
+        buy_cost_in_fiat = self.get_buy_cost(sc)
+
+        # Taxable when sell is not more than one year after buy.
+        is_taxable = sc.op.utc_time + relativedelta(years=1) >= op.utc_time
+
+        try:
+            sell_value_in_fiat = self.get_sell_value(op, sc)
+        except Exception as e:
+            if ReportType is tr.UnrealizedSellReportEntry:
+                log.warning(
+                    "Catched the following exception while trying to query an "
+                    f"unrealized sell value for {sc.sold} {sc.op.coin} at deadline "
+                    f"on platform {sc.op.platform}. "
+                    "If you want to see your unrealized sell value "
+                    "in the evaluation, please add a price by hand in the "
+                    f"table {get_sorted_tablename(op.coin, config.FIAT)[0]} "
+                    f"at {op.utc_time}; "
+                    "The sell value for this calculation will be set to 0. "
+                    "Your unrealized sell summary will be wrong and will not "
+                    "be exported.\n"
+                    f"Catched exception: {e}"
+                )
+                sell_value_in_fiat = decimal.Decimal()
+                self.unrealized_sells_faulty = True
+            else:
+                raise e
+
+        sell_report_entry = ReportType(
+            sell_platform=op.platform,
+            buy_platform=sc.op.platform,
+            amount=sc.sold,
+            coin=op.coin,
+            sell_utc_time=op.utc_time,
+            buy_utc_time=sc.op.utc_time,
+            **fee_params,  # type: ignore[call-arg]
+            sell_value_in_fiat=sell_value_in_fiat,
+            buy_cost_in_fiat=buy_cost_in_fiat,
+            is_taxable=is_taxable,
+            taxation_type="Einkünfte aus privaten Veräußerungsgeschäften",
+            remark=op.remark,
+        )
+
+        self.tax_report_entries.append(sell_report_entry)
+
+    def evaluate_sell(
+        self,
+        op: tr.Sell,
+        sold_coins: list[tr.SoldCoin],
+    ) -> None:
+        assert op.coin != config.FIAT
+        assert in_tax_year(op)
+        assert op.change == misc.dsum(sc.sold for sc in sold_coins)
+
+        for sc in sold_coins:
+
+            if isinstance(sc.op, tr.Deposit) and sc.op.link:
+                assert (
+                    sc.op.link.change >= sc.op.change
+                ), "Withdrawal must be equal or greater than the deposited amount."
+                deposit_fee = sc.op.link.change - sc.op.change
+                sold_percent = sc.sold / sc.op.change
+                sold_deposit_fee = deposit_fee * sold_percent
+
+                for wsc in sc.op.link.partial_withdrawn_coins(sold_percent):
+                    wsc_percent = wsc.sold / sc.op.link.change
+                    wsc_deposit_fee = sold_deposit_fee * wsc_percent
+
+                    if wsc_deposit_fee:
+                        # TODO Are withdrawal/deposit fees tax relevant?
+                        log.warning(
+                            "You paid fees for withdrawal and deposit of coins. "
+                            "I am currently not sure if you can reduce your taxed "
+                            "gain with these. For now, the deposit/withdrawal fees "
+                            "are not included in the tax report. "
+                            "Please open an issue or PR if you can resolve this."
+                        )
+                        # # Deposit fees are evaluated on deposited platform.
+                        # wsc_fee_in_fiat = (
+                        #     self.price_data.get_price(
+                        #         sc.op.platform,
+                        #         sc.op.coin,
+                        #         sc.op.utc_time,
+                        #         config.FIAT,
+                        #     )
+                        #     * wsc_deposit_fee
+                        # )
+
+                    self._evaluate_sell(op, wsc)
+
+            else:
+
+                if isinstance(sc.op, tr.Deposit):
+                    # Raise a warning when a deposit link is missing.
+                    log.warning(
+                        f"You sold {sc.op.change} {sc.op.coin} which were deposited "
+                        f"from somewhere unknown onto {sc.op.platform} (see "
+                        f"{sc.op.file_path} {sc.op.line}). "
+                        "A correct tax evaluation might not be possible! "
+                        "For now, we assume that the coins were bought at "
+                        "the timestamp of the deposit. "
+                        "If these coins get sold one year after this "
+                        "the sell is not tax relevant and everything is fine."
+                    )
+
+                self._evaluate_sell(op, sc)
+
+    def _evaluate_taxation_GERMANY(self, op: tr.Operation) -> None:
+        report_entry: tr.TaxReportEntry
+
+        if isinstance(op, (tr.CoinLend, tr.Staking)):
+            # TODO determine which coins get lended/etc., use fifo if it's
+            # unclear. it might be worth to optimize the order
+            # of coins given away (is this legal?)
+            # TODO mark them as currently lended/etc., so they don't get sold
+            pass
+
+        elif isinstance(op, (tr.CoinLendEnd, tr.StakingEnd)):
+            # TODO determine which coins come back from lending/etc. use fifo
+            # if it's unclear; it might be nice to match start and
+            # end of these operations like deposit and withdrawal operations.
+            # e.g.
+            # - lending 1 coin for 2 months
+            # - lending 2 coins for 1 month
+            # - getting back 2 coins from lending
+            # --> this should be the second and third coin,
+            #     not the first and second
+            # TODO mark them as not lended/etc. anymore, so they could be sold
+            # again
+            # TODO Add Lending/Staking TaxReportEntry (duration of lend)
+            # TODO maybe add total accumulated fees?
+            #      might be impossible to match CoinInterest with CoinLend periods
+            pass
+
+        elif isinstance(op, tr.Buy):
+            # Buys and sells always come in a pair. The buying/receiving
+            # part is not tax relevant per se.
+            # The fees of this buy/sell-transaction are saved internally in
+            # both operations. The "buying fees" are only relevant when
+            # detemining the acquisition cost of the bought coins.
+            # For now we'll just add our bought coins to the balance.
+            self.add_to_balance(op)
+
+            # TODO Only adding the Buys don't bring that much. We should add
+            # all trades instead (buy with buy.link)
+            # Add to export for informational purpose.
+            # if in_tax_year(op):
+            #     fee_params = self._get_fee_param_dict(op, decimal.Decimal(1))
+            #     tax_report_entry = tr.BuyReportEntry(
+            #         platform=op.platform,
+            #         amount=op.change,
+            #         coin=op.coin,
+            #         utc_time=op.utc_time,
+            #         **fee_params,
+            #         buy_value_in_fiat=self.price_data.get_cost(op),
+            #         remark=op.remark,
+            #     )
+            #     self.tax_report_entries.append(tax_report_entry)
+
+        elif isinstance(op, tr.Sell):
+            # Buys and sells always come in a pair. The selling/redeeming
+            # time is tax relevant.
+            # Remove the sold coins and paid fees from the balance.
+            # Evaluate the sell to determine the taxed gain and other relevant
+            # informations for the tax declaration.
+            sold_coins = self.remove_from_balance(op)
+            self.remove_fees_from_balance(op.fees)
+
+            if op.coin != config.FIAT and in_tax_year(op):
+                self.evaluate_sell(op, sold_coins)
+
+        elif isinstance(op, (tr.CoinLendInterest, tr.StakingInterest)):
+            # Received coins from lending or staking. Add the received coins
+            # to the balance.
+            self.add_to_balance(op)
+
+            if in_tax_year(op):
+                # Determine the taxation type depending on the received coin.
+                if isinstance(op, tr.CoinLendInterest):
+                    if misc.is_fiat(op.coin):
+                        ReportType = tr.InterestReportEntry
+                        taxation_type = "Einkünfte aus Kapitalvermögen"
+                    else:
+                        ReportType = tr.LendingInterestReportEntry
+                        taxation_type = "Einkünfte aus sonstigen Leistungen"
+                elif isinstance(op, tr.StakingInterest):
+                    ReportType = tr.StakingInterestReportEntry
+                    taxation_type = "Einkünfte aus sonstigen Leistungen"
+                else:
+                    raise NotImplementedError
+
+                report_entry = ReportType(
+                    platform=op.platform,
+                    amount=op.change,
+                    coin=op.coin,
+                    utc_time=op.utc_time,
+                    interest_in_fiat=self.price_data.get_cost(op),
+                    taxation_type=taxation_type,
+                    remark=op.remark,
+                )
+                self.tax_report_entries.append(report_entry)
+
+        elif isinstance(op, tr.Airdrop):
+            # Depending on how you received the coins, the taxation varies.
+            # If you didn't "do anything" to get the coins, the airdrop counts
+            # as a gift.
+            self.add_to_balance(op)
+
+            if in_tax_year(op):
+                if config.ALL_AIRDROPS_ARE_GIFTS:
+                    taxation_type = "Schenkung"
+                else:
+                    taxation_type = "Einkünfte aus sonstigen Leistungen"
+                report_entry = tr.AirdropReportEntry(
+                    platform=op.platform,
+                    amount=op.change,
+                    coin=op.coin,
+                    utc_time=op.utc_time,
+                    in_fiat=self.price_data.get_cost(op),
+                    taxation_type=taxation_type,
+                    remark=op.remark,
+                )
+                self.tax_report_entries.append(report_entry)
+
+        elif isinstance(op, tr.Commission):
+            # You received a commission. It is assumed that his is a customer-
+            # recruit-customer-bonus which is taxed as `Einkünfte aus sonstigen
+            # Leistungen`.
+            self.add_to_balance(op)
+
+            if in_tax_year(op):
+                report_entry = tr.CommissionReportEntry(
+                    platform=op.platform,
+                    amount=op.change,
+                    coin=op.coin,
+                    utc_time=op.utc_time,
+                    in_fiat=self.price_data.get_cost(op),
+                    taxation_type="Einkünfte aus sonstigen Leistungen",
+                    remark=op.remark,
+                )
+                self.tax_report_entries.append(report_entry)
+
+        elif isinstance(op, tr.Deposit):
+            # Coins get deposited onto this platform/balance.
+            self.add_to_balance(op)
+
+            if op.link:
+                assert op.coin == op.link.coin
+                assert op.fees is None
+                first_fee_amount = op.link.change - op.change
+                first_fee_coin = op.coin if first_fee_amount else ""
+                first_fee_in_fiat = (
+                    self.price_data.get_price(op.platform, op.coin, op.utc_time)
+                    if first_fee_amount
+                    else decimal.Decimal()
+                )
+                report_entry = tr.TransferReportEntry(
+                    first_platform=op.platform,
+                    second_platform=op.link.platform,
+                    amount=op.change,
+                    coin=op.coin,
+                    first_utc_time=op.utc_time,
+                    second_utc_time=op.link.utc_time,
+                    first_fee_amount=first_fee_amount,
+                    first_fee_coin=first_fee_coin,
+                    first_fee_in_fiat=first_fee_in_fiat,
+                    remark=op.remark,
+                )
+            else:
+                assert op.fees is None
+                report_entry = tr.DepositReportEntry(
+                    platform=op.platform,
+                    amount=op.change,
+                    coin=op.coin,
+                    utc_time=op.utc_time,
+                    first_fee_amount=decimal.Decimal(),
+                    first_fee_coin="",
+                    first_fee_in_fiat=decimal.Decimal(),
+                    remark=op.remark,
+                )
+
+            self.tax_report_entries.append(report_entry)
+
+        elif isinstance(op, tr.Withdrawal):
+            # Coins get moved to somewhere else. At this point, we only have
+            # to remove them from the corresponding balance.
+            op.withdrawn_coins = self.remove_from_balance(op)
+
+            if not op.has_link:
+                assert op.fees is None
+                report_entry = tr.WithdrawalReportEntry(
+                    platform=op.platform,
+                    amount=op.change,
+                    coin=op.coin,
+                    utc_time=op.utc_time,
+                    first_fee_amount=decimal.Decimal(),
+                    first_fee_coin="",
+                    first_fee_in_fiat=decimal.Decimal(),
+                    remark=op.remark,
+                )
+                self.tax_report_entries.append(report_entry)
+
+        else:
+            raise NotImplementedError
+
+    def _evaluate_unrealized_sells(self) -> None:
+        """Evaluate the unrealized sells at taxation deadline."""
+        for balance in self._balances.values():
+            # Get all left over coins from the balance.
+            sold_coins = balance.remove_all()
+            for sc in sold_coins:
+                # Sum up the portfolio at deadline.
+                # If the evaluation was done with a virtual single depot,
+                # the values per platform might not match the real values at
+                # platform.
+                self.multi_depot_portfolio[sc.op.platform][sc.op.coin] += sc.sold
+                self.single_depot_portfolio[sc.op.coin] += sc.sold
+
+                if sc.op.coin != config.FIAT:
+                    # "Sell" these coins which makes it possible to calculate
+                    # the unrealized gain afterwards.
+                    unrealized_sell = tr.Sell(
+                        utc_time=TAX_DEADLINE,
+                        platform=sc.op.platform,
+                        change=sc.sold,
+                        coin=sc.op.coin,
+                        line=[-1],
+                        file_path=Path(),
+                        fees=None,
+                    )
+                    self._evaluate_sell(
+                        unrealized_sell,
+                        sc,
+                        ReportType=tr.UnrealizedSellReportEntry,
+                    )
+
+    ###########################################################################
+    # General tax evaluation functions.
+    ###########################################################################
 
     def evaluate_taxation(self) -> None:
-        """Evaluate the taxation using country specific function."""
+        """Evaluate the taxation using country specific functions."""
         log.debug("Starting evaluation...")
 
         assert all(
             op.utc_time.year <= config.TAX_YEAR for op in self.book.operations
         ), "For tax evaluation, no operation should happen after the tax year."
 
-        if config.MULTI_DEPOT:
-            # Evaluate taxation separated by platforms and coins.
-            for _, operations in misc.group_by(
-                self.book.operations, "platform"
-            ).items():
-                self._evaluate_taxation_per_coin(operations)
-        else:
-            # Evaluate taxation separated by coins in a single virtual depot.
-            self._evaluate_taxation_per_coin(self.book.operations)
+        # Sort the operations by time.
+        operations = tr.sort_operations(self.book.operations, ["utc_time"])
+
+        # Evaluate the operations one by one.
+        # Difference between the config.MULTI_DEPOT and "single depot" method
+        # is done by keeping balances per platform and coin or only
+        # per coin (see self.balance).
+        for operation in operations:
+            self.__evaluate_taxation(operation)
+
+        # Make sure, that all fees were paid.
+        for balance in self._balances.values():
+            balance.sanity_check()
+
+        # Evaluate the balance at deadline to calculate unrealized sells.
+        if config.CALCULATE_UNREALIZED_GAINS:
+            self._evaluate_unrealized_sells()
+
+    ###########################################################################
+    # Export / Summary
+    ###########################################################################
 
     def print_evaluation(self) -> None:
         """Print short summary of evaluation to stdout."""
-        eval_str = "Evaluation:\n\n"
+        eval_str = (
+            f"Your tax evaluation for {config.TAX_YEAR} "
+            f"(Deadline {TAX_DEADLINE.strftime('%d.%m.%Y')}):\n\n"
+        )
+        for taxation_type, tax_report_entries in misc.group_by(
+            self.tax_report_entries, "taxation_type"
+        ).items():
+            if taxation_type is None:
+                continue
+            taxable_gain = misc.dsum(
+                tre.taxable_gain_in_fiat
+                for tre in tax_report_entries
+                if not isinstance(tre, tr.UnrealizedSellReportEntry)
+            )
+            eval_str += f"{taxation_type}: {taxable_gain:.2f} {config.FIAT}\n"
 
-        # Summarize the tax evaluation.
-        if self.tax_events:
-            eval_str += f"Your tax evaluation for {config.TAX_YEAR}:\n"
-            for taxation_type, tax_events in misc.group_by(
-                self.tax_events, "taxation_type"
-            ).items():
-                taxed_gains = sum(tx.taxed_gain for tx in tax_events)
-                eval_str += f"{taxation_type}: {taxed_gains:.2f} {config.FIAT}\n"
+        unrealized_report_entries = [
+            tre
+            for tre in self.tax_report_entries
+            if isinstance(tre, tr.UnrealizedSellReportEntry)
+        ]
+        assert all(tre.gain_in_fiat is not None for tre in unrealized_report_entries)
+        unrealized_gain = misc.dsum(
+            misc.not_none(tre.gain_in_fiat) for tre in unrealized_report_entries
+        )
+        unrealized_taxable_gain = misc.dsum(
+            tre.taxable_gain_in_fiat for tre in unrealized_report_entries
+        )
+
+        if config.CALCULATE_UNREALIZED_GAINS:
+            eval_str += (
+                "----------------------------------------\n"
+                f"Unrealized gain: {unrealized_gain:.2f} {config.FIAT}\n"
+                "Unrealized taxable gain at deadline: "
+                f"{unrealized_taxable_gain:.2f} {config.FIAT}\n"
+                "----------------------------------------\n"
+                f"Your portfolio on {TAX_DEADLINE.strftime('%x')} was:\n"
+            )
+
+        if config.MULTI_DEPOT:
+            for platform, platform_portfolio in self.multi_depot_portfolio.items():
+                for coin, amount in platform_portfolio.items():
+                    eval_str += f"{platform} {coin}: {amount:.2f}\n"
         else:
-            eval_str += (
-                "Either the evaluation has not run or there are no tax events "
-                f"for {config.TAX_YEAR}.\n"
-            )
-
-        # Summarize the virtual sell, if all left over coins would be sold right now.
-        if self.virtual_tax_events:
-            assert config.CALCULATE_UNREALIZED_GAINS
-            latest_operation = max(
-                self.virtual_tax_events, key=lambda tx: tx.op.utc_time
-            )
-            lo_date = latest_operation.op.utc_time.strftime("%d.%m.%y")
-
-            invsted = sum(tx.sell_price for tx in self.virtual_tax_events)
-            real_gains = sum(tx.real_gain for tx in self.virtual_tax_events)
-            taxed_gains = sum(tx.taxed_gain for tx in self.virtual_tax_events)
-            eval_str += "\n"
-            eval_str += (
-                f"Deadline {config.TAX_YEAR}: {lo_date}\n"
-                f"You were invested with {invsted:.2f} {config.FIAT}.\n"
-                f"If you would have sold everything then, "
-                f"you would have realized {real_gains:.2f} {config.FIAT} gains "
-                f"({taxed_gains:.2f} {config.FIAT} taxed gain).\n"
-            )
-
-            eval_str += "\n"
-            eval_str += f"Your portfolio on {lo_date} was:\n"
-            for tx in sorted(
-                self.virtual_tax_events,
-                key=lambda tx: tx.sell_price,
-                reverse=True,
-            ):
-                eval_str += (
-                    f"{tx.op.platform}: "
-                    f"{tx.op.change:.6f} {tx.op.coin} > "
-                    f"{tx.sell_price:.2f} {config.FIAT} "
-                    f"({tx.real_gain:.2f} gain, {tx.taxed_gain:.2f} taxed gain)\n"
-                )
+            for coin, amount in self.single_depot_portfolio.items():
+                eval_str += f"{coin}: {amount:.2f}\n"
 
         log.info(eval_str)
 
-    def export_evaluation_as_csv(self) -> Path:
-        """Export detailed summary of all tax events to CSV.
+    def export_evaluation_as_excel(self) -> Path:
+        """Export detailed summary of all tax events to Excel.
 
         File will be placed in export/ with ascending revision numbers
         (in case multiple evaluations will be done).
 
-        When no tax events occured, the CSV will be exported only with
-        a header line.
+        When no tax events occured, the Excel will be exported only with
+        a header line and a general sheet.
 
         Returns:
             Path: Path to the exported file.
         """
         file_path = misc.get_next_file_path(
-            config.EXPORT_PATH, str(config.TAX_YEAR), "csv"
+            config.EXPORT_PATH, str(config.TAX_YEAR), ["xlsx", "log"]
+        )
+        wb = xlsxwriter.Workbook(file_path, {"remove_timezone": True})
+        datetime_format = wb.add_format({"num_format": "dd.mm.yyyy hh:mm;@"})
+        date_format = wb.add_format({"num_format": "dd.mm.yyyy;@"})
+        change_format = wb.add_format({"num_format": "#,##0.00000000"})
+        fiat_format = wb.add_format({"num_format": "#,##0.00"})
+        header_format = wb.add_format(
+            {
+                "bold": True,
+                "border": 5,
+                "align": "center",
+                "valign": "vcenter",
+                "text_wrap": True,
+            }
         )
 
-        with open(file_path, "w", newline="", encoding="utf8") as f:
-            writer = csv.writer(f)
-            # Add embedded metadata info
-            writer.writerow(
-                ["# software", "CoinTaxman <https://github.com/provinzio/CoinTaxman>"]
+        def get_format(field: dataclasses.Field) -> Optional[xlsxwriter.format.Format]:
+            if field.type in ("datetime.datetime", "Optional[datetime.datetime]"):
+                return datetime_format
+            if field.type in ("decimal.Decimal", "Optional[decimal.Decimal]"):
+                if field.name.endswith("in_fiat"):
+                    return fiat_format
+                return change_format
+            return None
+
+        #
+        # General
+        #
+        last_day = TAX_DEADLINE.date()
+        first_day = last_day.replace(month=1, day=1)
+        time_period = f"{first_day.strftime('%x')}–{last_day.strftime('%x')}"
+        ws_general = wb.add_worksheet("Allgemein")
+        row = 0
+        ws_general.merge_range(row, 0, 0, 1, "Allgemeine Daten", header_format)
+        row += 1
+        ws_general.write_row(
+            row, 0, ["Zeitraum des Steuerberichts", time_period], date_format
+        )
+        row += 1
+        ws_general.write_row(
+            row, 0, ["Verbrauchsfolgeverfahren", config.PRINCIPLE.name], date_format
+        )
+        row += 1
+        ws_general.write_row(
+            row,
+            0,
+            ["Methode", "Multi-Depot" if config.MULTI_DEPOT else "Single-Depot"],
+            date_format,
+        )
+        row += 1
+        ws_general.write_row(row, 0, ["Alle Zeiten in", config.LOCAL_TIMEZONE_KEY])
+        row += 1
+        ws_general.write_row(
+            row,
+            0,
+            ["Erstellt am", datetime.datetime.now(config.LOCAL_TIMEZONE)],
+            datetime_format,
+        )
+        row += 1
+        ws_general.write_row(
+            row, 0, ["Software", "CoinTaxman <https://github.com/provinzio/CoinTaxman>"]
+        )
+        row += 1
+        commit_hash = misc.get_current_commit_hash(default="undetermined")
+        ws_general.write_row(row, 0, ["Version (Commit)", commit_hash])
+        row += 1
+        # Set column format and freeze first row.
+        ws_general.set_column(0, 0, 26)
+        ws_general.set_column(1, 1, 21)
+        ws_general.freeze_panes(1, 0)
+
+        #
+        # Add summary of tax relevant amounts.
+        #
+        ws_summary = wb.add_worksheet("Zusammenfassung")
+        ws_summary.write_row(
+            0,
+            0,
+            [
+                "Einkunftsart",
+                "steuerbarer Veräußerungserlös in EUR",
+                "steuerbare Anschaffungskosten in EUR",
+                "steuerbare Werbungskosten in EUR",
+                "steuerbarer Gewinn/Verlust in EUR",
+            ],
+            header_format,
+        )
+        row = 1
+        for taxation_type, tax_report_entries in misc.group_by(
+            self.tax_report_entries, "taxation_type"
+        ).items():
+            if taxation_type is None:
+                continue
+            first_value_in_fiat = None
+            second_value_in_fiat = None
+            total_fee_in_fiat = None
+            if taxation_type == "Einkünfte aus privaten Veräußerungsgeschäften":
+                first_value_in_fiat = misc.dsum(
+                    misc.cdecimal(tre.first_value_in_fiat)
+                    for tre in tax_report_entries
+                    if tre.taxable_gain_in_fiat
+                    and not isinstance(tre, tr.UnrealizedSellReportEntry)
+                )
+                second_value_in_fiat = misc.dsum(
+                    misc.cdecimal(tre.second_value_in_fiat)
+                    for tre in tax_report_entries
+                    if (
+                        not isinstance(tre, tr.UnrealizedSellReportEntry)
+                        and tre.taxable_gain_in_fiat
+                    )
+                )
+                total_fee_in_fiat = misc.dsum(
+                    misc.cdecimal(tre.total_fee_in_fiat)
+                    for tre in tax_report_entries
+                    if (
+                        not isinstance(tre, tr.UnrealizedSellReportEntry)
+                        and tre.taxable_gain_in_fiat
+                    )
+                )
+            taxable_gain = misc.dsum(
+                tre.taxable_gain_in_fiat
+                for tre in tax_report_entries
+                if not isinstance(tre, tr.UnrealizedSellReportEntry)
             )
-            commit_hash = misc.get_current_commit_hash(default="undetermined")
-            writer.writerow(["# commit", commit_hash])
-            writer.writerow(["# updated", datetime.date.today().strftime("%x")])
-
-            header = [
-                "Date",
-                "Taxation Type",
-                f"Taxed Gain in {config.FIAT}",
-                "Action",
-                "Amount",
-                "Asset",
-                f"Sell Price in {config.FIAT}",
-                "Remark",
+            ws_summary.write_row(
+                row,
+                0,
+                [
+                    taxation_type,
+                    first_value_in_fiat,
+                    second_value_in_fiat,
+                    total_fee_in_fiat,
+                    taxable_gain,
+                ],
+            )
+            row += 1
+        row += 2
+        if not self.unrealized_sells_faulty:
+            ws_summary.merge_range(
+                row, 0, row, 4, "Unrealisierte Einkünfte", header_format
+            )
+            ws_summary.write_row(
+                row + 1,
+                0,
+                [
+                    "Einkunftsart",
+                    "Unrealisierter Veräußerungserlös in EUR",
+                    "steuerbare Anschaffungskosten in EUR",
+                    "Unrealisierter Gewinn/Verlust in EUR",
+                    "davon wären steuerbar in EUR",
+                ],
+                header_format,
+            )
+            taxation_type = "Einkünfte aus privaten Veräußerungsgeschäften"
+            unrealized_report_entries = [
+                tre
+                for tre in self.tax_report_entries
+                if isinstance(tre, tr.UnrealizedSellReportEntry)
             ]
-            writer.writerow(header)
-            # Tax events are currently sorted by coin. Sort by time instead.
-            for tx in sorted(self.tax_events, key=lambda tx: tx.op.utc_time):
-                line = [
-                    tx.op.utc_time,
-                    tx.taxation_type,
-                    tx.taxed_gain,
-                    tx.op.__class__.__name__,
-                    tx.op.change,
-                    tx.op.coin,
-                    tx.sell_price,
-                    tx.remark,
-                ]
-                writer.writerow(line)
+            assert all(
+                taxation_type == tre.taxation_type for tre in unrealized_report_entries
+            )
+            assert all(
+                tre.gain_in_fiat is not None for tre in unrealized_report_entries
+            )
+            first_value_in_fiat = misc.dsum(
+                misc.cdecimal(tre.first_value_in_fiat)
+                for tre in tax_report_entries
+                if isinstance(tre, tr.UnrealizedSellReportEntry)
+            )
+            second_value_in_fiat = misc.dsum(
+                misc.cdecimal(tre.second_value_in_fiat)
+                for tre in tax_report_entries
+                if isinstance(tre, tr.UnrealizedSellReportEntry)
+            )
+            total_gain_fiat = misc.dsum(
+                misc.cdecimal(tre.gain_in_fiat)
+                for tre in tax_report_entries
+                if isinstance(tre, tr.UnrealizedSellReportEntry)
+            )
+            taxable_gain = misc.dsum(
+                tre.taxable_gain_in_fiat
+                for tre in tax_report_entries
+                if isinstance(tre, tr.UnrealizedSellReportEntry)
+            )
+            ws_summary.write_row(
+                row + 2,
+                0,
+                [
+                    taxation_type,
+                    first_value_in_fiat,
+                    second_value_in_fiat,
+                    total_gain_fiat,
+                    taxable_gain,
+                ],
+            )
+        # Set column format and freeze first row.
+        ws_summary.set_column(0, 0, 43)
+        ws_summary.set_column(1, 2, 18.29, fiat_format)
+        ws_summary.set_column(3, 4, 15.57, fiat_format)
+        ws_summary.freeze_panes(1, 0)
 
+        #
+        # Sheets per ReportType
+        #
+        for event_type, tax_report_entries in misc.group_by(
+            tr.sort_tax_report_entries(self.tax_report_entries), "event_type"
+        ).items():
+            ReportType = type(tax_report_entries[0])
+
+            if (
+                self.unrealized_sells_faulty
+                and ReportType is tr.UnrealizedSellReportEntry
+            ):
+                continue
+
+            ws = wb.add_worksheet(event_type)
+
+            # Header
+            labels = ReportType.excel_labels()
+            ws.write_row(0, 0, labels, header_format)
+            # Set height
+            ws.set_row(0, 45)
+            ws.autofilter(0, 0, 0, len(labels) - 1)
+
+            # Data
+            for row, entry in enumerate(tax_report_entries, 1):
+                ws.write_row(row, 0, entry.excel_values())
+
+            # Set column format and freeze first row.
+            for col, (field, width, hidden) in enumerate(
+                ReportType.excel_field_and_width()
+            ):
+                cell_format = get_format(field)
+                ws.set_column(
+                    col,
+                    col,
+                    width,
+                    cell_format,
+                    dict(hidden=hidden),
+                )
+            ws.freeze_panes(1, 0)
+
+        wb.close()
         log.info("Saved evaluation in %s.", file_path)
         return file_path

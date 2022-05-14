@@ -28,17 +28,11 @@ import requests
 import config
 import log_config
 import misc
-import transaction
+import transaction as tr
 from core import kraken_pair_map
 from database import get_price_db, get_tablenames_from_db, mean_price_db, set_price_db
 
 log = log_config.getLogger(__name__)
-
-
-# TODO Keep database connection open?
-# TODO Combine multiple exchanges in one file?
-#      - Add a database for each exchange (added with ATTACH DATABASE)
-#      - Tables in database stay the same
 
 
 class FallbackPriceNotFound(Exception):
@@ -590,7 +584,7 @@ class PriceData:
             try:
                 get_price = getattr(self, f"_get_price_{platform}")
             except AttributeError:
-                raise NotImplementedError("Unable to read data from %s", platform)
+                raise NotImplementedError(f"Unable to read data from {platform=}")
 
             price = get_price(coin, utc_time, reference_coin, **kwargs)
             assert isinstance(price, decimal.Decimal)
@@ -606,16 +600,24 @@ class PriceData:
 
     def get_cost(
         self,
-        tr: Union[transaction.Operation, transaction.SoldCoin],
+        op_sc: Union[tr.Operation, tr.SoldCoin],
         reference_coin: str = config.FIAT,
     ) -> decimal.Decimal:
-        op = tr if isinstance(tr, transaction.Operation) else tr.op
+        op = op_sc if isinstance(op_sc, tr.Operation) else op_sc.op
         price = self.get_price(op.platform, op.coin, op.utc_time, reference_coin)
-        if isinstance(tr, transaction.Operation):
-            return price * tr.change
-        if isinstance(tr, transaction.SoldCoin):
-            return price * tr.sold
+        if isinstance(op_sc, tr.Operation):
+            return price * op_sc.change
+        if isinstance(op_sc, tr.SoldCoin):
+            return price * op_sc.sold
         raise NotImplementedError
+
+    def get_partial_cost(
+        self,
+        op_sc: Union[tr.Operation, tr.SoldCoin],
+        percent: decimal.Decimal,
+        reference_coin: str = config.FIAT,
+    ) -> decimal.Decimal:
+        return percent * self.get_cost(op_sc, reference_coin=reference_coin)
 
     def check_database(self):
         stats = {}

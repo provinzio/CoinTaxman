@@ -25,10 +25,12 @@ from pathlib import Path
 from typing import (
     Any,
     Callable,
+    Iterable,
     Optional,
     SupportsFloat,
     SupportsInt,
     Tuple,
+    Type,
     TypeVar,
     Union,
     cast,
@@ -66,6 +68,33 @@ def xdecimal(
         x = str(x)
     assert x is None or isinstance(x, str) or isinstance(x, decimal.Decimal)
     return None if x is None or x == "" else decimal.Decimal(x)
+
+
+def cdecimal(x: Union[None, str, int, float, decimal.Decimal]) -> decimal.Decimal:
+    """Convert to decimal and change None to 0.
+
+    See xdecimal for further informations.
+
+    Args:
+        x (Union[None, str, int, float, decimal.Decimal])
+
+    Returns:
+        decimal.Decimal
+    """
+    dec = xdecimal(x)
+    return decimal.Decimal() if dec is None else dec
+
+
+def dsum(__iterable: Iterable[decimal.Decimal]) -> decimal.Decimal:
+    """Builtin sum function, which always returns a decimal.Decimal.
+
+    Args:
+        __iterable (Iterable[decimal.Decimal])
+
+    Returns:
+        decimal.Decimal
+    """
+    return decimal.Decimal(sum(__iterable))
 
 
 def force_decimal(x: Union[None, str, int, float, decimal.Decimal]) -> decimal.Decimal:
@@ -172,20 +201,59 @@ def parse_iso_timestamp_to_decimal_timestamp(d: str) -> decimal.Decimal:
     return to_decimal_timestamp(datetime.datetime.fromisoformat(d))
 
 
-def group_by(lst: L, key: str) -> dict[Any, L]:
+def group_by(lst: L, key: Union[str, list[str]]) -> dict[Any, L]:
     """Group a list of objects by `key`.
 
     Args:
-        lst (list)
-        key (str)
+        lst (L)
+        key (Union[str, list[str]])
 
     Returns:
-        dict[Any, list]: Dict with different `key`as keys.
+        dict[Any, L]: Dict with different `key`as keys.
     """
     d = collections.defaultdict(list)
-    for e in lst:
-        d[getattr(e, key)].append(e)
+    if isinstance(key, str):
+        for e in lst:
+            d[getattr(e, key)].append(e)
+    elif isinstance(key, list):
+        assert all(isinstance(k, str) for k in key)
+        for e in lst:
+            d[tuple(getattr(e, k) for k in key)].append(e)
+    else:
+        raise TypeError
     return dict(d)
+
+
+T = TypeVar("T")
+
+
+def sort_by_order_and_key(
+    order: list[Type[T]],
+    list_: list[T],
+    keys: Optional[list[str]] = None,
+) -> list[T]:
+    """Sort a list by list of existing types and arbitrary keys/members.
+
+    If the type is missing in order list. The entry will be placed first.
+
+    Args:
+        order (list[Type[T]]): List with types in correct order.
+        operations (list[T]): List with entries to be sorted.
+        keys (list[str], optional): List of members which will be considered
+                                    when sorting. Defaults to None.
+
+    Returns:
+        list[T]: Sorted entries by `order` and specific keys.
+    """
+
+    def key_function(op: T) -> tuple:
+        try:
+            idx = order.index(type(op))
+        except ValueError:
+            idx = 0
+        return tuple(([getattr(op, key) for key in keys] if keys else []) + [idx])
+
+    return sorted(list_, key=key_function)
 
 
 __delayed: dict[int, datetime.datetime] = {}
@@ -212,18 +280,20 @@ def delayed(func: F) -> F:
 
 
 def is_fiat(symbol: Union[str, core.Fiat]) -> bool:
-    """Check if `symbol` is a fiat.
+    """Check if `symbol` is a fiat currency.
 
     Args:
-        fiat (str): Currency Symbol.
+        fiat (Union[str, core.Fiat]): Currency Symbol.
 
     Returns:
-        bool: True if `symbol` is fiat. False otherwise.
+        bool: True if `symbol` is a fiat currency. False otherwise.
     """
     return isinstance(symbol, core.Fiat) or symbol in core.Fiat.__members__
 
 
-def get_next_file_path(path: Path, base_filename: str, extension: str) -> Path:
+def get_next_file_path(
+    path: Path, base_filename: str, extensions: Union[str, list[str]]
+) -> Path:
     """Looking for the next free filename in format {base_filename}_revXXX.
 
     The revision number starts with 001 and will always be +1 from the highest
@@ -232,7 +302,7 @@ def get_next_file_path(path: Path, base_filename: str, extension: str) -> Path:
     Args:
         path (Path)
         base_filename (str)
-        extension (str)
+        extension (Union[str, list[str]])
 
     Raises:
         AssertitionError: When {base_filename}_rev999.{extension}
@@ -242,7 +312,10 @@ def get_next_file_path(path: Path, base_filename: str, extension: str) -> Path:
         Path: Path to next free file.
     """
     i = 1
-    regex = re.compile(base_filename + r"_rev(\d{3})." + extension)
+    extensions = [extensions] if isinstance(extensions, str) else extensions
+    extension = extensions[0]
+    regex = re.compile(base_filename + r"_rev(\d{3}).(" + "|".join(extensions) + ")")
+
     for p in path.iterdir():
         if p.is_file():
             if m := regex.match(p.name):
@@ -267,3 +340,9 @@ def get_current_commit_hash(default: Optional[str] = None) -> str:
         if default is None:
             raise RuntimeError("Unable to determine commit hash") from e
         return default
+
+
+def not_none(v: Optional[T]) -> T:
+    if v is None:
+        raise ValueError()
+    return v
