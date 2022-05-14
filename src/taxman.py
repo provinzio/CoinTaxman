@@ -295,7 +295,21 @@ class Taxman:
 
         is_taxable = not config.IS_LONG_TERM(sc.op.utc_time, op.utc_time)
 
-        sell_value_in_fiat = self.get_sell_value(op, sc, ReportType)
+        try:
+            sell_value_in_fiat = self.get_sell_value(op, sc, ReportType)
+        except Exception as e:
+            if ReportType is tr.UnrealizedSellReportEntry:
+                log.warning(
+                    "Catched the following exception while trying to query an "
+                    f"unrealized sell value for {sc.sold} {sc.op.coin} at deadline. "
+                    "The sell value will be set to 0. "
+                    "Your unrealized sell summary will be wrong and will not "
+                    "be exported\n"
+                    f"Catched exception: {e}"
+                )
+                sell_value_in_fiat = decimal.Decimal()
+            else:
+                raise e
 
         sell_report_entry = ReportType(
             sell_platform=op.platform,
