@@ -397,6 +397,8 @@ class Book:
                             row,
                             file_path,
                         )
+                    else:
+                        raise NotImplementedError(f"unknown operation type {operation}")
 
                     if eur_fee:
                         self.append_operation(
