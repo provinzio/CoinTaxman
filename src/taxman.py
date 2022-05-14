@@ -397,19 +397,21 @@ class Taxman:
             # For now we'll just add our bought coins to the balance.
             self.add_to_balance(op)
 
+            # TODO Only adding the Buys don't bring that much. We should add
+            # all trades instead (buy with buy.link)
             # Add to export for informational purpose.
-            if in_tax_year(op):
-                fee_params = self._get_fee_param_dict(op, decimal.Decimal(1))
-                tax_report_entry = tr.BuyReportEntry(
-                    platform=op.platform,
-                    amount=op.change,
-                    coin=op.coin,
-                    utc_time=op.utc_time,
-                    **fee_params,
-                    buy_value_in_fiat=self.price_data.get_cost(op),
-                    remark=op.remark,
-                )
-                self.tax_report_entries.append(tax_report_entry)
+            # if in_tax_year(op):
+            #     fee_params = self._get_fee_param_dict(op, decimal.Decimal(1))
+            #     tax_report_entry = tr.BuyReportEntry(
+            #         platform=op.platform,
+            #         amount=op.change,
+            #         coin=op.coin,
+            #         utc_time=op.utc_time,
+            #         **fee_params,
+            #         buy_value_in_fiat=self.price_data.get_cost(op),
+            #         remark=op.remark,
+            #     )
+            #     self.tax_report_entries.append(tax_report_entry)
 
         elif isinstance(op, tr.Sell):
             # Buys and sells always come in a pair. The selling/redeeming
