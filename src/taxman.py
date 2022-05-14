@@ -713,7 +713,7 @@ class Taxman:
                 "bold": True,
                 "border": 5,
                 "align": "center",
-                "valign": "center",
+                "valign": "vcenter",
                 "text_wrap": True,
             }
         )
