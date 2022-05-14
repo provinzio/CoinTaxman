@@ -367,9 +367,11 @@ class Taxman:
                         f"You sold {sc.op.change} {sc.op.coin} which were deposited "
                         f"from somewhere unknown onto {sc.op.platform} (see "
                         f"{sc.op.file_path} {sc.op.line}). "
-                        "A correct tax evaluation is not possible! "
+                        "A correct tax evaluation might not be possible! "
                         "For now, we assume that the coins were bought at "
-                        "the timestamp of the deposit."
+                        "the timestamp of the deposit. "
+                        "If these coins get sold one year after this "
+                        "the sell is not tax relevant and everything is fine."
                     )
 
                 self._evaluate_sell(op, sc)
