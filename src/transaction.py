@@ -803,7 +803,7 @@ class CommissionReportEntry(AirdropReportEntry):
 
 
 class TransferReportEntry(TaxReportEntry):
-    event_type = "Ein-& Auszahlungen"
+    event_type = "Ein-&Auszahlungen"
     abs_gain_loss = True
 
     def __init__(
