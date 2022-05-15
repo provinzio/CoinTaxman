@@ -754,11 +754,23 @@ class Taxman:
         ws_general.write_row(
             row,
             0,
-            ["Methode", "Multi-Depot" if config.MULTI_DEPOT else "Single-Depot"],
+            [
+                "Walletübergreifende Betrachtung?",
+                "Nein, separate Betrachtung je Wallet"
+                if config.MULTI_DEPOT
+                else (
+                    "Ja, Zusammenfassung aller Transaktion in einer virtuellen Wallet "
+                    "(Hinweis: ausgewiesene Bestände können sich von der Bilanz der "
+                    "einzelnen Wallets unterscheiden)"
+                ),
+            ],
             date_format,
         )
         row += 1
-        ws_general.write_row(row, 0, ["Alle Zeiten in", config.LOCAL_TIMEZONE_KEY])
+        ws_general.write_row(
+            row, 0, ["Alle Zeiten in Zeitzone", config.LOCAL_TIMEZONE_KEY]
+        )
+        row += 1
         row += 1
         ws_general.write_row(
             row,
@@ -775,7 +787,7 @@ class Taxman:
         ws_general.write_row(row, 0, ["Version (Commit)", commit_hash])
         row += 1
         # Set column format and freeze first row.
-        ws_general.set_column(0, 0, 26)
+        ws_general.set_column(0, 0, 32)
         ws_general.set_column(1, 1, 21)
         ws_general.freeze_panes(1, 0)
 
