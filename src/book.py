@@ -21,7 +21,7 @@ import decimal
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Counter, Optional
 
 import config
 import log_config
@@ -1582,14 +1582,25 @@ class Book:
                     )
 
     def resolve_trades(self) -> None:
+        # Filter operations to only contain trades.
+        filtered_ops = [
+            op
+            for op in self.operations
+            if op.type_name
+            in [
+                tr.Buy.type_name_c(),
+                tr.Sell.type_name_c(),
+            ]
+        ]
+
         # Match trades which belong together (traded at same time).
-        for _, _operations in misc.group_by(self.operations, "platform").items():
+        for _, _operations in misc.group_by(filtered_ops, "platform").items():
             for _, matching_operations in misc.group_by(
                 _operations, "utc_time"
             ).items():
                 # Count matching operations by type with dict
                 # { operation typename: list of operations }
-                t_op = collections.defaultdict(list)
+                t_op = collections.defaultdict(list[tr.Operation])
                 for op in matching_operations:
                     t_op[op.type_name].append(op)
 
@@ -1652,6 +1663,46 @@ class Book:
                             buy_op, percent
                         )
                     continue
+
+                # Double buy/sell-pairs via a "bridge" coin at a
+                # particular utc_time (e.g. sell btc/usdt and buy eth/usdt)
+                # Find the coin that has one buy and one sell op
+                bridge_coin = Counter(
+                    [op.coin for op in t_op[tr.Buy.type_name_c()]]
+                ) & Counter([op.coin for op in t_op[tr.Sell.type_name_c()]])
+
+                is_double_buy_sell_pair = all(
+                    (
+                        len(matching_operations) == 4,
+                        len(t_op[tr.Buy.type_name_c()]) == 2,
+                        len(t_op[tr.Sell.type_name_c()]) == 2,
+                        len(bridge_coin) == 1,
+                    )
+                )
+                if is_double_buy_sell_pair:
+                    # Get the name of the bridge coin
+                    bridge_coin_name = next(bridge_coin.elements())
+
+                    # Iterate over all ops and add links accordingly
+                    for buy_op in t_op[tr.Buy.type_name_c()]:
+                        assert isinstance(buy_op, tr.Buy)
+                        assert buy_op.link is buy_op.buying_cost is None
+                        for sell_op in t_op[tr.Sell.type_name_c()]:
+                            assert isinstance(sell_op, tr.Sell)
+                            assert sell_op.selling_value is None
+                            if sell_op.link is not None:
+                                continue
+                            is_valid_pair = [buy_op.coin, sell_op.coin].count(
+                                bridge_coin_name
+                            ) == 1
+                            if is_valid_pair:
+                                buy_op.link = sell_op
+                                sell_op.link = buy_op
+                            else:
+                                assert True, "This should not happen"
+                    continue
+
+                log.warning(f"Failed: {matching_operations}")
 
     def read_file(self, file_path: Path) -> None:
         """Import transactions form an account statement.
