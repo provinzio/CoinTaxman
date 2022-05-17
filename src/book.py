@@ -1527,8 +1527,10 @@ class Book:
             in [tr.Buy.type_name_c(), tr.Sell.type_name_c(), tr.Fee.type_name_c()]
         ]
 
-        # Match trades which belong together (traded at same time) and add belonging fees.
+        # Cache for sell ops if the belonging buy op happens at a later utc_time
         bnb_small_asset_sell_cache: list[tr.Sell] = []
+
+        # Match trades which belong together (traded at same time) and add belonging fees.
         for _, _operations in misc.group_by(filtered_ops, "platform").items():
             for _, matching_operations in misc.group_by(
                 _operations, "utc_time"
@@ -1568,9 +1570,10 @@ class Book:
                     sell_op.fees = fees
                     continue
 
-                # Double buy/sell-pairs via a "bridge" coin at a
-                # particular utc_time (e.g. sell btc/usdt and buy eth/usdt)
-                # Find the coin that has one buy op and one sell op
+                # Double buy/sell-pairs via a "bridge" coin
+                # e.g. sell btc/usdt and buy eth/usdt (usdt as a bridge coin)
+
+                # Find the bridge coin which has one buy op and one sell op
                 buy_coins = set([op.coin for op in t_op[tr.Buy.type_name_c()]])
                 sell_coins = set([op.coin for op in t_op[tr.Sell.type_name_c()]])
                 bridge_coins = buy_coins & sell_coins
@@ -1626,12 +1629,13 @@ class Book:
                 # Calculate the buying cost of this type of operation by all
                 # small asset sells.
                 # This method relies on the operations being sorted by utc_time.
-                is_binance_bnb_small_asset_transfer = all(op.platform == "binance" for op in matching_operations),
+                is_binance_bnb_small_asset_transfer = all(
+                    op.platform == "binance" for op in matching_operations
+                )
 
                 if is_binance_bnb_small_asset_transfer:
                     if len(t_op[tr.Buy.type_name_c()]) == 0:
                         bnb_small_asset_sell_cache += t_op[tr.Sell.type_name_c()]
-                        continue
                     else:
                         (buy_op,) = t_op[tr.Buy.type_name_c()]
                         assert isinstance(buy_op, tr.Buy)
@@ -1655,7 +1659,7 @@ class Book:
                             )
                         # Clear cache after all sell ops are accounted for.
                         bnb_small_asset_sell_cache.clear()
-                        continue
+                    continue
 
                 log.warning(f"Matching trades failed ops={t_op}")
 
