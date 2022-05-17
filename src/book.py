@@ -1616,7 +1616,7 @@ class Book:
                             else:
                                 assert True, "This should not happen"
                     if any(op.coin == "BNB" for op in t_op[tr.Fee.type_name_c()]):
-                        log.debug(
+                        log.warning(
                             f"Fees paid in BNB not considered. Please open an issue or PR"
                         )
                     continue
