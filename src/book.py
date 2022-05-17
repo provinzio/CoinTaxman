@@ -1528,6 +1528,7 @@ class Book:
         ]
 
         # Match trades which belong together (traded at same time) and add belonging fees.
+        bnb_small_asset_sell_cache: list[tr.Sell] = []
         for _, _operations in misc.group_by(filtered_ops, "platform").items():
             for _, matching_operations in misc.group_by(
                 _operations, "utc_time"
@@ -1567,41 +1568,6 @@ class Book:
                     sell_op.fees = fees
                     continue
 
-                # Binance allows to convert small assets in one go to BNB.
-                # Our `merge_identical_column` function merges all BNB which
-                # gets bought at that time together.
-                # BUG Trade connection can not be established with our current
-                #     method.
-                # Calculate the buying cost of this type of operation by all
-                # small asset sells.
-                is_binance_bnb_small_asset_transfer = all(
-                    (
-                        all(op.platform == "binance" for op in matching_operations),
-                        len(t_op[tr.Buy.type_name_c()]) == 1,
-                        len(t_op[tr.Sell.type_name_c()]) >= 1,
-                    )
-                )
-
-                if is_binance_bnb_small_asset_transfer:
-                    (buy_op,) = t_op[tr.Buy.type_name_c()]
-                    assert isinstance(buy_op, tr.Buy)
-                    sell_ops = t_op[tr.Sell.type_name_c()]
-                    assert all(isinstance(op, tr.Sell) for op in sell_ops)
-                    assert buy_op.link is None
-                    assert buy_op.buying_cost is None
-                    buying_costs = [self.price_data.get_cost(op) for op in sell_ops]
-                    buy_op.buying_cost = misc.dsum(buying_costs)
-                    assert len(sell_ops) == len(buying_costs)
-                    for sell_op, buying_cost in zip(sell_ops, buying_costs):
-                        assert isinstance(sell_op, tr.Sell)
-                        assert sell_op.link is None
-                        assert sell_op.selling_value is None
-                        percent = buying_cost / buy_op.buying_cost
-                        sell_op.selling_value = self.price_data.get_partial_cost(
-                            buy_op, percent
-                        )
-                    continue
-
                 # Double buy/sell-pairs via a "bridge" coin at a
                 # particular utc_time (e.g. sell btc/usdt and buy eth/usdt)
                 # Find the coin that has one buy op and one sell op
@@ -1613,7 +1579,7 @@ class Book:
                     (
                         len(t_op[tr.Buy.type_name_c()]) == 2,
                         len(t_op[tr.Sell.type_name_c()]) == 2,
-                        len(t_op[tr.Fee.type_name_c()]) <= 3,
+                        0 < len(t_op[tr.Fee.type_name_c()]) <= 3,
                         len(bridge_coins) == 1,
                     )
                 )
@@ -1651,6 +1617,45 @@ class Book:
                             else:
                                 assert True, "This should not happen"
                     continue
+
+                # Binance allows to convert small assets in one go to BNB.
+                # Our `merge_identical_column` function merges all BNB which
+                # gets bought at that time together.
+                # BUG Trade connection can not be established with our current
+                #     method.
+                # Calculate the buying cost of this type of operation by all
+                # small asset sells.
+                # This method relies on the operations being sorted by utc_time.
+                is_binance_bnb_small_asset_transfer = all(op.platform == "binance" for op in matching_operations),
+
+                if is_binance_bnb_small_asset_transfer:
+                    if len(t_op[tr.Buy.type_name_c()]) == 0:
+                        bnb_small_asset_sell_cache += t_op[tr.Sell.type_name_c()]
+                        continue
+                    else:
+                        (buy_op,) = t_op[tr.Buy.type_name_c()]
+                        assert isinstance(buy_op, tr.Buy)
+                        sell_ops = (
+                            bnb_small_asset_sell_cache + t_op[tr.Sell.type_name_c()]
+                        )
+                        assert len(sell_ops) > 0
+                        assert all(isinstance(op, tr.Sell) for op in sell_ops)
+                        assert buy_op.link is None
+                        assert buy_op.buying_cost is None
+                        buying_costs = [self.price_data.get_cost(op) for op in sell_ops]
+                        buy_op.buying_cost = misc.dsum(buying_costs)
+                        assert len(sell_ops) == len(buying_costs)
+                        for sell_op, buying_cost in zip(sell_ops, buying_costs):
+                            assert isinstance(sell_op, tr.Sell)
+                            assert sell_op.link is None
+                            assert sell_op.selling_value is None
+                            percent = buying_cost / buy_op.buying_cost
+                            sell_op.selling_value = self.price_data.get_partial_cost(
+                                buy_op, percent
+                            )
+                        # Clear cache after all sell ops are accounted for.
+                        bnb_small_asset_sell_cache.clear()
+                        continue
 
                 log.warning(f"Matching trades failed ops={t_op}")
 
