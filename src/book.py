@@ -1521,10 +1521,7 @@ class Book:
     def resolve_trades_and_fees(self) -> None:
         # Filter operations to only contain trades and fees.
         filtered_ops = [
-            op
-            for op in self.operations
-            if op.type_name
-            in [tr.Buy.type_name_c(), tr.Sell.type_name_c(), tr.Fee.type_name_c()]
+            op for op in self.operations if isinstance(op, (tr.Buy, tr.Sell, tr.Fee))
         ]
 
         # Cache for sell ops if the belonging buy op happens at a later utc_time
@@ -1548,7 +1545,7 @@ class Book:
                     (
                         len(t_op[tr.Buy.type_name_c()]) == 1,
                         len(t_op[tr.Sell.type_name_c()]) == 1,
-                        len(t_op[tr.Fee.type_name_c()]) <= 2,
+                        0 < len(t_op[tr.Fee.type_name_c()]) <= 2,  # coin + bnb fee
                     )
                 )
                 if is_buy_sell_pair:
@@ -1577,12 +1574,11 @@ class Book:
                 buy_coins = set([op.coin for op in t_op[tr.Buy.type_name_c()]])
                 sell_coins = set([op.coin for op in t_op[tr.Sell.type_name_c()]])
                 bridge_coins = buy_coins & sell_coins
-
                 is_double_buy_sell_pair = all(
                     (
                         len(t_op[tr.Buy.type_name_c()]) == 2,
                         len(t_op[tr.Sell.type_name_c()]) == 2,
-                        0 < len(t_op[tr.Fee.type_name_c()]) <= 3,
+                        0 < len(t_op[tr.Fee.type_name_c()]) <= 2,  # coin + bnb fee
                         len(bridge_coins) == 1,
                     )
                 )
@@ -1619,6 +1615,10 @@ class Book:
                                 sell_op.fees = fees
                             else:
                                 assert True, "This should not happen"
+                    if any(op.coin == "BNB" for op in t_op[tr.Fee.type_name_c()]):
+                        log.debug(
+                            f"Fees paid in BNB not considered. Please open an issue or PR"
+                        )
                     continue
 
                 # Binance allows to convert small assets in one go to BNB.
@@ -1630,7 +1630,10 @@ class Book:
                 # small asset sells.
                 # This method relies on the operations being sorted by utc_time.
                 is_binance_bnb_small_asset_transfer = all(
-                    op.platform == "binance" for op in matching_operations
+                    (
+                        all(op.platform == "binance" for op in matching_operations),
+                        len(t_op[tr.Buy.type_name_c()]) <= 1,
+                    )
                 )
 
                 if is_binance_bnb_small_asset_transfer:
