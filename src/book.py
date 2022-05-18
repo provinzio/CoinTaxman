@@ -1528,7 +1528,7 @@ class Book:
         bnb_small_asset_sell_cache: list[tr.Sell] = []
 
         # Match trades which belong together (traded at same time) and add belonging fees.
-        for _, _operations in misc.group_by(filtered_ops, "platform").items():
+        for platform, _operations in misc.group_by(filtered_ops, "platform").items():
             for _, matching_operations in misc.group_by(
                 _operations, "utc_time"
             ).items():
@@ -1545,7 +1545,7 @@ class Book:
                     (
                         len(t_op[tr.Buy.type_name_c()]) == 1,
                         len(t_op[tr.Sell.type_name_c()]) == 1,
-                        0 < len(t_op[tr.Fee.type_name_c()]) <= 2,  # coin + bnb fee
+                        len(t_op[tr.Fee.type_name_c()]) <= 2,  # coin + bnb fee
                     )
                 )
                 if is_buy_sell_pair:
@@ -1631,7 +1631,7 @@ class Book:
                 # This method relies on the operations being sorted by utc_time.
                 is_binance_bnb_small_asset_transfer = all(
                     (
-                        all(op.platform == "binance" for op in matching_operations),
+                        platform == "binance",
                         len(t_op[tr.Buy.type_name_c()]) <= 1,
                     )
                 )
@@ -1642,6 +1642,7 @@ class Book:
                     else:
                         (buy_op,) = t_op[tr.Buy.type_name_c()]
                         assert isinstance(buy_op, tr.Buy)
+                        assert buy_op.coin == "BNB"
                         sell_ops = (
                             bnb_small_asset_sell_cache + t_op[tr.Sell.type_name_c()]
                         )
