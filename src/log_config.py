@@ -35,7 +35,8 @@ fh.setLevel(logging.WARNING)
 # Formatter
 formatter = logging.Formatter("%(asctime)s %(name)-12s %(levelname)-8s %(message)s")
 
-for handler in (ch, fh):  # type: ignore
+handlers: list[logging.Handler] = [ch, fh]
+for handler in handlers:
     handler.setFormatter(formatter)
     log.addHandler(handler)
 
