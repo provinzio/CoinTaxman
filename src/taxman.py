@@ -476,9 +476,9 @@ class Taxman:
                 self.tax_report_entries.append(report_entry)
 
         elif isinstance(op, tr.MarginFee):
-            self.remove_fees_from_balance(op.fees)
+            # Fees for margin trading
+            self.remove_from_balance(op)
             if in_tax_year(op):
-                # Fees reduce taxed gain.
                 taxation_type = "Kapitaleinkünfte aus Margin Trading"
                 report_entry = tr.MarginReportEntry(
                     platform=op.platform,
@@ -492,6 +492,7 @@ class Taxman:
                 self.tax_report_entries.append(report_entry)
 
         elif isinstance(op, tr.MarginGain):
+            # Gains from margin trading
             self.add_to_balance(op)
             if in_tax_year(op):
                 taxation_type = "Kapitaleinkünfte aus Margin Trading"
@@ -507,10 +508,8 @@ class Taxman:
                 self.tax_report_entries.append(report_entry)
 
         elif isinstance(op, tr.MarginLoss):
-            # First, sell the lost coin to evaluate gain/loss from holding it
-            # if tx_ := evaluate_sell(op):
-            #    self.tax_events.append(tx_)
-            # Then, add the total loss to the income from capital
+            # Losses from margin trading
+            self.remove_from_balance(op)
             if in_tax_year(op):
                 taxation_type = "Kapitaleinkünfte aus Margin Trading"
                 report_entry = tr.MarginReportEntry(

@@ -651,7 +651,7 @@ class Book:
                 assert coin
 
                 # Margin trading: Add operations and fees to list
-                if operation in ["MarginFee", "MarginGain", "MarginSell"]:
+                if operation in ["MarginFee", "MarginGain", "MarginLoss"]:
                     if operation == "MarginFee":
                         assert change == 0, "Margin fee should be only contain fee"
                     if change:

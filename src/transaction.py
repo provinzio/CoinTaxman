@@ -180,14 +180,22 @@ class Sell(Transaction):
 
 
 class MarginFee(Transaction):
+    """Fees for margin trading"""
+
     pass
 
 
 class MarginGain(Transaction):
+    """Gains from margin trading.
+    This is already a taxable value, no buy/sell calculation required."""
+
     pass
 
 
 class MarginLoss(Transaction):
+    """"Losses from margin trading.
+    This is already a taxable value, no buy/sell calculation required."""
+
     pass
 
 
