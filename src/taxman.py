@@ -170,7 +170,9 @@ class Taxman:
                     "previously sold coins of the trade. "
                     "The calculated buy cost might be wrong. "
                     "This may lead to a false tax evaluation.\n"
-                    f"{sc.op}"
+                    f"{sc.op.type_name} {sc.op.change} {sc.op.coin} @ "
+                    f"{sc.op.platform} {sc.op.utc_time}, "
+                    f"row(s) {sc.op.line} of {sc.op.file_path.name}"
                 )
                 buy_value = self.price_data.get_cost(sc)
         else:

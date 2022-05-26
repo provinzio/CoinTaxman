@@ -193,7 +193,7 @@ class MarginGain(Transaction):
 
 
 class MarginLoss(Transaction):
-    """"Losses from margin trading.
+    """Losses from margin trading.
     This is already a taxable value, no buy/sell calculation required."""
 
     pass

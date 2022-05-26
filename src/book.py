@@ -1604,9 +1604,10 @@ class Book:
                     log.warning(
                         "Fee matching is not implemented for this case. "
                         "Your fees will be discarded and are not evaluated in "
-                        "the tax evaluation.\n"
-                        "Please create an Issue or PR.\n\n"
-                        f"{matching_operations=}\n{fees=}"
+                        "the tax evaluation. "
+                        "Please create an Issue or PR. "
+                        f"Found {len(matching_operations)} matching operations:\n"
+                        f"{matching_operations=}\n{fees=}\n"
                     )
 
     def resolve_trades(self) -> None:
