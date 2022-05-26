@@ -39,15 +39,32 @@ def main() -> None:
         log.warning("Stopping CoinTaxman.")
         return
 
+    # Merge identical operations together, which makes it easier to match
+    # buy/sell to get prices from csv, match fees and reduces database access
+    # (as long as there are only one buy/sell pair per time,
+    # might be problematic otherwise).
+    book.merge_identical_operations()
+    # Resolve dependencies between withdrawals and deposits, which is
+    # necessary to correctly fetch prices and to calculate p/l.
+    book.resolve_deposits()
     book.get_price_from_csv()
+    # Match fees with operations  AND
+    # Resolve dependencies between sells and buys, which is
+    # necessary to correctly calculate the buying cost of a sold coin
+    book.match_fees()
+    book.resolve_trades()
+
     taxman.evaluate_taxation()
-    evaluation_file_path = taxman.export_evaluation_as_csv()
+    evaluation_file_path = taxman.export_evaluation_as_excel()
     taxman.print_evaluation()
 
     # Save log
     log_file_path = evaluation_file_path.with_suffix(".log")
     log_config.shutdown()
     os.rename(TMP_LOG_FILEPATH, log_file_path)
+
+    print(f"Detailed export saved at {evaluation_file_path} and {log_file_path}")
+    print("If you want to archive the evaluation, run `make archive`.")
 
 
 if __name__ == "__main__":

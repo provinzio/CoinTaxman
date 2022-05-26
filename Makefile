@@ -29,6 +29,9 @@ build:
 run:
 	python src/main.py
 
+# Shortcut for development (developer run)
+drun: format lint run
+
 run-container:
 	docker run --name cointaxman -it --rm \
 		-v `pwd`/account_statements:/CoinTaxman/account_statements:Z \

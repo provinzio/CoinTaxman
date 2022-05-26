@@ -28,17 +28,15 @@ import requests
 import config
 import log_config
 import misc
-import transaction
+import transaction as tr
 from core import kraken_pair_map
 from database import get_price_db, get_tablenames_from_db, mean_price_db, set_price_db
 
 log = log_config.getLogger(__name__)
 
 
-# TODO Keep database connection open?
-# TODO Combine multiple exchanges in one file?
-#      - Add a database for each exchange (added with ATTACH DATABASE)
-#      - Tables in database stay the same
+class FallbackPriceNotFound(Exception):
+    pass
 
 
 class PriceData:
@@ -52,6 +50,8 @@ class PriceData:
         utc_time: datetime.datetime,
         quote_asset: str,
         swapped_symbols: bool = False,
+        fallback_mode: bool = False,
+        minute_interval: int = 1,
     ) -> decimal.Decimal:
         """Retrieve price from binance official REST API.
 
@@ -77,10 +77,11 @@ class PriceData:
         Returns:
             decimal.Decimal: Price of asset pair.
         """
+        assert base_asset != quote_asset
         root_url = "https://api.binance.com/api/v3/aggTrades"
         symbol = f"{base_asset}{quote_asset}"
         startTime, endTime = misc.get_offset_timestamps(
-            utc_time, datetime.timedelta(minutes=1)
+            utc_time, datetime.timedelta(minutes=minute_interval)
         )
         url = f"{root_url}?{symbol=:}&{startTime=:}&{endTime=:}"
 
@@ -88,49 +89,86 @@ class PriceData:
         response = requests.get(url)
         data = json.loads(response.text)
 
-        # Some combinations do not exist (e.g. `TWTEUR`), but almost anything
-        # is paired with BTC. Calculate `TWTEUR` as `TWTBTC * BTCEUR`.
         if (
             isinstance(data, dict)
             and data.get("code") == -1121
             and data.get("msg") == "Invalid symbol."
-        ):
-            if quote_asset == "BTC":
-                # If we are already comparing with BTC, we might have to swap
-                # the assets to generate the correct symbol.
+        ) or len(data) == 0:
+            # Some combinations do not exist (e.g. `TWTEUR`), but almost anything
+            # is paired with our fallback coins.
+            # Check if binance offers prices against our fallback coins as
+            # intermediate coin (e.g. SHIB/EUR = SHIB/BTC * BTC/EUR)
+            fallback_assets = ["BTC", "BNB", "BUSD", "USDT"]
+            fallback_intervalls = [1, 3, 5, 10, 15, 30, 60]
+
+            # Are we already comparing against an fallback coin?
+            if fallback_mode:
+                # We could also try to swap the coins...
                 # Check a last time, if we find the pair by changing the symbol
                 # order.
-                # If this does not help, we need to think of something else.
                 if swapped_symbols:
-                    raise RuntimeError(f"Can not retrieve {symbol=} from binance")
-                # Changing the order of the assets require to
-                # invert the price.
+                    # We have already swapped the symbols.
+                    # Raise an exception.
+                    raise FallbackPriceNotFound
+                # Changing the order of the assets require to invert the price.
                 price = self.get_price(
-                    "binance", quote_asset, utc_time, base_asset, swapped_symbols=True
+                    "binance",
+                    quote_asset,
+                    utc_time,
+                    base_asset,
+                    swapped_symbols=True,
+                    fallback_mode=fallback_mode,
+                    minute_interval=minute_interval,
                 )
                 return misc.reciprocal(price)
 
-            btc = self.get_price("binance", base_asset, utc_time, "BTC")
-            quote = self.get_price("binance", "BTC", utc_time, quote_asset)
-            return btc * quote
+            assert swapped_symbols is False
+
+            # Check against all fallback coins.
+            for fallback_intervall in fallback_intervalls:
+                for fallback_asset in fallback_assets:
+                    if base_asset != fallback_asset and quote_asset != fallback_asset:
+                        try:
+                            base = self.get_price(
+                                "binance",
+                                base_asset,
+                                utc_time,
+                                fallback_asset,
+                                fallback_mode=True,
+                                minute_interval=fallback_intervall,
+                            )
+                            quote = self.get_price(
+                                "binance",
+                                fallback_asset,
+                                utc_time,
+                                quote_asset,
+                                fallback_mode=True,
+                                minute_interval=fallback_intervall,
+                            )
+                        except FallbackPriceNotFound:
+                            # Unable to fetch prices with our intermediate fallback
+                            # coin. Lets checkout the next fallback coin.
+                            continue
+                        else:
+                            return base * quote
+
+            log.warning(
+                f"Unable to retrieve price for {symbol=} from binance at "
+                f"{utc_time=} even though multiple {fallback_assets=} and "
+                f"multiple {fallback_intervalls=}  were checked against. "
+                "Assumption: The coin couldn't been traded at that time. "
+                "Set the price to 0. "
+                "This will be saved to the database and used again without "
+                "further warnings. "
+                "Please edit the price entry in the database by hand, "
+                "if you want to avoid that or use make check-db. "
+                "Feel free to open a PR to improve the binance fallback strategy."
+            )
+
+            return decimal.Decimal()
 
         response.raise_for_status()
-
-        if len(data) == 0:
-            log.warning(
-                "Binance offers no price for %s at %s. Trying %s/USDT and %s/USDT",
-                symbol,
-                utc_time,
-                base_asset,
-                quote_asset,
-            )
-            if quote_asset == "USDT":
-                return decimal.Decimal()
-            quote = self.get_price("binance", quote_asset, utc_time, "USDT")
-            if quote == 0.0:
-                return quote
-            usdt = self.get_price("binance", base_asset, utc_time, "USDT")
-            return usdt / quote
+        assert data
 
         # Calculate average price.
         total_cost = decimal.Decimal()
@@ -546,7 +584,7 @@ class PriceData:
             try:
                 get_price = getattr(self, f"_get_price_{platform}")
             except AttributeError:
-                raise NotImplementedError("Unable to read data from %s", platform)
+                raise NotImplementedError(f"Unable to read data from {platform=}")
 
             price = get_price(coin, utc_time, reference_coin, **kwargs)
             assert isinstance(price, decimal.Decimal)
@@ -562,16 +600,24 @@ class PriceData:
 
     def get_cost(
         self,
-        tr: Union[transaction.Operation, transaction.SoldCoin],
+        op_sc: Union[tr.Operation, tr.SoldCoin],
         reference_coin: str = config.FIAT,
     ) -> decimal.Decimal:
-        op = tr if isinstance(tr, transaction.Operation) else tr.op
+        op = op_sc if isinstance(op_sc, tr.Operation) else op_sc.op
         price = self.get_price(op.platform, op.coin, op.utc_time, reference_coin)
-        if isinstance(tr, transaction.Operation):
-            return price * tr.change
-        if isinstance(tr, transaction.SoldCoin):
-            return price * tr.sold
+        if isinstance(op_sc, tr.Operation):
+            return price * op_sc.change
+        if isinstance(op_sc, tr.SoldCoin):
+            return price * op_sc.sold
         raise NotImplementedError
+
+    def get_partial_cost(
+        self,
+        op_sc: Union[tr.Operation, tr.SoldCoin],
+        percent: decimal.Decimal,
+        reference_coin: str = config.FIAT,
+    ) -> decimal.Decimal:
+        return percent * self.get_cost(op_sc, reference_coin=reference_coin)
 
     def check_database(self):
         stats = {}
@@ -582,13 +628,16 @@ class PriceData:
                 stats[platform] = {"fix": 0, "rem": 0}
                 try:
                     get_price = getattr(self, f"_get_price_{platform}")
-                except AttributeError:
+                except AttributeError as e:
                     if platform == "coinbase":
                         get_price = self._get_price_coinbase_pro
                     else:
-                        raise NotImplementedError(
-                            "Unable to read data from %s", platform
+                        log.warning(
+                            f"excepted NotImplementedError: {e}, "
+                            "checking will be ignored in this case"
                         )
+                        del stats[platform]
+                        continue
 
                 with sqlite3.connect(db_path) as conn:
                     cur = conn.cursor()
@@ -597,30 +646,81 @@ class PriceData:
                         base_asset, quote_asset = tablename.split("/")
                         query = f"SELECT utc_time FROM `{tablename}` WHERE price<=0.0;"
                         cur = conn.execute(query)
+                        data = cur.fetchall()
 
-                        for row in cur.fetchall():
-                            utc_time = datetime.datetime.strptime(
-                                row[0], "%Y-%m-%d %H:%M:%S%z"
-                            )
+                        for row in data:
+                            try:
+                                utc_time = datetime.datetime.strptime(
+                                    row[0], "%Y-%m-%d %H:%M:%S%z"
+                                )
+                                timezone_aware = True
+                            except ValueError:
+                                utc_time = datetime.datetime.strptime(
+                                    row[0], "%Y-%m-%d %H:%M:%S"
+                                )
+                                timezone_aware = False
+
                             price = get_price(base_asset, utc_time, quote_asset)
+
+                            if not timezone_aware:
+                                timezone_aware_utc_time = utc_time.astimezone(
+                                    datetime.timezone.utc
+                                )
+                                timezone_aware_price = get_price(
+                                    base_asset,
+                                    timezone_aware_utc_time,
+                                    quote_asset,
+                                )
+                                if timezone_aware_price:
+                                    log.info(
+                                        "Delete timezone unaware price of "
+                                        f"{tablename=} on {platform=} at {utc_time=} "
+                                        "because there already exists a timezone "
+                                        "aware price for the same (utc) time"
+                                    )
+                                    query = (
+                                        f"DELETE FROM `{tablename}`" "WHERE utc_time=?"
+                                    )
+                                    conn.execute(query, (utc_time,))
+                                    conn.commit()
+                                else:
+                                    log.info(
+                                        "Update timezone unaware price of "
+                                        f"{tablename=} on {platform=} at {utc_time=}"
+                                        "to utc-timezone aware price"
+                                    )
+                                    query = (
+                                        f"UPDATE `{tablename}` "
+                                        "SET utc_time=? "
+                                        "WHERE utc_time=?;"
+                                    )
+                                    conn.execute(
+                                        query,
+                                        (
+                                            timezone_aware_utc_time,
+                                            utc_time,
+                                        ),
+                                    )
+                                    conn.commit()
+                                continue
 
                             if price == 0.0:
                                 log.warning(
-                                    f"""
-                                    Could not fetch price for
-                                    pair {tablename} on {platform} at {utc_time}
-                                    """
+                                    "Could not fetch price for pair "
+                                    f"{tablename} on {platform} at {utc_time}"
                                 )
                                 stats[platform]["rem"] += 1
                             else:
                                 log.info(
                                     f"Updating {tablename} at {utc_time} to {price}"
                                 )
-                                query = f"""
-                                UPDATE `{tablename}`
-                                SET price=?
-                                WHERE utc_time=?;"""
+                                query = (
+                                    f"UPDATE `{tablename}` "
+                                    "SET price=? "
+                                    "WHERE utc_time=?;"
+                                )
                                 conn.execute(query, (str(price), utc_time))
+                                conn.commit()
                                 stats[platform]["fix"] += 1
 
                     conn.commit()

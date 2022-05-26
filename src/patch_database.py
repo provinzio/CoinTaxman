@@ -146,15 +146,29 @@ def __patch_002(db_path: Path) -> None:
 
                 for _utc_time, _price in list(cur.fetchall()):
                     # Convert the data.
-                    # Try non-fractional seconds first, then fractional seconds
-                    try:
-                        utc_time = datetime.datetime.strptime(
-                            _utc_time, "%Y-%m-%d %H:%M:%S%z"
+                    # Try non-fractional seconds first, then fractional seconds,
+                    # then the same without timezone
+                    for dateformat in (
+                        "%Y-%m-%d %H:%M:%S%z",
+                        "%Y-%m-%d %H:%M:%S.%f%z",
+                        "%Y-%m-%d %H:%M:%S",
+                        "%Y-%m-%d %H:%M:%S.%f",
+                    ):
+                        try:
+                            utc_time = datetime.datetime.strptime(_utc_time, dateformat)
+                        except ValueError:
+                            continue
+                        else:
+                            if not dateformat.endswith("%z"):
+                                # Add the missing time zone information.
+                                utc_time = utc_time.replace(tzinfo=None)
+                            break
+                    else:
+                        raise ValueError(
+                            f"Could not parse date `{_utc_time}` "
+                            "in table `{tablename}`."
                         )
-                    except ValueError:
-                        utc_time = datetime.datetime.strptime(
-                            _utc_time, "%Y-%m-%d %H:%M:%S.%f%z"
-                        )
+
                     price = decimal.Decimal(_price)
                     set_price_db("", base_asset, quote_asset, utc_time, price, db_path)
                 conn.execute(f"DROP TABLE `{tablename}`;")

@@ -17,10 +17,10 @@
 import logging
 from logging import getLogger, shutdown  # noqa: F401
 
-from config import TMP_LOG_FILEPATH
+from config import LOG_LEVEL, TMP_LOG_FILEPATH
 
-logging.basicConfig(level=logging.DEBUG)
 log = getLogger(None)
+log.setLevel(LOG_LEVEL)
 
 # Entferne die handler des basic loggers.
 for handler in log.handlers:
@@ -28,13 +28,14 @@ for handler in log.handlers:
 
 # Handler
 ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
 fh = logging.FileHandler(TMP_LOG_FILEPATH, "w")
+fh.setLevel(logging.WARNING)
 
 # Formatter
 formatter = logging.Formatter("%(asctime)s %(name)-12s %(levelname)-8s %(message)s")
 
 for handler in (ch, fh):
-    handler.setLevel(logging.DEBUG)
     handler.setFormatter(formatter)
     log.addHandler(handler)
 
