@@ -54,7 +54,7 @@ install:
 	pip install -r requirements.txt
 
 install-dev: install
-	pip -r requirements-dev.txt
+	pip install -r requirements-dev.txt
 
 # Setup virtual environment
 venv:
