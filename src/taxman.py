@@ -900,23 +900,17 @@ class Taxman:
             )
             first_value_in_fiat = misc.dsum(
                 misc.cdecimal(tre.first_value_in_fiat)
-                for tre in tax_report_entries
-                if isinstance(tre, tr.UnrealizedSellReportEntry)
+                for tre in unrealized_report_entries
             )
             second_value_in_fiat = misc.dsum(
                 misc.cdecimal(tre.second_value_in_fiat)
-                for tre in tax_report_entries
-                if isinstance(tre, tr.UnrealizedSellReportEntry)
+                for tre in unrealized_report_entries
             )
             total_gain_fiat = misc.dsum(
-                misc.cdecimal(tre.gain_in_fiat)
-                for tre in tax_report_entries
-                if isinstance(tre, tr.UnrealizedSellReportEntry)
+                misc.cdecimal(tre.gain_in_fiat) for tre in unrealized_report_entries
             )
             taxable_gain = misc.dsum(
-                tre.taxable_gain_in_fiat
-                for tre in tax_report_entries
-                if isinstance(tre, tr.UnrealizedSellReportEntry)
+                tre.taxable_gain_in_fiat for tre in unrealized_report_entries
             )
             ws_summary.write_row(
                 row + 2,
