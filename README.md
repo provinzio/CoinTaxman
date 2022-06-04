@@ -121,6 +121,11 @@ Hit the thumbs up button of that issue or participate in the process.
 - Add a way to retrieve price data from this exchange in `src/price_data.py` like `PriceData._get_price_binance`
 - Setup a wiki entry on how to retrieve the account statement and other useful information, which I can copy paste in our [Wiki](https://github.com/provinzio/CoinTaxman/wiki)
 
+#### Managing python module dependencies
+
+We use `pip-compile` from `pip-tools` to manage our python requirements, which separates "real" dependencies (e.g. dependencies/requirements.in) from all dependencies with there sub-dependencies (see requirements.txt).
+To update the dependencies, please update the files in the dependencies folder and run `make build-deps` or the corresponding commands by hand (see Makefile).
+
 # Ideas on crypto-taxation
 
 The taxation of cryptocurrency is probably not yet regulated down to the smallest detail in every country. Often there still seem to be ambiguities or gray areas.
