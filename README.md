@@ -45,6 +45,12 @@ You can use the custom import format [here](https://github.com/provinzio/CoinTax
 
 Have a look at our [Wiki](https://github.com/provinzio/CoinTaxman/wiki) for more information on how to obtain the account statement for your exchange.
 
+**Remark**: The first run might take a while to fetch all required prices into the local database.
+The implementation is at the moment kinda bad and does one http request per required price.
+E.g. 1.000 trades (1.000 "buys" and 1.000 "sells") require 2.000 price fetches (and perhaps more for the paid fees).
+Each price fetch might take 3 seconds, which leads to 6.000 seconds = 1.6 hours.
+After the first run, all prices are stored locally which reduces the runtime way below 5 minutes.
+
 #### Makefile
 
 The Makefile offers multiple useful commands to quickly update the requirements, run the script, create a docker container, clean your code...
