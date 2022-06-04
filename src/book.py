@@ -1519,12 +1519,12 @@ class Book:
         self.operations = [tr.Operation.merge(*ops) for ops in grouped_ops.values()]
 
     def resolve_trades_and_fees(self) -> None:
-        # Filter operations to only contain trades and fees.
+        # Only look at trades and fees.
         filtered_ops = [
             op for op in self.operations if isinstance(op, (tr.Buy, tr.Sell, tr.Fee))
         ]
 
-        # Cache for sell ops if the belonging buy op happens at a later utc_time
+        # Cache for sell ops if the belonging buy op happens at a later utc_time.
         bnb_small_asset_sell_cache: list[tr.Sell] = []
 
         # Match trades which belong together (traded at same time) and add belonging fees.
@@ -1532,15 +1532,13 @@ class Book:
             for _, matching_operations in misc.group_by(
                 _operations, "utc_time"
             ).items():
-                # Count matching operations by type with dict
+                # Count matching operations by type with dict.
                 # { operation typename: list of operations }
-                t_op = collections.defaultdict(list[tr.Operation])
+                t_op: dict[str, list[tr.Operation]] = collections.defaultdict(list)
                 for op in matching_operations:
                     t_op[op.type_name].append(op)
 
                 # Check if this is a single buy/sell-pair.
-                # Fees might occure by other operation types,
-                # but this is currently not implemented.
                 is_buy_sell_pair = all(
                     (
                         len(t_op[tr.Buy.type_name_c()]) == 1,
@@ -1554,7 +1552,11 @@ class Book:
                     assert isinstance(buy_op, tr.Buy)
                     (sell_op,) = t_op[tr.Sell.type_name_c()]
                     assert isinstance(sell_op, tr.Sell)
-                    fees = t_op[tr.Fee.type_name_c()]
+                    fees: list[tr.Fee] = t_op[
+                        tr.Fee.type_name_c()
+                    ]  # type:ignore[assignment]
+                    assert all(isinstance(fee, tr.Fee) for fee in fees)
+
                     assert buy_op.link is None
                     assert buy_op.buying_cost is None
                     buy_op.link = sell_op
@@ -1565,12 +1567,13 @@ class Book:
                     buy_op.fees = fees
                     assert sell_op.fees is None
                     sell_op.fees = fees
+
                     continue
 
                 # Double buy/sell-pairs via a "bridge" coin
-                # e.g. sell btc/usdt and buy eth/usdt (usdt as a bridge coin)
+                # e.g. sell btc/usdt and buy eth/usdt (usdt as a bridge coin).
 
-                # Find the bridge coin which has one buy op and one sell op
+                # Find the bridge coin which has one buy op and one sell op.
                 buy_coins = set([op.coin for op in t_op[tr.Buy.type_name_c()]])
                 sell_coins = set([op.coin for op in t_op[tr.Sell.type_name_c()]])
                 bridge_coins = buy_coins & sell_coins
@@ -1578,7 +1581,7 @@ class Book:
                     (
                         len(t_op[tr.Buy.type_name_c()]) == 2,
                         len(t_op[tr.Sell.type_name_c()]) == 2,
-                        0 < len(t_op[tr.Fee.type_name_c()]) <= 2,  # coin + bnb fee
+                        len(t_op[tr.Fee.type_name_c()]) <= 2,  # coin + bnb fee
                         len(bridge_coins) == 1,
                     )
                 )
@@ -1589,40 +1592,63 @@ class Book:
                     # Iterate over all ops and add links accordingly
                     for buy_op in t_op[tr.Buy.type_name_c()]:
                         assert isinstance(buy_op, tr.Buy)
-                        assert buy_op.link is buy_op.buying_cost is None
+                        assert buy_op.link is None
+
                         for sell_op in t_op[tr.Sell.type_name_c()]:
                             assert isinstance(sell_op, tr.Sell)
-                            assert sell_op.selling_value is None
+
                             if sell_op.link is not None:
+                                # Already matched.
                                 continue
+
                             is_valid_pair = [buy_op.coin, sell_op.coin].count(
                                 bridge_coin
                             ) == 1
                             if is_valid_pair:
+                                assert sell_op.link is not None
                                 buy_op.link = sell_op
                                 sell_op.link = buy_op
                                 # Match fees to buy_op coin
                                 # BUG Fees paid in BNB are currently ignored.
-                                #     Is is unclear which buy op the BNB-fee op should be accounted to.
+                                #     It is unclear which buy op the BNB-fee op should be accounted to.
                                 #     It is also possible to pay fees partly in the coin bought and partly in BNB
                                 fees = [
-                                    fee
+                                    fee  # type:ignore[misc]
                                     for fee in t_op[tr.Fee.type_name_c()]
-                                    if fee.coin == buy_op.coin
+                                    if fee.coin in [buy_op.coin, sell_op.coin]
                                 ]
-                                assert len(fees) == 1
+                                assert all(isinstance(fee, tr.Fee) for fee in fees)
+                                assert len(fees) <= 1
                                 buy_op.fees = fees
                                 sell_op.fees = fees
                             else:
-                                assert True, "This should not happen"
-                    if any(op.coin == "BNB" for op in t_op[tr.Fee.type_name_c()]):
+                                raise RuntimeError("Unexpected behavior")
+
+                    assert all(
+                        op.link is not None
+                        for op in t_op.values()
+                        if isinstance(op, (tr.Buy, tr.Sell))
+                    ), "Not all operations were matched."
+
+                    linked_fees = set(
+                        op.fees
+                        for op in t_op[tr.Buy.type_name_c()]
+                        + t_op[tr.Sell.type_name_c()]
+                    )
+                    missing_fees = [
+                        fee
+                        for fee in t_op[tr.Fee.type_name_c()]
+                        if fee not in linked_fees
+                    ]
+                    if any(missing_fees):
                         log.warning(
-                            f"Fees paid in BNB not considered. Please open an issue or PR"
+                            f"Following fees were not considered: {', '.join(f.coin for f in fees)}. "
+                            "Please open an issue or PR."
                         )
                     continue
 
                 # Binance allows to convert small assets in one go to BNB.
-                # Our `merge_identical_column` function merges all BNB which
+                # Our `merge_identical_operations` function merges all BNB which
                 # gets bought at that time together.
                 # BUG Trade connection can not be established with our current
                 #     method.
@@ -1638,20 +1664,45 @@ class Book:
 
                 if is_binance_bnb_small_asset_transfer:
                     if len(t_op[tr.Buy.type_name_c()]) == 0:
-                        bnb_small_asset_sell_cache += t_op[tr.Sell.type_name_c()]
+                        # There are no buys.
+                        # These sells might belong to a small asset transfer from another utc_time.
+                        # Cache the sell operations.
+                        sell_ops: list[tr.Sell] = t_op[
+                            tr.Sell.type_name_c()
+                        ]  # type:ignore[assignment]
+                        assert all(isinstance(op, tr.Sell) for op in sell_ops)
+
+                        if t_op[tr.Fee.type_name_c()]:
+                            raise NotImplementedError(
+                                "Fees are currently not implemented for this scenario"
+                            )
+
+                        assert len(sell_ops) == len(t_op)
+                        bnb_small_asset_sell_cache += sell_ops
+
                     else:
                         (buy_op,) = t_op[tr.Buy.type_name_c()]
                         assert isinstance(buy_op, tr.Buy)
-                        assert buy_op.coin == "BNB"
-                        sell_ops = (
-                            bnb_small_asset_sell_cache + t_op[tr.Sell.type_name_c()]
-                        )
+                        assert (
+                            buy_op.coin == "BNB"
+                        ), f"expected bnb small asset transfer, but coin is {buy_op.coin}"
+                        sell_ops = t_op[  # type:ignore[assignment]
+                            tr.Sell.type_name_c()
+                        ]
+
+                        # Add previously cached sells to the list.
+                        # TODO is it possible, that they occure after this timestamp
+                        # check timestamps!
+                        sell_ops += bnb_small_asset_sell_cache
+
                         assert len(sell_ops) > 0
                         assert all(isinstance(op, tr.Sell) for op in sell_ops)
+
                         assert buy_op.link is None
                         assert buy_op.buying_cost is None
                         buying_costs = [self.price_data.get_cost(op) for op in sell_ops]
                         buy_op.buying_cost = misc.dsum(buying_costs)
+
                         assert len(sell_ops) == len(buying_costs)
                         for sell_op, buying_cost in zip(sell_ops, buying_costs):
                             assert isinstance(sell_op, tr.Sell)
@@ -1668,9 +1719,7 @@ class Book:
                 log.warning(f"Matching trades failed ops={t_op}")
 
         # Only keep none fee operations in book.
-        self.operations = [
-            op for op in self.operations if op.type_name != tr.Fee.type_name_c()
-        ]
+        self.operations = [op for op in self.operations if not isinstance(op, tr.Fee)]
 
     def read_file(self, file_path: Path) -> None:
         """Import transactions form an account statement.
