@@ -23,6 +23,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Optional
 
+import more_itertools
+
 import config
 import log_config
 import misc
@@ -1695,6 +1697,13 @@ class Book:
 
                         assert len(sell_ops) > 0
                         assert all(isinstance(op, tr.Sell) for op in sell_ops)
+
+                        # Check that all sell_ops occure at roughly the same time.
+                        min_utc_time, max_utc_time = more_itertools.minmax(
+                            sell_op.utc_time for sell_op in sell_ops
+                        )
+                        diff = max_utc_time - min_utc_time
+                        assert diff.total_seconds() < 1
 
                         assert buy_op.unlinked
                         buying_costs = [self.price_data.get_cost(op) for op in sell_ops]
