@@ -41,6 +41,7 @@ Quick and easy installation can be done with `pip`.
 2. Run `python "src/main.py"`
 
 If not all your exchanges are supported, you can not (directly) calculate your taxes with this tool.
+You can use the custom import format [here](https://github.com/provinzio/CoinTaxman/wiki/Custom-import-format) to make it happen.
 
 Have a look at our [Wiki](https://github.com/provinzio/CoinTaxman/wiki) for more information on how to obtain the account statement for your exchange.
 
