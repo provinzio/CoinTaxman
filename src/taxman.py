@@ -867,7 +867,12 @@ class Taxman:
         row += 2
         if not self.unrealized_sells_faulty:
             ws_summary.merge_range(
-                row, 0, row, 4, "Unrealisierte Einkünfte", header_format
+                row,
+                0,
+                row,
+                4,
+                f"Unrealisierte Einkünfte zum {TAX_DEADLINE.strftime('%x')}",
+                header_format,
             )
             ws_summary.write_row(
                 row + 1,
