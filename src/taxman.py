@@ -527,49 +527,49 @@ class Taxman:
             # Coins get deposited onto this platform/balance.
             self.add_to_balance(op)
 
-            if op.link:
-                assert op.coin == op.link.coin
-                assert op.fees is None
-                first_fee_amount = op.link.change - op.change
-                first_fee_coin = op.coin if first_fee_amount else ""
-                first_fee_in_fiat = (
-                    self.price_data.get_price(op.platform, op.coin, op.utc_time)
-                    if first_fee_amount
-                    else decimal.Decimal()
-                )
-                report_entry = tr.TransferReportEntry(
-                    first_platform=op.platform,
-                    second_platform=op.link.platform,
-                    amount=op.change,
-                    coin=op.coin,
-                    first_utc_time=op.utc_time,
-                    second_utc_time=op.link.utc_time,
-                    first_fee_amount=first_fee_amount,
-                    first_fee_coin=first_fee_coin,
-                    first_fee_in_fiat=first_fee_in_fiat,
-                    remark=op.remark,
-                )
-            else:
-                assert op.fees is None
-                report_entry = tr.DepositReportEntry(
-                    platform=op.platform,
-                    amount=op.change,
-                    coin=op.coin,
-                    utc_time=op.utc_time,
-                    first_fee_amount=decimal.Decimal(),
-                    first_fee_coin="",
-                    first_fee_in_fiat=decimal.Decimal(),
-                    remark=op.remark,
-                )
-
-            self.tax_report_entries.append(report_entry)
+            if in_tax_year(op):
+                if op.link:
+                    assert op.coin == op.link.coin
+                    assert op.fees is None
+                    first_fee_amount = op.link.change - op.change
+                    first_fee_coin = op.coin if first_fee_amount else ""
+                    first_fee_in_fiat = (
+                        self.price_data.get_price(op.platform, op.coin, op.utc_time)
+                        if first_fee_amount
+                        else decimal.Decimal()
+                    )
+                    report_entry = tr.TransferReportEntry(
+                        first_platform=op.platform,
+                        second_platform=op.link.platform,
+                        amount=op.change,
+                        coin=op.coin,
+                        first_utc_time=op.utc_time,
+                        second_utc_time=op.link.utc_time,
+                        first_fee_amount=first_fee_amount,
+                        first_fee_coin=first_fee_coin,
+                        first_fee_in_fiat=first_fee_in_fiat,
+                        remark=op.remark,
+                    )
+                else:
+                    assert op.fees is None
+                    report_entry = tr.DepositReportEntry(
+                        platform=op.platform,
+                        amount=op.change,
+                        coin=op.coin,
+                        utc_time=op.utc_time,
+                        first_fee_amount=decimal.Decimal(),
+                        first_fee_coin="",
+                        first_fee_in_fiat=decimal.Decimal(),
+                        remark=op.remark,
+                    )
+                self.tax_report_entries.append(report_entry)
 
         elif isinstance(op, tr.Withdrawal):
             # Coins get moved to somewhere else. At this point, we only have
             # to remove them from the corresponding balance.
             op.withdrawn_coins = self.remove_from_balance(op)
 
-            if not op.has_link:
+            if not op.has_link and in_tax_year(op):
                 assert op.fees is None
                 report_entry = tr.WithdrawalReportEntry(
                     platform=op.platform,
