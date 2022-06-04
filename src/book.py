@@ -1557,11 +1557,9 @@ class Book:
                     ]  # type:ignore[assignment]
                     assert all(isinstance(fee, tr.Fee) for fee in fees)
 
-                    assert buy_op.link is None
-                    assert buy_op.buying_cost is None
+                    assert buy_op.unlinked
                     buy_op.link = sell_op
-                    assert sell_op.link is None
-                    assert sell_op.selling_value is None
+                    assert sell_op.unlinked
                     sell_op.link = buy_op
                     assert buy_op.fees is None
                     buy_op.fees = fees
@@ -1592,12 +1590,12 @@ class Book:
                     # Iterate over all ops and add links accordingly
                     for buy_op in t_op[tr.Buy.type_name_c()]:
                         assert isinstance(buy_op, tr.Buy)
-                        assert buy_op.link is None
+                        assert buy_op.unlinked
 
                         for sell_op in t_op[tr.Sell.type_name_c()]:
                             assert isinstance(sell_op, tr.Sell)
 
-                            if sell_op.link is not None:
+                            if not sell_op.unlinked:
                                 # Already matched.
                                 continue
 
@@ -1605,7 +1603,7 @@ class Book:
                                 bridge_coin
                             ) == 1
                             if is_valid_pair:
-                                assert sell_op.link is not None
+                                assert sell_op.unlinked
                                 buy_op.link = sell_op
                                 sell_op.link = buy_op
                                 # Match fees to buy_op coin
@@ -1624,8 +1622,8 @@ class Book:
                             else:
                                 raise RuntimeError("Unexpected behavior")
 
-                    assert all(
-                        op.link is not None
+                    assert any(
+                        op.unlinked
                         for op in t_op.values()
                         if isinstance(op, (tr.Buy, tr.Sell))
                     ), "Not all operations were matched."
@@ -1698,16 +1696,14 @@ class Book:
                         assert len(sell_ops) > 0
                         assert all(isinstance(op, tr.Sell) for op in sell_ops)
 
-                        assert buy_op.link is None
-                        assert buy_op.buying_cost is None
+                        assert buy_op.unlinked
                         buying_costs = [self.price_data.get_cost(op) for op in sell_ops]
                         buy_op.buying_cost = misc.dsum(buying_costs)
 
                         assert len(sell_ops) == len(buying_costs)
                         for sell_op, buying_cost in zip(sell_ops, buying_costs):
                             assert isinstance(sell_op, tr.Sell)
-                            assert sell_op.link is None
-                            assert sell_op.selling_value is None
+                            assert sell_op.unlinked
                             percent = buying_cost / buy_op.buying_cost
                             sell_op.selling_value = self.price_data.get_partial_cost(
                                 buy_op, percent
