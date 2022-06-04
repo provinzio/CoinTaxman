@@ -65,7 +65,12 @@ else # Linux
 	source .pyenv/bin/activate && make install
 endif
 
+# Rebuild requirements(-dev).txt
+build-deps:
+	pip-compile --output-file requirements.txt dependencies/requirements.in
+	pip-compile --output-file requirements-dev.txt dependencies/requirements-dev.in
+
 archive:
 	python src/archive_evaluation.py
 
-.PHONY: flake8 mypy check-isort lint isort black format build run run-container clean cleanrun check-db install install-dev venv archive
+.PHONY: flake8 mypy check-isort lint isort black format build run run-container clean cleanrun check-db install install-dev venv build-deps archive

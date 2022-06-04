@@ -303,6 +303,9 @@ class Taxman:
             else:
                 raise e
 
+        # Hacky fix: see below.
+        fee_params["sell_value_in_fiat"] = sell_value_in_fiat
+
         sell_report_entry = ReportType(
             sell_platform=op.platform,
             buy_platform=sc.op.platform,
@@ -310,8 +313,13 @@ class Taxman:
             coin=op.coin,
             sell_utc_time=op.utc_time,
             buy_utc_time=sc.op.utc_time,
-            **fee_params,  # type: ignore[call-arg]
-            sell_value_in_fiat=sell_value_in_fiat,
+            # BUG mpypy bug when adding empty dict to a file which has no
+            # more accepted keyword arguments.
+            # https://github.com/python/mypy/issues/12937
+            # Hacky Fix: Add sell_value_in_fiat to the params list, so that
+            # the dictionary isn't empty.
+            **fee_params,
+            # sell_value_in_fiat=sell_value_in_fiat,
             buy_cost_in_fiat=buy_cost_in_fiat,
             is_taxable=is_taxable,
             taxation_type="Einkünfte aus privaten Veräußerungsgeschäften",
