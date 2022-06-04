@@ -10,6 +10,8 @@ chardet==4.0.0
     # via requests
 idna==2.10
     # via requests
+more-itertools==8.13.0
+    # via -r dependencies/requirements.in
 python-dateutil==2.8.1
     # via -r dependencies/requirements.in
 requests==2.25.1
