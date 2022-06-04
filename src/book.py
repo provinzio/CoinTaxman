@@ -1529,7 +1529,8 @@ class Book:
         # Cache for sell ops if the belonging buy op happens at a later utc_time.
         bnb_small_asset_sell_cache: list[tr.Sell] = []
 
-        # Match trades which belong together (traded at same time) and add belonging fees.
+        # Match trades which belong together (traded at same time) and add
+        # belonging fees.
         for platform, _operations in misc.group_by(filtered_ops, "platform").items():
             for _, matching_operations in misc.group_by(
                 _operations, "utc_time"
@@ -1610,8 +1611,10 @@ class Book:
                                 sell_op.link = buy_op
                                 # Match fees to buy_op coin
                                 # BUG Fees paid in BNB are currently ignored.
-                                #     It is unclear which buy op the BNB-fee op should be accounted to.
-                                #     It is also possible to pay fees partly in the coin bought and partly in BNB
+                                #     It is unclear which buy op the BNB-fee
+                                #     op should be accounted to.
+                                #     It is also possible to pay fees partly
+                                #     in the coin bought and partly in BNB.
                                 fees = [
                                     fee  # type:ignore[misc]
                                     for fee in t_op[tr.Fee.type_name_c()]
@@ -1644,7 +1647,8 @@ class Book:
                     ]
                     if any(missing_fees):
                         log.warning(
-                            f"Following fees were not considered: {', '.join(f.coin for f in fees)}. "
+                            "Following fees were not considered: "
+                            f"{', '.join(f.coin for f in fees)}. "
                             "Please open an issue or PR."
                         )
 
@@ -1668,7 +1672,8 @@ class Book:
                 if is_binance_bnb_small_asset_transfer:
                     if len(t_op[tr.Buy.type_name_c()]) == 0:
                         # There are no buys.
-                        # These sells might belong to a small asset transfer from another utc_time.
+                        # These sells might belong to a small asset transfer
+                        # from another utc_time.
                         # Cache the sell operations.
                         sell_ops: list[tr.Sell] = t_op[
                             tr.Sell.type_name_c()
@@ -1686,9 +1691,10 @@ class Book:
                     else:
                         (buy_op,) = t_op[tr.Buy.type_name_c()]
                         assert isinstance(buy_op, tr.Buy)
-                        assert (
-                            buy_op.coin == "BNB"
-                        ), f"expected bnb small asset transfer, but coin is {buy_op.coin}"
+                        assert buy_op.coin == "BNB", (
+                            "expected bnb small asset transfer, "
+                            f"but coin is {buy_op.coin}"
+                        )
                         sell_ops = t_op[  # type:ignore[assignment]
                             tr.Sell.type_name_c()
                         ]
