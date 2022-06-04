@@ -1624,12 +1624,14 @@ class Book:
                             else:
                                 raise RuntimeError("Unexpected behavior")
 
+                    # Check that all operations were matched or raise an error.
                     assert any(
                         op.unlinked
                         for op in t_op.values()
                         if isinstance(op, (tr.Buy, tr.Sell))
                     ), "Not all operations were matched."
 
+                    # Check that all fees were matched or raise a warning.
                     linked_fees = set(
                         op.fees
                         for op in t_op[tr.Buy.type_name_c()]
@@ -1645,6 +1647,7 @@ class Book:
                             f"Following fees were not considered: {', '.join(f.coin for f in fees)}. "
                             "Please open an issue or PR."
                         )
+
                     continue
 
                 # Binance allows to convert small assets in one go to BNB.
@@ -1691,9 +1694,9 @@ class Book:
                         ]
 
                         # Add previously cached sells to the list.
-                        # TODO is it possible, that they occure after this timestamp
-                        # check timestamps!
                         sell_ops += bnb_small_asset_sell_cache
+                        # Clear cache after adding it.
+                        bnb_small_asset_sell_cache.clear()
 
                         assert len(sell_ops) > 0
                         assert all(isinstance(op, tr.Sell) for op in sell_ops)
@@ -1705,6 +1708,8 @@ class Book:
                         diff = max_utc_time - min_utc_time
                         assert diff.total_seconds() < 1
 
+                        # Calculate buying cost and selling value of the
+                        # small asset transfers as if they were one big trade.
                         assert buy_op.unlinked
                         buying_costs = [self.price_data.get_cost(op) for op in sell_ops]
                         buy_op.buying_cost = misc.dsum(buying_costs)
@@ -1717,8 +1722,7 @@ class Book:
                             sell_op.selling_value = self.price_data.get_partial_cost(
                                 buy_op, percent
                             )
-                        # Clear cache after all sell ops are accounted for.
-                        bnb_small_asset_sell_cache.clear()
+
                     continue
 
                 log.warning(f"Matching trades failed ops={t_op}")
