@@ -606,7 +606,7 @@ class Book:
                         # a "margin" entry with zero change. For closed positions, the
                         # end is marked with a "margin" entry containing the net
                         # gain/loss of the position.
-                        # if the change is zero, consider only the fees
+                        # If the change is zero, consider only the fees.
                         if change == 0:
                             operation = "MarginFee"
                         elif change > 0:
@@ -614,7 +614,7 @@ class Book:
                         else:
                             operation = "MarginLoss"
                     elif _type == "settled":
-                        # "settled" entries mark the end of settled positions
+                        # "settled" entries mark the end of settled positions.
                         operation = "MarginGain" if change > 0 else "MarginLoss"
                     elif _type == "transfer":
                         if num_columns == 9:
@@ -650,16 +650,16 @@ class Book:
                 assert operation
                 assert coin
 
-                # Margin trading: Add operations and fees to list
+                # Margin trading: Add operations and fees to list.
                 if operation in ["MarginFee", "MarginGain", "MarginLoss"]:
                     if operation == "MarginFee":
                         assert change == 0, "Margin fee should be only contain fee"
                     if change:
-                        # add margin gain/losses to operation list
+                        # Add margin gain/losses to operation list.
                         self.append_operation(
                             operation, utc_time, platform, change, coin, row, file_path
                         )
-                    if fee != 0:
+                    if fee:
                         self.append_operation(
                             "MarginFee", utc_time, platform, fee, coin, row, file_path
                         )
