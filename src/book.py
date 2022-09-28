@@ -142,6 +142,7 @@ class Book:
             "POS savings interest": "StakingInterest",
             "POS savings purchase": "Staking",
             "POS savings redemption": "StakingEnd",
+            "ETH 2.0 Staking Rewards": "StakingInterest",
             #
             "Withdraw": "Withdrawal",
         }
