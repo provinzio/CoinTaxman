@@ -468,7 +468,9 @@ class PriceData:
 
                 if not data["error"]:
                     break
-                elif data["error"] == ["EGeneral:Invalid arguments"]:
+                elif data["error"] == ["EGeneral:Invalid arguments"] or data[
+                    "error"
+                ] == ["EQuery:Unknown asset pair"]:
                     # add pair to invalid pairs list
                     # leads to inversion of pair next time
                     log.warning(
