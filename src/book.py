@@ -654,7 +654,9 @@ class Book:
                 # Margin trading: Add operations and fees to list.
                 if operation in ["MarginFee", "MarginGain", "MarginLoss"]:
                     if operation == "MarginFee":
-                        assert change == 0, "Margin fee should be only contain fee"
+                        assert (
+                            change == 0
+                        ), "Margin fee operation should only contain fee."
                     if change:
                         # Add margin gain/losses to operation list.
                         self.append_operation(

@@ -481,15 +481,20 @@ class Taxman:
             # Fees for margin trading
             self.remove_from_balance(op)
             if in_tax_year(op):
-                taxation_type = "Kapitaleinkünfte aus Margin Trading"
+                taxation_type = "Kapitaleinkünfte"
+                if not op.remark:
+                    _remark = "Margin Fee"
+                else:
+                    _remark = "Margin Fee, " + op.remark
+                assert op.change > 0, "Change should be positive."
                 report_entry = tr.MarginReportEntry(
                     platform=op.platform,
-                    amount=op.change,
+                    amount=-op.change,
                     coin=op.coin,
                     utc_time=op.utc_time,
                     interest_in_fiat=-self.price_data.get_cost(op),
                     taxation_type=taxation_type,
-                    remark=op.remark,
+                    remark=_remark,
                 )
                 self.tax_report_entries.append(report_entry)
 
@@ -497,7 +502,12 @@ class Taxman:
             # Gains from margin trading
             self.add_to_balance(op)
             if in_tax_year(op):
-                taxation_type = "Kapitaleinkünfte aus Margin Trading"
+                taxation_type = "Kapitaleinkünfte"
+                if not op.remark:
+                    _remark = "Margin Gain"
+                else:
+                    _remark = "Margin Gain, " + op.remark
+                assert op.change > 0, "Change should be positive."
                 report_entry = tr.MarginReportEntry(
                     platform=op.platform,
                     amount=op.change,
@@ -505,7 +515,7 @@ class Taxman:
                     utc_time=op.utc_time,
                     interest_in_fiat=self.price_data.get_cost(op),
                     taxation_type=taxation_type,
-                    remark=op.remark,
+                    remark=_remark,
                 )
                 self.tax_report_entries.append(report_entry)
 
@@ -513,15 +523,20 @@ class Taxman:
             # Losses from margin trading
             self.remove_from_balance(op)
             if in_tax_year(op):
-                taxation_type = "Kapitaleinkünfte aus Margin Trading"
+                taxation_type = "Kapitaleinkünfte"
+                if not op.remark:
+                    _remark = "Margin Loss"
+                else:
+                    _remark = "Margin Loss, " + op.remark
+                assert op.change > 0, "Change should be positive."
                 report_entry = tr.MarginReportEntry(
                     platform=op.platform,
-                    amount=op.change,
+                    amount=-op.change,
                     coin=op.coin,
                     utc_time=op.utc_time,
                     interest_in_fiat=-self.price_data.get_cost(op),
                     taxation_type=taxation_type,
-                    remark=op.remark,
+                    remark=_remark,
                 )
                 self.tax_report_entries.append(report_entry)
 
