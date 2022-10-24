@@ -142,6 +142,7 @@ class Book:
             "POS savings interest": "StakingInterest",
             "POS savings purchase": "Staking",
             "POS savings redemption": "StakingEnd",
+            "ETH 2.0 Staking Rewards": "StakingInterest",
             #
             "Withdraw": "Withdrawal",
         }
@@ -1187,7 +1188,7 @@ class Book:
                         (op, buy_quantity, buy_asset, buy_value_in_fiat)
                     )
 
-                if operation_type != "Deposit":
+                if operation_type not in ("Deposit", "Airdrop"):
                     assert sell_quantity
                     assert sell_asset
 
