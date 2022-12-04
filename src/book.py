@@ -127,6 +127,11 @@ class Book:
             "Savings Interest": "CoinLendInterest",
             "Savings purchase": "CoinLend",
             "Savings Principal redemption": "CoinLendEnd",
+            "Savings distribution": "CoinLendInterest",
+            "Simple Earn Flexible Subscription": "CoinLend",
+            "Simple Earn Flexible Interest": "CoinLendInterest",
+            #
+            "BNB Vault Rewards": "CoinLendInterest",
             #
             "Commission History": "Commission",
             "Commission Fee Shared With You": "Commission",
@@ -143,6 +148,7 @@ class Book:
             "POS savings purchase": "Staking",
             "POS savings redemption": "StakingEnd",
             "ETH 2.0 Staking Rewards": "StakingInterest",
+            "Staking Rewards": "StakingInterest",
             #
             "Withdraw": "Withdrawal",
         }
@@ -206,8 +212,10 @@ class Book:
                 change = abs(change)
 
                 # Validate data.
-                assert account in ("Spot", "Savings"), (
-                    "Other types than Spot or Savings are currently not supported. "
+                supported_account_types = ("Spot", "Savings", "Earn")
+                assert account in supported_account_types, (
+                    f"Other types than {supported_account_types} are currently "
+                    f"not supported.  Given account type is `{account}`. "
                     "Please create an Issue or PR."
                 )
                 assert operation
