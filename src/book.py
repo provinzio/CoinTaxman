@@ -129,7 +129,11 @@ class Book:
             "Savings Principal redemption": "CoinLendEnd",
             "Savings distribution": "CoinLendInterest",
             "Simple Earn Flexible Subscription": "CoinLend",
+            "Simple Earn Flexible Redemption": "CoinLendEnd",
             "Simple Earn Flexible Interest": "CoinLendInterest",
+            "Simple Earn Locked Subscription": "CoinLend",
+            "Simple Earn Locked Redemption": "CoinLendEnd",
+            "Simple Earn Locked Rewards": "CoinLendInterest",
             #
             "BNB Vault Rewards": "CoinLendInterest",
             #
@@ -148,7 +152,9 @@ class Book:
             "POS savings purchase": "Staking",
             "POS savings redemption": "StakingEnd",
             "ETH 2.0 Staking Rewards": "StakingInterest",
+            "Staking Purchase": "Staking",
             "Staking Rewards": "StakingInterest",
+            "Staking Redemption": "StakingEnd",
             #
             "Withdraw": "Withdrawal",
         }
