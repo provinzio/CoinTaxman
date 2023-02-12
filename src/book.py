@@ -134,6 +134,7 @@ class Book:
             "Simple Earn Locked Subscription": "CoinLend",
             "Simple Earn Locked Redemption": "CoinLendEnd",
             "Simple Earn Locked Rewards": "CoinLendInterest",
+            "Savings Distribution": "CoinLendInterest",
             #
             "BNB Vault Rewards": "CoinLendInterest",
             #
@@ -192,6 +193,7 @@ class Book:
                 if operation in (
                     "The Easiest Way to Trade",
                     "Small assets exchange BNB",
+                    "Small Assets Exchange BNB",
                     "Transaction Related",
                     "Large OTC trading",
                     "Sell",
