@@ -1673,6 +1673,11 @@ class Book:
                         assert isinstance(sell_op, tr.Sell)
                         assert sell_op.link is None
                         assert sell_op.selling_value is None
+
+                        # Divide by zero hotfix (seems to happen when the price could not be retrieved)
+                        if (buy_op.buying_cost == 0):
+                            buy_op.buying_cost = 1
+
                         percent = buying_cost / buy_op.buying_cost
                         sell_op.selling_value = self.price_data.get_partial_cost(
                             buy_op, percent
