@@ -252,6 +252,7 @@ class Book:
             "Receive": "Deposit",
             "Send": "Withdrawal",
             "Coinbase Earn": "Buy",
+            "Learning Reward": "Buy",
             "Rewards Income": "Staking",
         }
 
@@ -282,6 +283,17 @@ class Book:
                         "Subtotal",
                         "Total (inclusive of fees)",
                         "Fees",
+                        "Notes",
+                    ] or fields == [
+                        "Timestamp",
+                        "Transaction Type",
+                        "Asset",
+                        "Quantity Transacted",
+                        "Spot Price Currency",
+                        "Spot Price at Transaction",
+                        "Subtotal",
+                        "Total (inclusive of fees and/or spread)",
+                        "Fees and/or Spread",
                         "Notes",
                     ]
                 # Coinbase export format from mid 2021 and before
@@ -449,6 +461,9 @@ class Book:
                     )
 
     def _read_coinbase_v2(self, file_path: Path) -> None:
+        self._read_coinbase(file_path=file_path)
+
+    def _read_coinbase_v3(self, file_path: Path) -> None:
         self._read_coinbase(file_path=file_path)
 
     def _read_coinbase_pro(self, file_path: Path) -> None:
@@ -1229,6 +1244,7 @@ class Book:
                 "binance_v2": 1,
                 "coinbase": 1,
                 "coinbase_v2": 1,
+                "coinbase_v3": 1,
                 "coinbase_pro": 1,
                 "kraken_ledgers_old": 1,
                 "kraken_ledgers": 1,
@@ -1268,6 +1284,13 @@ class Book:
                     "likely tax obligations. For US customers, Sells, "
                     "Converts, Rewards Income, Coinbase Earn "
                     "transactions, and Donations are taxable events. "
+                    "For final tax obligations, please consult your tax advisor."
+                ],
+                "coinbase_v3": [
+                    "You can use this transaction report to inform your "
+                    "likely tax obligations. For US customers, Sells, "
+                    "Converts, Rewards Income, Learning Rewards, "
+                    "and Donations are taxable events. "
                     "For final tax obligations, please consult your tax advisor."
                 ],
                 "coinbase_pro": [
