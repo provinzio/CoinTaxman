@@ -69,8 +69,6 @@ Please consider supporting the development of this tool by either using my [Bina
 
 BTC: `1AZMdztmZ8yZFDb5sdbWNp1wPT8gvvigwp`
 
-ETH: `0x4868d10b8bc347b374300a7b924e3ffdf937ea0f`
-
 ### Key notes for users
 
 ### Requesting a new country
