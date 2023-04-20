@@ -122,7 +122,9 @@ class Book:
         operation_mapping = {
             "Distribution": "Airdrop",
             "Cash Voucher distribution": "Airdrop",
+            "Cashback Voucher": "Airdrop",
             "Rewards Distribution": "Airdrop",
+            "Simple Earn Flexible Airdrop": "Airdrop",
             #
             "Savings Interest": "CoinLendInterest",
             "Savings purchase": "CoinLend",
@@ -142,6 +144,7 @@ class Book:
             "Commission Fee Shared With You": "Commission",
             "Referrer rebates": "Commission",
             "Referral Kickback": "Commission",
+            "Commission Rebate": "Commission",
             # DeFi yield farming
             "Liquid Swap add": "CoinLend",
             "Liquid Swap remove": "CoinLendEnd",
@@ -157,7 +160,13 @@ class Book:
             "Staking Rewards": "StakingInterest",
             "Staking Redemption": "StakingEnd",
             #
+            "Fiat Deposit": "Deposit",
             "Withdraw": "Withdrawal",
+            #
+            "Transaction Buy": "Buy",
+            "Transaction Spend": "Sell",
+            "Transaction Revenue": "Buy",
+            "Transaction Sold": "Sell",
         }
 
         with open(file_path, encoding="utf8") as f:
