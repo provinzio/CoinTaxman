@@ -207,6 +207,7 @@ class Book:
                     "Large OTC trading",
                     "Sell",
                     "Buy",
+                    "Binance Convert",
                 ):
                     operation = "Sell" if change < 0 else "Buy"
 
