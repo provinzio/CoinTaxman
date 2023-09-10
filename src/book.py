@@ -167,6 +167,7 @@ class Book:
             "Transaction Spend": "Sell",
             "Transaction Revenue": "Buy",
             "Transaction Sold": "Sell",
+            "Transaction Fee": "Fee",
         }
 
         with open(file_path, encoding="utf8") as f:
