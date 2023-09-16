@@ -122,16 +122,29 @@ class Book:
         operation_mapping = {
             "Distribution": "Airdrop",
             "Cash Voucher distribution": "Airdrop",
+            "Cashback Voucher": "Airdrop",
             "Rewards Distribution": "Airdrop",
+            "Simple Earn Flexible Airdrop": "Airdrop",
             #
             "Savings Interest": "CoinLendInterest",
             "Savings purchase": "CoinLend",
             "Savings Principal redemption": "CoinLendEnd",
+            "Savings distribution": "CoinLendInterest",
+            "Simple Earn Flexible Subscription": "CoinLend",
+            "Simple Earn Flexible Redemption": "CoinLendEnd",
+            "Simple Earn Flexible Interest": "CoinLendInterest",
+            "Simple Earn Locked Subscription": "CoinLend",
+            "Simple Earn Locked Redemption": "CoinLendEnd",
+            "Simple Earn Locked Rewards": "CoinLendInterest",
+            "Savings Distribution": "CoinLendInterest",
+            #
+            "BNB Vault Rewards": "CoinLendInterest",
             #
             "Commission History": "Commission",
             "Commission Fee Shared With You": "Commission",
             "Referrer rebates": "Commission",
             "Referral Kickback": "Commission",
+            "Commission Rebate": "Commission",
             # DeFi yield farming
             "Liquid Swap add": "CoinLend",
             "Liquid Swap remove": "CoinLendEnd",
@@ -143,8 +156,18 @@ class Book:
             "POS savings purchase": "Staking",
             "POS savings redemption": "StakingEnd",
             "ETH 2.0 Staking Rewards": "StakingInterest",
+            "Staking Purchase": "Staking",
+            "Staking Rewards": "StakingInterest",
+            "Staking Redemption": "StakingEnd",
             #
+            "Fiat Deposit": "Deposit",
             "Withdraw": "Withdrawal",
+            #
+            "Transaction Buy": "Buy",
+            "Transaction Spend": "Sell",
+            "Transaction Revenue": "Buy",
+            "Transaction Sold": "Sell",
+            "Transaction Fee": "Fee",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -180,10 +203,12 @@ class Book:
                 if operation in (
                     "The Easiest Way to Trade",
                     "Small assets exchange BNB",
+                    "Small Assets Exchange BNB",
                     "Transaction Related",
                     "Large OTC trading",
                     "Sell",
                     "Buy",
+                    "Binance Convert",
                 ):
                     operation = "Sell" if change < 0 else "Buy"
 
@@ -206,8 +231,10 @@ class Book:
                 change = abs(change)
 
                 # Validate data.
-                assert account in ("Spot", "Savings"), (
-                    "Other types than Spot or Savings are currently not supported. "
+                supported_account_types = ("Spot", "Savings", "Earn")
+                assert account in supported_account_types, (
+                    f"Other types than {supported_account_types} are currently "
+                    f"not supported.  Given account type is `{account}`. "
                     "Please create an Issue or PR."
                 )
                 assert operation
@@ -236,6 +263,7 @@ class Book:
             "Receive": "Deposit",
             "Send": "Withdrawal",
             "Coinbase Earn": "Buy",
+            "Learning Reward": "Buy",
             "Rewards Income": "Staking",
         }
 
@@ -266,6 +294,17 @@ class Book:
                         "Subtotal",
                         "Total (inclusive of fees)",
                         "Fees",
+                        "Notes",
+                    ] or fields == [
+                        "Timestamp",
+                        "Transaction Type",
+                        "Asset",
+                        "Quantity Transacted",
+                        "Spot Price Currency",
+                        "Spot Price at Transaction",
+                        "Subtotal",
+                        "Total (inclusive of fees and/or spread)",
+                        "Fees and/or Spread",
                         "Notes",
                     ]
                 # Coinbase export format from mid 2021 and before
@@ -433,6 +472,9 @@ class Book:
                     )
 
     def _read_coinbase_v2(self, file_path: Path) -> None:
+        self._read_coinbase(file_path=file_path)
+
+    def _read_coinbase_v3(self, file_path: Path) -> None:
         self._read_coinbase(file_path=file_path)
 
     def _read_coinbase_pro(self, file_path: Path) -> None:
@@ -1243,6 +1285,7 @@ class Book:
                 "binance_v2": 1,
                 "coinbase": 1,
                 "coinbase_v2": 1,
+                "coinbase_v3": 1,
                 "coinbase_pro": 1,
                 "kraken_ledgers_old": 1,
                 "kraken_ledgers": 1,
@@ -1282,6 +1325,13 @@ class Book:
                     "likely tax obligations. For US customers, Sells, "
                     "Converts, Rewards Income, Coinbase Earn "
                     "transactions, and Donations are taxable events. "
+                    "For final tax obligations, please consult your tax advisor."
+                ],
+                "coinbase_v3": [
+                    "You can use this transaction report to inform your "
+                    "likely tax obligations. For US customers, Sells, "
+                    "Converts, Rewards Income, Learning Rewards, "
+                    "and Donations are taxable events. "
                     "For final tax obligations, please consult your tax advisor."
                 ],
                 "coinbase_pro": [
