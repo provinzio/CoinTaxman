@@ -18,7 +18,7 @@ six==1.16.0
     # via python-dateutil
 tzdata==2022.1
     # via -r dependencies/requirements.in
-urllib3==1.26.17
+urllib3==1.26.18
     # via requests
 xlsxwriter==3.0.3
     # via -r dependencies/requirements.in
