@@ -572,6 +572,8 @@ class Book:
         )
 
     def _read_kraken_ledgers(self, file_path: Path) -> None:
+        fee_sign_of_file: Optional[bool] = None
+
         platform = "kraken"
         operation_mapping = {
             "spend": "Sell",  # Sell ordered via 'Buy Crypto' button
@@ -636,6 +638,26 @@ class Book:
                 _asset = _asset.removesuffix(".S")
                 coin = kraken_asset_map.get(_asset, _asset)
                 fee = misc.force_decimal(_fee)
+                # An older implementation expected always positive fees
+                # It seems that newer ledger files can have negative fee
+                # values instead.
+                if fee != 0:
+                    # As soon as the first fee!=0 appears, check whether the
+                    # fees are positive or negative. All fees in the file
+                    # should have the same sign.
+                    if fee_sign_of_file is None:
+                        fee_sign_of_file = fee < 0
+                    # Adjust the fee sign so that fees are always positive.
+                    if fee_sign_of_file is True:
+                        fee *= -1
+                    if fee < 0:
+                        log.error(
+                            f"{file_path} row {row}: Unexpected fee sign. "
+                            "All fees should have the same sign. "
+                            "Please create an Issue or PR."
+                        )
+                        raise RuntimeError
+
                 operation = operation_mapping.get(_type)
                 if operation is None:
                     if _type == "trade":
