@@ -808,7 +808,6 @@ class Book:
                         )
 
     def _read_kraken_ledgers_old(self, file_path: Path) -> None:
-
         self._read_kraken_ledgers(file_path)
 
     def _read_bitpanda_pro_trades(self, file_path: Path) -> None:
