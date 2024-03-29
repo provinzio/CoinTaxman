@@ -621,7 +621,7 @@ class Book:
                     ) = columns
                 else:
                     log.error(
-                        "{file_path}: Unknown Kraken ledgers format: "
+                        f"{file_path}: Unknown Kraken ledgers format: "
                         "Number of rows do not match known versions."
                     )
                     raise RuntimeError
