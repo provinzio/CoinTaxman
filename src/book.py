@@ -125,6 +125,8 @@ class Book:
             "Cashback Voucher": "Airdrop",
             "Rewards Distribution": "Airdrop",
             "Simple Earn Flexible Airdrop": "Airdrop",
+            "Airdrop Assets": "Airdrop",
+            "Launchpool Earnings Withdrawal": "Airdrop",
             #
             "Savings Interest": "CoinLendInterest",
             "Savings purchase": "CoinLend",
@@ -242,7 +244,10 @@ class Book:
                 assert change
 
                 # Check for problems.
-                if remark and remark not in ("Withdraw fee is included",):
+                if remark and remark not in (
+                    "Withdraw fee is included",
+                    "Binance Earn",
+                ) and not remark.endswith(" to BNB"):
                     log.warning(
                         "I may have missed a remark in %s:%i: `%s`.",
                         file_path,
