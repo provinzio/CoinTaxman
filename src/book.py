@@ -243,21 +243,27 @@ class Book:
                 assert coin
                 assert change
 
-                # Check for problems.
-                if remark and remark not in (
-                    "Withdraw fee is included",
-                    "Binance Earn",
-                    "Binance Launchpool",
-                ) and not remark.endswith(" to BNB"):
-                    log.warning(
-                        "I may have missed a remark in %s:%i: `%s`.",
-                        file_path,
-                        row,
-                        remark,
-                    )
+                if remark:
+                    # Ignore default remarks
+                    if remark  in (
+                        "Withdraw fee is included",
+                        "Binance Earn",
+                        "Binance Launchpool",
+                    ) or  remark.endswith(" to BNB"):
+                        remark = None
+                    
+                    # Warn on other binance remarks, becuase all remarks should be some
+                    # unnecessary default text which we'd like to ignore
+                    else:
+                        log.warning(
+                            "I may have missed a remark in %s:%i: `%s`.",
+                            file_path,
+                            row,
+                            remark,
+                        )
 
                 self.append_operation(
-                    operation, utc_time, platform, change, coin, row, file_path
+                    operation, utc_time, platform, change, coin, row, file_path, remark
                 )
 
     def _read_binance_v2(self, file_path: Path) -> None:
