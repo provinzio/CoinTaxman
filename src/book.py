@@ -126,7 +126,6 @@ class Book:
             "Rewards Distribution": "Airdrop",
             "Simple Earn Flexible Airdrop": "Airdrop",
             "Airdrop Assets": "Airdrop",
-            "Launchpool Earnings Withdrawal": "Airdrop",
             #
             "Savings Interest": "CoinLendInterest",
             "Savings purchase": "CoinLend",
@@ -141,6 +140,7 @@ class Book:
             "Savings Distribution": "CoinLendInterest",
             #
             "BNB Vault Rewards": "CoinLendInterest",
+            "Launchpool Earnings Withdrawal": "CoinLendInterest",
             #
             "Commission History": "Commission",
             "Commission Fee Shared With You": "Commission",
@@ -247,6 +247,7 @@ class Book:
                 if remark and remark not in (
                     "Withdraw fee is included",
                     "Binance Earn",
+                    "Binance Launchpool",
                 ) and not remark.endswith(" to BNB"):
                     log.warning(
                         "I may have missed a remark in %s:%i: `%s`.",
