@@ -155,7 +155,7 @@ class PriceData:
             log.warning(
                 f"Unable to retrieve price for {symbol=} from binance at "
                 f"{utc_time=} even though multiple {fallback_assets=} and "
-                f"multiple {fallback_intervalls=}  were checked against. "
+                f"multiple {fallback_intervalls=} were checked against. "
                 "Assumption: The coin couldn't been traded at that time. "
                 "Set the price to 0. "
                 "This will be saved to the database and used again without "
