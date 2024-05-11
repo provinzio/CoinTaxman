@@ -1017,6 +1017,11 @@ class Book:
             "withdrawal": "Withdrawal",
             "buy": "Buy",
             "sell": "Sell",
+            "reward": "StakingInterest",
+            "staking": "Staking",
+            "staking_end": "StakingEnd",
+            "airdrop_gift": "AirdropGift",
+            "airdrop_income": "AirdropIncome",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -1041,6 +1046,7 @@ class Book:
                 "Fee asset",
                 "Spread",
                 "Spread Currency",
+                "Tax Fiat",
             ]:
                 try:
                     line = next(reader)
@@ -1052,7 +1058,7 @@ class Book:
                 _tx_id,
                 csv_utc_time,
                 operation,
-                _inout,
+                inout,
                 amount_fiat,
                 fiat,
                 amount_asset,
@@ -1065,8 +1071,14 @@ class Book:
                 fee_currency,
                 _spread,
                 _spread_currency,
+                _tax_fiat,
             ) in reader:
                 row = reader.line_num
+
+                # Skip stocks for now!
+                # TODO: Handle Stocks?
+                if asset_class.startswith("Stock"):
+                    continue
 
                 # make RFC3339 timestamp ISO 8601 parseable
                 if csv_utc_time[-1] == "Z":
@@ -1079,23 +1091,66 @@ class Book:
                 # CocaCola transfer, which I don't want to track. Would need to
                 # be implemented if need be.
                 if operation == "transfer":
-                    log.warning(
-                        f"'Transfer' operations are not "
-                        f"implemented, skipping row {row} of file {file_path}"
-                    )
-                    continue
+                    if asset == "BEST" and asset_class == "Cryptocurrency":
+                        # BEST is awarded for trading activity and holding a portfolio at bitpanda
+                        # The BEST awards are listed as "transfer" but must be processed as Airdrop (non-taxable)
+                        operation = "airdrop_gift"
+                    elif (
+                        inout == "incoming"
+                        and asset == "ETHW"
+                        and asset_class == "Cryptocurrency"
+                        and utc_time.year == 2022
+                        and utc_time.month == 9
+                    ):
+                        # In September 2022 the ETH blockchain switched from proof of work to
+                        # proof of stake. This bore the potential for a hardfork and continuation
+                        # of the original PoW chain albeit with a drastically reduced hashrate.
+                        # Bitpanda considered listing the resulting token if there was still value
+                        # in trading the ETH token on the PoW fork and considered distributing airdrops
+                        # in that case. The resulting token would be traded using the ETHW handle.
+                        # See: https://blog.bitpanda.com/en/ethereum-merge-everything-you-need-know
+                        #
+                        # German law regarding this case is not entirely clear
+                        # (see https://www.winheller.com/bankrecht-finanzrecht/bitcointrading/bitcoinundsteuer/besteuerung-hardforks-ledger-splits.html).
+                        # TODO: This should actually copy the history from the original ETH history.
+                        log.warning(
+                            f"Airdrop of {asset} is likely a result of Ethereums switch "
+                            f"to PoS in September 2022. The legal status of taxation of fork "
+                            f"airdrops is unclear in Germany (at least). Also, the original "
+                            f"history should be copied, which is NOT YET IMPLEMENTED. "
+                            f"See https://blog.bitpanda.com/en/ethereum-merge-everything-you-need-know "
+                            f"for more information. "
+                            f"Please open an issue or PR if you know how to resolve this. "
+                            f"In row {row} in file {file_path}."
+                        )
+                        operation = "airdrop_gift"
+                    else:
+                        log.warning(
+                            f"'Transfer' operations are not "
+                            f"implemented, skipping row {row} of file {file_path}"
+                        )
+                        continue
+
+                # remap tansfer(stake)
+                if operation == "transfer(stake)":
+                    if inout == "incoming":
+                        operation = "staking"
+                if operation == "transfer(unstake)":
+                    if inout == "outgoing":
+                        operation = "staking_end"
 
                 # fail for unknown ops
                 try:
                     operation = operation_mapping[operation]
                 except KeyError:
                     log.error(
-                        f"Unsupported operation '{operation}' "
+                        f"Unsupported operation '{operation}' for asset {asset} "
                         f"in row {row} of file {file_path}"
                     )
                     raise RuntimeError
 
-                if operation in ["Deposit", "Withdrawal"]:
+                # Handling Airdrops the same as Deposits and Withdrawals here. Otherwise, balance doesn't add up.
+                if operation in ["Deposit", "Withdrawal", "Airdrop", "AirdropGift", "AirdropIncome"]:
                     if asset_class == "Fiat":
                         change = misc.force_decimal(amount_fiat)
                         if fiat != asset:
@@ -1418,6 +1473,7 @@ class Book:
                     "Fee asset",
                     "Spread",
                     "Spread Currency",
+                    "Tax Fiat",
                 ],
                 "custom_eur": [
                     "Type",

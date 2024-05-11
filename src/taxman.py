@@ -486,6 +486,12 @@ class Taxman:
                     taxation_type = "Schenkung"
                 else:
                     taxation_type = "Einkünfte aus sonstigen Leistungen"
+
+                # If taxation_type is actually set, it should overwrite the general setting.
+                # This can happen by using the subclasses AirdropGift (not taxed) and AirdropIncome (taxed)
+                if op.taxation_type:
+                    taxation_type = op.taxation_type
+
                 report_entry = tr.AirdropReportEntry(
                     platform=op.platform,
                     amount=op.change,

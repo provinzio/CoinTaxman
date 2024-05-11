@@ -190,8 +190,17 @@ class StakingInterest(Transaction):
 
 
 class Airdrop(Transaction):
-    pass
+    taxation_type: Optional[str] = None
 
+class AirdropGift(Airdrop):
+    """AirdropGift is used for gifts that are non-taxable"""
+
+    taxation_type: Optional[str] = "Schenkung"
+
+class AirdropIncome(Airdrop):
+    """AirdropIncome is used for income that is taxable"""
+
+    taxation_type: Optional[str] = "Einkünfte aus sonstigen Leistungen"
 
 class Commission(Transaction):
     pass
