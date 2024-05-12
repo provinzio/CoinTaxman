@@ -281,8 +281,11 @@ class PriceData:
     def _get_price_bitpanda(
         self, base_asset: str, utc_time: datetime.datetime, quote_asset: str
     ) -> decimal.Decimal:
+        # TODO: Do we want to get historic price data from ONE TRADING (ex Bitpanda Pro) or do we want something else?
         return self._get_price_bitpanda_pro(base_asset, utc_time, quote_asset)
 
+    # Bitpanda Pro is now ONE TRADING.
+    # TODO: Handle something different?
     @misc.delayed
     def _get_price_bitpanda_pro(
         self, base_asset: str, utc_time: datetime.datetime, quote_asset: str
@@ -304,7 +307,7 @@ class PriceData:
         """
 
         baseurl = (
-            f"https://api.exchange.bitpanda.com/public/v1/"
+            f"https://api.onetrading.com/fast/v1/"
             f"candlesticks/{base_asset}_{quote_asset}"
         )
 
@@ -341,18 +344,18 @@ class PriceData:
                 }
                 if num_offset:
                     log.debug(
-                        f"Calling Bitpanda API for {base_asset} / {quote_asset} price "
+                        f"Calling ONE TRADING (ex Bitpanda Pro) API for {base_asset} / {quote_asset} price "
                         f"for {t} minute timeframe ending at {end} "
                         f"(includes {window_offset} minutes offset)"
                     )
                 else:
                     log.debug(
-                        f"Calling Bitpanda API for {base_asset} / {quote_asset} price "
+                        f"Calling ONE TRADING (ex Bitpanda Pro) API for {base_asset} / {quote_asset} price "
                         f"for {t} minute timeframe ending at {end}"
                     )
                 r = requests.get(baseurl, params=params)
 
-                assert r.status_code == 200, "No valid response from Bitpanda API"
+                assert r.status_code == 200, f"No valid response from ONE TRADING (ex Bitpanda Pro) API\nError: {r.json()['error']}"
                 data = r.json()
 
                 # exit loop if data is valid
@@ -604,7 +607,25 @@ class PriceData:
         reference_coin: str = config.FIAT,
     ) -> decimal.Decimal:
         op = op_sc if isinstance(op_sc, tr.Operation) else op_sc.op
-        price = self.get_price(op.platform, op.coin, op.utc_time, reference_coin)
+        if op.coin in ["ETHW", "BEST"] and op.platform == "bitpanda":
+            # ETHW and BEST are not available via ONE TRADING (ex Bitpanda Pro) API
+            # => use the price from the exported data.
+            if op.exported_price is not None:
+                return op.exported_price
+            if op.coin == "BEST" and isinstance(op, tr.Fee):
+                # Fees paid with BEST don't have a value given in the exported data.
+                # The value also can't be queried from the ONE TRADING (ex Bitpanda Pro) API (anymore)
+                log.warning(
+                    f"Can't get price for '{type(op).__name__}' of {op.coin} on platform {op.platform} for operation 'Withdrawal' anymore.\n"
+                    f"A withdrawal of BEST on bitpanda is likely a deduction of fees. For now we'll assume a value of 0.\n"
+                    f"For accurately calculating fees, this needs to be fixed. PRs welcome!\n"
+                    f"(row {op.line} in {op.file_path}"
+                )
+                return 0
+            raise RuntimeError(f"Can't get price for '{type(op).__name__}' of {op.coin} on platform {op.platform} (row {op.line} in {op.file_path})!")
+        else:
+            price = self.get_price(op.platform, op.coin, op.utc_time, reference_coin)
+
         if isinstance(op_sc, tr.Operation):
             return price * op_sc.change
         if isinstance(op_sc, tr.SoldCoin):

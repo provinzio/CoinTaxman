@@ -59,6 +59,7 @@ class Book:
         coin: str,
         row: int,
         file_path: Path,
+        exported_price: Optional[decimal.Decimal] = None,
         remark: Optional[str] = None,
     ) -> tr.Operation:
 
@@ -77,7 +78,7 @@ class Book:
         if remark:
             kwargs["remarks"] = [remark]
 
-        op = Op(utc_time, platform, change, coin, [row], file_path, **kwargs)
+        op = Op(utc_time, platform, change, coin, [row], file_path, None, exported_price, **kwargs)
         assert isinstance(op, tr.Operation)
         return op
 
@@ -99,6 +100,7 @@ class Book:
         coin: str,
         row: int,
         file_path: Path,
+        exported_price: Optional[decimal.Decimal] = None,
         remark: Optional[str] = None,
     ) -> None:
         # Discard operations after the `TAX_YEAR`.
@@ -112,6 +114,7 @@ class Book:
                 coin,
                 row,
                 file_path,
+                exported_price,
                 remark=remark,
             )
 
@@ -263,7 +266,7 @@ class Book:
                         )
 
                 self.append_operation(
-                    operation, utc_time, platform, change, coin, row, file_path, remark
+                    operation, utc_time, platform, change, coin, row, file_path, None, remark
                 )
 
     def _read_binance_v2(self, file_path: Path) -> None:
@@ -1063,7 +1066,7 @@ class Book:
                 fiat,
                 amount_asset,
                 asset,
-                _asset_price,
+                asset_price,
                 asset_price_currency,
                 asset_class,
                 _product_id,
@@ -1083,6 +1086,11 @@ class Book:
                 # make RFC3339 timestamp ISO 8601 parseable
                 if csv_utc_time[-1] == "Z":
                     csv_utc_time = csv_utc_time[:-1] + "+00:00"
+
+                if asset_price != "-":
+                    exported_price = misc.force_decimal(asset_price)
+                else:
+                    exported_price = None
 
                 # timezone information is already taken care of with this
                 utc_time = datetime.datetime.fromisoformat(csv_utc_time)
@@ -1183,6 +1191,13 @@ class Book:
                     # Calculated price
                     price_calc = change_fiat / change
                     set_price_db(platform, asset, config.FIAT, utc_time, price_calc)
+                elif operation in ["Staking", "StakingEnd", "StakingInterest"]:
+                    change = misc.force_decimal(amount_asset)
+                else:
+                    # If something slips through the if/elifs above, the change will be wrong!
+                    # That's why we have to raise an exception here!
+                    log.error(f"Failed to appropriately handle operation '{operation}' for {platform}!")
+                    raise RuntimeError
 
                 if change < 0:
                     log.error(
@@ -1191,8 +1206,11 @@ class Book:
                     )
                     raise RuntimeError
 
+                # Asset price is added to operation as 'exported_price' because some asset prices
+                # can't be checked anymore (like BEST and ETHW, which are both not available using
+                # ONE TRADINGs (ex Bitpanda Pro) candlebars API.
                 self.append_operation(
-                    operation, utc_time, platform, change, asset, row, file_path
+                    operation, utc_time, platform, change, asset, row, file_path, exported_price
                 )
 
                 # add buy / sell operation for fiat currency
