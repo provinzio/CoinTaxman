@@ -1099,7 +1099,7 @@ class Book:
                 # CocaCola transfer, which I don't want to track. Would need to
                 # be implemented if need be.
                 if operation == "transfer":
-                    if asset == "BEST" and asset_class == "Cryptocurrency":
+                    if asset == "BEST" and asset_class == "Cryptocurrency" and inout == "incoming":
                         # BEST is awarded for trading activity and holding a portfolio at bitpanda
                         # The BEST awards are listed as "transfer" but must be processed as Airdrop (non-taxable)
                         operation = "airdrop_gift"
@@ -1132,6 +1132,48 @@ class Book:
                             f"In row {row} in file {file_path}."
                         )
                         operation = "airdrop_gift"
+                    elif (
+                        inout == "incoming"
+                        and asset == "LUNC"
+                        and asset_class == "Fiat"
+                        and utc_time.year == 2022
+                        and utc_time.month == 5
+                    ):
+                        # In May 2022 the Terra (LUNA) blockchain crashed. In response, a new chain
+                        # Terra 2.0 (LUNA) was created. The new old chain is still tradeable as
+                        # Terra Classic (LUNC) and holders of LUNA before the crash received their
+                        # LUNC tokens as airdrop. This also applied to LUNA tokens held through
+                        # bitpanda crypto indices.
+                        # Source for bitpanda LUNC airdrop:
+                        # https://support.bitpanda.com/hc/en-us/articles/4995318011292-Terra-2-0-LUNA-Airdrop
+                        #
+                        # The German law regarding this case is not entirely clear:
+                        # https://www.winheller.com/bankrecht-finanzrecht/bitcointrading/bitcoinundsteuer/besteuerung-hardforks-ledger-splits.html
+                        # TODO: This should actually copy the history from the original LUNA history.
+                        log.warning(
+                            f"WARNING: Airdrop of {asset} is a result of the fork of the "
+                            f"LUNA blockchain in May 2022. The legal status of "
+                            f"taxation of hardfork results is not clear in German law. "
+                            f"Also, the date of procurement should be set to the date(s) "
+                            f"of procurement of the original coins, essentially copying "
+                            f"the history of the original chain, which is NOT YET IMPLEMENTED. "
+                            f"See https://support.bitpanda.com/hc/en-us/articles/4995318011292-Terra-2-0-LUNA-Airdrop "
+                            f"for more information. "
+                            f"Please open an issue or PR if you know how to resolve this. "
+                            f"In row {row} in file {file_path}."
+                        )
+                        # Rewrite this asset_class because "Fiat" clearly wrong.
+                        asset_class = "Cryptocurrency"
+                        operation = "airdrop_gift"
+                    elif (
+                        inout == "incoming"
+                        and asset_class == "Cryptocurrency"
+                        and asset != "BEST"
+                        and utc_time < datetime.datetime(2022, 6, 14, 0, 0, 0, 0, utc_time.tzinfo)
+                    ):
+                        # Bitpanda tagged incoming staking rewards as incoming transfer until June 14 2022
+                        # or a few days before that date. After that, staking rewards are correctly tagged as "reward".
+                        operation = "reward"
                     else:
                         log.warning(
                             f"'Transfer' operations are not "

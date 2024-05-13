@@ -261,8 +261,8 @@ class Taxman:
         Raises:
             NotImplementedError: When there are more than two different fee coins.
         """
-        assert op.coin == sc.op.coin
-        assert op.change >= sc.sold
+        assert op.coin == sc.op.coin, f"Error evaluating op.coin==sc.op.coin:\n\t\t{op}\n\t\t{sc}"
+        assert op.change >= sc.sold, f"Error evaluating op.change >=sc.sold:\n\t\t{op}\n\t\t{sc}"
 
         # Share the fees and sell_value proportionally to the coins sold.
         percent = sc.sold / op.change
@@ -284,7 +284,7 @@ class Taxman:
         except Exception as e:
             if ReportType is tr.UnrealizedSellReportEntry:
                 log.warning(
-                    "Catched the following exception while trying to query an "
+                    "Caught the following exception while trying to query an "
                     f"unrealized sell value for {sc.sold} {sc.op.coin} at deadline "
                     f"on platform {sc.op.platform}. "
                     "If you want to see your unrealized sell value "
@@ -294,7 +294,7 @@ class Taxman:
                     "The sell value for this calculation will be set to 0. "
                     "Your unrealized sell summary will be wrong and will not "
                     "be exported.\n"
-                    f"Catched exception: {e}"
+                    f"Caught exception: {type(e).__name__}: {e}"
                 )
                 sell_value_in_fiat = decimal.Decimal()
                 self.unrealized_sells_faulty = True
