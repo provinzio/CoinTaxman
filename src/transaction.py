@@ -173,10 +173,18 @@ class Buy(Transaction):
     link: Optional[Sell] = None
     buying_cost: Optional[decimal.Decimal] = None
 
+    @property
+    def unlinked(self) -> bool:
+        return self.link is None and self.buying_cost is None
+
 
 class Sell(Transaction):
     link: Optional[Buy] = None
     selling_value: Optional[decimal.Decimal] = None
+
+    @property
+    def unlinked(self) -> bool:
+        return self.link is None and self.selling_value is None
 
 
 class CoinLendInterest(Transaction):
