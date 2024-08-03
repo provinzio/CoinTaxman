@@ -125,6 +125,7 @@ class Book:
             "Cashback Voucher": "Airdrop",
             "Rewards Distribution": "Airdrop",
             "Simple Earn Flexible Airdrop": "Airdrop",
+            "Airdrop Assets": "Airdrop",
             #
             "Savings Interest": "CoinLendInterest",
             "Savings purchase": "CoinLend",
@@ -139,6 +140,7 @@ class Book:
             "Savings Distribution": "CoinLendInterest",
             #
             "BNB Vault Rewards": "CoinLendInterest",
+            "Launchpool Earnings Withdrawal": "CoinLendInterest",
             #
             "Commission History": "Commission",
             "Commission Fee Shared With You": "Commission",
@@ -241,17 +243,27 @@ class Book:
                 assert coin
                 assert change
 
-                # Check for problems.
-                if remark and remark not in ("Withdraw fee is included",):
-                    log.warning(
-                        "I may have missed a remark in %s:%i: `%s`.",
-                        file_path,
-                        row,
-                        remark,
-                    )
+                if remark:
+                    # Ignore default remarks
+                    if remark  in (
+                        "Withdraw fee is included",
+                        "Binance Earn",
+                        "Binance Launchpool",
+                    ) or  remark.endswith(" to BNB"):
+                        remark = None
+                    
+                    # Warn on other binance remarks, becuase all remarks should be some
+                    # unnecessary default text which we'd like to ignore
+                    else:
+                        log.warning(
+                            "I may have missed a remark in %s:%i: `%s`.",
+                            file_path,
+                            row,
+                            remark,
+                        )
 
                 self.append_operation(
-                    operation, utc_time, platform, change, coin, row, file_path
+                    operation, utc_time, platform, change, coin, row, file_path, remark
                 )
 
     def _read_binance_v2(self, file_path: Path) -> None:
@@ -572,6 +584,8 @@ class Book:
         )
 
     def _read_kraken_ledgers(self, file_path: Path) -> None:
+        fee_sign_of_file: Optional[bool] = None
+
         platform = "kraken"
         operation_mapping = {
             "spend": "Sell",  # Sell ordered via 'Buy Crypto' button
@@ -622,7 +636,7 @@ class Book:
                     ) = columns
                 else:
                     log.error(
-                        "{file_path}: Unknown Kraken ledgers format: "
+                        f"{file_path}: Unknown Kraken ledgers format: "
                         "Number of rows do not match known versions."
                     )
                     raise RuntimeError
@@ -637,6 +651,26 @@ class Book:
                 _asset = _asset.removesuffix(".S")
                 coin = kraken_asset_map.get(_asset, _asset)
                 fee = misc.force_decimal(_fee)
+                # An older implementation expected always positive fees
+                # It seems that newer ledger files can have negative fee
+                # values instead.
+                if fee != 0:
+                    # As soon as the first fee!=0 appears, check whether the
+                    # fees are positive or negative. All fees in the file
+                    # should have the same sign.
+                    if fee_sign_of_file is None:
+                        fee_sign_of_file = fee < 0
+                    # Adjust the fee sign so that fees are always positive.
+                    if fee_sign_of_file is True:
+                        fee *= -1
+                    if fee < 0:
+                        log.error(
+                            f"{file_path} row {row}: Unexpected fee sign. "
+                            "All fees should have the same sign. "
+                            "Please create an Issue or PR."
+                        )
+                        raise RuntimeError
+
                 operation = operation_mapping.get(_type)
                 if operation is None:
                     if _type == "trade":
@@ -838,7 +872,6 @@ class Book:
                         )
 
     def _read_kraken_ledgers_old(self, file_path: Path) -> None:
-
         self._read_kraken_ledgers(file_path)
 
     def _read_bitpanda_pro_trades(self, file_path: Path) -> None:
