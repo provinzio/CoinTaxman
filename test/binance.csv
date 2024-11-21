@@ -1,0 +1,12 @@
+UTC_Time,Account,Operation,Coin,Change,Remark
+2017-12-05 18:01:21,Spot,Buy,ETH,0.01138874,""
+2017-12-05 18:01:21,Spot,Buy,USDT,25.0,""
+2021-03-01 22:43:36,Spot,Commission History,BNB,0.00000438,""
+2021-03-01 22:45:23,Spot,Commission History,BNB,0.00000501,""
+2021-03-01 23:27:38,Spot,Commission History,BNB,0.00000434,""
+2017-12-05 18:01:21,Spot,Fee,BNB,-0.00100000,""
+2017-12-05 18:01:21,Spot,Sell,ETH,-0.01138874,""
+2017-12-05 18:01:21,Spot,Buy,BNB,2.00000000,""
+2021-06-07 14:00:17,Spot,Fee,BNB,-0.00004383,""
+2021-06-07 14:00:17,Spot,Buy,STRAX,14.35000000,""
+2021-06-07 14:00:17,Spot,Transaction Related,USDT,-23.26709000,""

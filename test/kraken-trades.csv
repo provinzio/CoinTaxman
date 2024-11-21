@@ -1,0 +1,4 @@
+"txid","ordertxid","pair","time","type","ordertype","price","cost","fee","vol","margin","misc","ledgers"
+"<example-trades-txid-1>","<example-ordertxid-1>","XXBTZEUR","2021-02-02 13:30:51.7025","buy","market",28979.40000,997.40670,2.59326,0.03441778,0.00000,"","<example-ledgers-txid-3>","<example-ledgers-txid-2>"
+"<example-trades-txid-2>","<example-ordertxid-2>","XBTUSDC","2021-02-02 13:31:08.8733","sell","market",34878.04000,8.05962,0.02096,0.00023108,0.00000,"","<example-ledgers-txid-5>","<example-ledgers-txid-4>"
+"<example-trades-txid-3>","<example-ordertxid-3>","XBTUSDC","2021-02-08 09:53:58.1674","buy","market",39074.30000,8.01781,0.02085,0.00020519,0.00000,"","<example-ledgers-txid-7>","<example-ledgers-txid-6>"
