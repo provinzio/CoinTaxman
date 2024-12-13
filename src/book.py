@@ -254,14 +254,14 @@ class Book:
 
                 if remark:
                     # Ignore default remarks
-                    if remark  in (
+                    if remark in (
                         "Withdraw fee is included",
                         "Binance Earn",
                         "Binance Pay",
                         "Binance Launchpool",
-                    ) or  remark.endswith(" to BNB"):
+                    ) or remark.endswith(" to BNB"):
                         remark = None
-                    
+
                     # Warn on other binance remarks, becuase all remarks should be some
                     # unnecessary default text which we'd like to ignore
                     else:
