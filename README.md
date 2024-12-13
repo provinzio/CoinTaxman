@@ -36,7 +36,7 @@ Quick and easy installation can be done with `pip`.
 
 ### Usage
 
-1. Adjust `src/config.ini` to your liking
+1. Adjust `\config.ini` to your liking
 2. Add all your account statements in `account_statements/`
 2. Run `python "src/main.py"`
 
