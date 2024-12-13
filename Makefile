@@ -58,11 +58,11 @@ install-dev: install
 
 # Setup virtual environment
 venv:
-	python3 -m venv .pyenv
+	python3 -m venv .venv
 ifdef OS # Windows
-	.pyenv\Scripts\activate && make install
+	.venv\Scripts\activate && make install
 else # Linux
-	source .pyenv/bin/activate && make install
+	source .venv/bin/activate && make install
 endif
 
 # Rebuild requirements(-dev).txt
