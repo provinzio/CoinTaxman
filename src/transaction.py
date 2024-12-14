@@ -114,12 +114,6 @@ class Operation:
         identical_to = all(
             getattr(self, i) == getattr(op, i) for i in self.identical_columns
         )
-
-        if identical_to:
-            assert (
-                self.file_path == op.file_path
-            ), "Identical operations should also be in the same file."
-
         return identical_to
 
     @staticmethod
@@ -128,6 +122,33 @@ class Operation:
         assert all(
             op1.identical_to(op2) for op1, op2 in itertools.combinations(operations, 2)
         ), "Operations have to be identical to be merged"
+
+        # Warn when mergeing across multiple files.
+        # Ignore `Korrekturbuchung.`
+        if (
+            len(
+                set(
+                    [
+                        op.file_path
+                        for op in operations
+                        if not op.remark.startswith("Korrekturbuchung.")
+                    ]
+                )
+            )
+            > 1
+        ):
+            log.warning(
+                "Identical operations will be merged across several files. "
+                "This normally only happens if a transaction occurs incorrectly "
+                "in several files. Please check if you have duplicate transactions "
+                "in your files:\n"
+                + (
+                    "\n".join(
+                        f" - {op.utc_time} {op.coin} {op.change} {op.file_path} [{op.line}] "
+                        for op in operations
+                    )
+                )
+            )
 
         # Select arbitray operation from list.
         o = copy(operations[0])
