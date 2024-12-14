@@ -265,6 +265,10 @@ class Book:
                     ) or remark.endswith(" to BNB"):
                         remark = None
 
+                    # Do not warn for specific remarks
+                    elif remark.startswith("Korrekturbuchung."):
+                        pass
+
                     # Warn on other binance remarks, becuase all remarks should be some
                     # unnecessary default text which we'd like to ignore
                     else:
