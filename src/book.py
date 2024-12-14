@@ -127,6 +127,8 @@ class Book:
             "Simple Earn Flexible Airdrop": "Airdrop",
             "Airdrop Assets": "Airdrop",
             "Crypto Box": "Airdrop",
+            "Launchpool Airdrop": "Airdrop",
+            "Megadrop Rewards": "Airdrop",
             #
             "Savings Interest": "CoinLendInterest",
             "Savings purchase": "CoinLend",
@@ -171,6 +173,7 @@ class Book:
             "Transaction Revenue": "Buy",
             "Transaction Sold": "Sell",
             "Transaction Fee": "Fee",
+            "Asset Recovery": "Sell",
         }
 
         with open(file_path, encoding="utf8") as f:
