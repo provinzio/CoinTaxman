@@ -286,7 +286,7 @@ class Book:
     def _read_binance_v2(self, file_path: Path) -> None:
         self._read_binance(file_path=file_path, version=2)
 
-    def _read_coinbase(self, file_path: Path) -> None:
+    def _read_coinbase(self, file_path: Path, version: int = 1) -> None:
         platform = "coinbase"
         operation_mapping = {
             "Receive": "Deposit",
@@ -301,18 +301,39 @@ class Book:
 
             # Skip header.
             try:
-                assert next(reader)  # header line
-                assert next(reader) == []
-                assert next(reader) == []
-                assert next(reader) == []
-                assert next(reader) == ["Transactions"]
-                assert next(reader)  # user row
-                assert next(reader) == []
+                if version == 4:
+                    assert next(reader) == []
+                    assert next(reader) == ["Transactions"]
+                    assert next(reader)  # user row
+                else:
+                    assert next(reader)  # header line
+                    assert next(reader) == []
+                    assert next(reader) == []
+                    assert next(reader) == []
+                    assert next(reader) == ["Transactions"]
+                    assert next(reader)  # user row
+                    assert next(reader) == []
 
                 fields = next(reader)
                 num_columns = len(fields)
-                # Coinbase export format from late 2021 and ongoing
-                if num_columns == 10:
+                # Coinbase export format from 2023/2024 and ongoing
+                if num_columns == 11:
+                    assert version == 4
+                    assert fields == [
+                        "ID",
+                        "Timestamp",
+                        "Transaction Type",
+                        "Asset",
+                        "Quantity Transacted",
+                        "Price Currency",
+                        "Price at Transaction",
+                        "Subtotal",
+                        "Total (inclusive of fees and/or spread)",
+                        "Fees and/or Spread",
+                        "Notes",
+                    ]
+                # Coinbase export format from late 2021 until 2023/2024
+                elif num_columns == 10:
                     assert fields == [
                         "Timestamp",
                         "Transaction Type",
@@ -366,8 +387,28 @@ class Book:
 
             for columns in reader:
 
-                # Coinbase export format from late 2021 and ongoing
-                if num_columns == 10:
+                # Coinbase export format from 2023/2024 and ongoing
+                if num_columns == 11:
+                    (
+                        _id,
+                        _utc_time,
+                        operation,
+                        coin,
+                        _change,
+                        _currency_spot,
+                        _eur_spot,
+                        _eur_subtotal,
+                        _eur_total,
+                        _eur_fee,
+                        remark,
+                    ) = columns
+                    _eur_spot = _eur_spot.replace("€", "")
+                    _eur_subtotal = _eur_subtotal.replace("€", "")
+                    _eur_total = _eur_total.replace("€", "")
+                    _eur_fee = _eur_fee.replace("€", "")
+
+                # Coinbase export format from late 2021 until 2023/2024
+                elif num_columns == 10:
                     (
                         _utc_time,
                         operation,
@@ -399,12 +440,22 @@ class Book:
                 row = reader.line_num
 
                 # Parse data.
-                utc_time = datetime.datetime.strptime(_utc_time, "%Y-%m-%dT%H:%M:%SZ")
+                if version == 4:
+                    utc_time = datetime.datetime.strptime(
+                        _utc_time, "%Y-%m-%d %H:%M:%S UTC"
+                    )
+                else:
+                    utc_time = datetime.datetime.strptime(
+                        _utc_time, "%Y-%m-%dT%H:%M:%SZ"
+                    )
                 utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
                 operation = operation_mapping.get(operation, operation)
                 change = misc.force_decimal(_change)
                 # `eur_subtotal` and `eur_fee` are None for withdrawals.
                 eur_subtotal = misc.xdecimal(_eur_subtotal)
+                if version == 4:
+                    change = abs(change)
+                    eur_subtotal = abs(eur_subtotal)
                 if eur_subtotal is None:
                     # Cost without fees from CSV is missing. This can happen for
                     # old transactions (<2018), event though something was bought.
@@ -441,6 +492,8 @@ class Book:
                     convert_coin = match.group("coin")
 
                     eur_total = misc.force_decimal(_eur_total)
+                    if version == 4:
+                        eur_total = abs(eur_total)
                     convert_eur_spot = eur_total / convert_change
 
                     self.append_operation(
@@ -501,10 +554,13 @@ class Book:
                     )
 
     def _read_coinbase_v2(self, file_path: Path) -> None:
-        self._read_coinbase(file_path=file_path)
+        self._read_coinbase(file_path=file_path, version=2)
 
     def _read_coinbase_v3(self, file_path: Path) -> None:
-        self._read_coinbase(file_path=file_path)
+        self._read_coinbase(file_path=file_path, version=3)
+
+    def _read_coinbase_v4(self, file_path: Path) -> None:
+        self._read_coinbase(file_path=file_path, version=4)
 
     def _read_coinbase_pro(self, file_path: Path) -> None:
         platform = "coinbase_pro"
@@ -1306,6 +1362,7 @@ class Book:
                 "coinbase": 1,
                 "coinbase_v2": 1,
                 "coinbase_v3": 1,
+                "coinbase_v4": 4,
                 "coinbase_pro": 1,
                 "kraken_ledgers_old": 1,
                 "kraken_ledgers": 1,
@@ -1353,6 +1410,19 @@ class Book:
                     "Converts, Rewards Income, Learning Rewards, "
                     "and Donations are taxable events. "
                     "For final tax obligations, please consult your tax advisor."
+                ],
+                "coinbase_v4": [
+                    "ID",
+                    "Timestamp",
+                    "Transaction Type",
+                    "Asset",
+                    "Quantity Transacted",
+                    "Price Currency",
+                    "Price at Transaction",
+                    "Subtotal",
+                    "Total (inclusive of fees and/or spread)",
+                    "Fees and/or Spread",
+                    "Notes",
                 ],
                 "coinbase_pro": [
                     "portfolio",
