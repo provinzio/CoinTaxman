@@ -166,6 +166,7 @@ class Book:
             "Staking Redemption": "StakingEnd",
             #
             "Fiat Deposit": "Deposit",
+            "Fiat Withdraw": "Withdrawal",
             "Withdraw": "Withdrawal",
             #
             "Transaction Buy": "Buy",
