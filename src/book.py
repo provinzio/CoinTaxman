@@ -605,8 +605,8 @@ class Book:
 
         platform = "kraken"
         operation_mapping = {
-            "spend": "Sell",  # Sell ordered via 'Buy Crypto' button
-            "receive": "Buy",  # Buy ordered via 'Buy Crypto' button
+            "spend": "Sell",  # Sell ordered via 'Buy Crypto' or 'Dust Sweeping'
+            "receive": "Buy",  # Buy ordered via 'Buy Crypto' or 'Dust Sweeping'
             "reward": "StakingInterest",
             "staking": "StakingInterest",
             "deposit": "Deposit",
@@ -742,6 +742,34 @@ class Book:
                         elif subtype in ["spottostaking", "spotfromstaking"]:
                             # duplicate entries for staking actions
                             continue
+                        elif subtype in ["spottofutures", "spotfromfutures"]:
+                            # transfer between spot and futures
+                            continue
+                        else:
+                            log.error(
+                                f"{file_path} row {row}: Order subtype '{subtype}' is "
+                                "currently not supported. Please create an Issue or PR."
+                            )
+                            raise RuntimeError
+                    elif _type == "earn":
+                        if subtype == "reward":
+                            operation = "StakingInterest"
+                        elif subtype == "migration":
+                            # Migration of "x.S" legacy staking balance to new staking
+                            # infrastructure in "earn / bonded" wallet
+                            continue
+                        elif subtype == "allocation":
+                            if change > 0:
+                                operation = "Staking"
+                            else:
+                                # duplicate entries for staking actions
+                                continue
+                        elif subtype == "deallocation":
+                            if change > 0:
+                                operation = "StakingEnd"
+                            else:
+                                # duplicate entries for staking actions
+                                continue
                         else:
                             log.error(
                                 f"{file_path} row {row}: Order subtype '{subtype}' is "
