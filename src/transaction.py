@@ -144,7 +144,8 @@ class Operation:
                 "in your files:\n"
                 + (
                     "\n".join(
-                        f" - {op.utc_time} {op.coin} {op.change} {op.file_path} [{op.line}] "
+                        f" - {op.utc_time} {op.coin} {op.change} "
+                        f"{op.file_path} [{op.line}] "
                         for op in operations
                     )
                 )
