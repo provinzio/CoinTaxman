@@ -126,6 +126,9 @@ class Book:
             "Rewards Distribution": "Airdrop",
             "Simple Earn Flexible Airdrop": "Airdrop",
             "Airdrop Assets": "Airdrop",
+            "Crypto Box": "Airdrop",
+            "Launchpool Airdrop": "Airdrop",
+            "Megadrop Rewards": "Airdrop",
             #
             "Savings Interest": "CoinLendInterest",
             "Savings purchase": "CoinLend",
@@ -170,6 +173,7 @@ class Book:
             "Transaction Revenue": "Buy",
             "Transaction Sold": "Sell",
             "Transaction Fee": "Fee",
+            "Asset Recovery": "Sell",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -223,17 +227,25 @@ class Book:
                     # so we have to change the account type to Spot.
                     account = "Spot"
 
-                if account in ("Spot", "P2P") and operation in (
-                    "transfer_in",
-                    "transfer_out",
+                if (
+                    account in ("Spot", "P2P")
+                    and operation
+                    in (
+                        "transfer_in",
+                        "transfer_out",
+                    )
+                    or (
+                        account in ("Spot", "Funding")
+                        and operation == "Transfer Between Main and Funding Wallet"
+                    )
                 ):
-                    # Ignore transfer from and to P2P market.
+                    # Ignore transfers
                     continue
 
                 change = abs(change)
 
                 # Validate data.
-                supported_account_types = ("Spot", "Savings", "Earn")
+                supported_account_types = ("Spot", "Savings", "Earn", "Funding")
                 assert account in supported_account_types, (
                     f"Other types than {supported_account_types} are currently "
                     f"not supported.  Given account type is `{account}`. "
@@ -245,13 +257,18 @@ class Book:
 
                 if remark:
                     # Ignore default remarks
-                    if remark  in (
+                    if remark in (
                         "Withdraw fee is included",
                         "Binance Earn",
+                        "Binance Pay",
                         "Binance Launchpool",
-                    ) or  remark.endswith(" to BNB"):
+                    ) or remark.endswith(" to BNB"):
                         remark = None
-                    
+
+                    # Do not warn for specific remarks
+                    elif remark.startswith("Korrekturbuchung."):
+                        pass
+
                     # Warn on other binance remarks, becuase all remarks should be some
                     # unnecessary default text which we'd like to ignore
                     else:
