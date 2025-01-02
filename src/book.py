@@ -264,7 +264,7 @@ class Book:
                         "Binance Pay",
                         "Binance Launchpool",
                     ) or remark.endswith(" to BNB"):
-                        remark = None
+                        remark = ""
 
                     # Do not warn for specific remarks
                     elif remark.startswith("Korrekturbuchung."):
