@@ -456,7 +456,7 @@ class Book:
                 eur_subtotal = misc.xdecimal(_eur_subtotal)
                 if version == 4:
                     change = abs(change)
-                    eur_subtotal = abs(eur_subtotal)
+                    eur_subtotal = abs(eur_subtotal) if eur_subtotal else None
                 if eur_subtotal is None:
                     # Cost without fees from CSV is missing. This can happen for
                     # old transactions (<2018), event though something was bought.
