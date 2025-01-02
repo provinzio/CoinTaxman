@@ -623,8 +623,24 @@ class Book:
             for columns in reader:
 
                 num_columns = len(columns)
-                # Kraken ledgers export format from October 2020 and ongoing
-                if num_columns == 10:
+                # Kraken ledgers export format from 2025 and ongoing
+                if num_columns == 11:
+                    (
+                        txid,
+                        refid,
+                        _utc_time,
+                        _type,
+                        subtype,
+                        aclass,
+                        _asset,
+                        _wallet,
+                        _amount,
+                        _fee,
+                        balance,
+                    ) = columns
+
+                # Kraken ledgers export format from October 2020 until 2025
+                elif num_columns == 10:
                     (
                         txid,
                         refid,
@@ -889,6 +905,9 @@ class Book:
                         )
 
     def _read_kraken_ledgers_old(self, file_path: Path) -> None:
+        self._read_kraken_ledgers(file_path)
+
+    def _read_kraken_ledgers_v2(self, file_path: Path) -> None:
         self._read_kraken_ledgers(file_path)
 
     def _read_bitpanda_pro_trades(self, file_path: Path) -> None:
@@ -1339,6 +1358,7 @@ class Book:
                 "coinbase_pro": 1,
                 "kraken_ledgers_old": 1,
                 "kraken_ledgers": 1,
+                "kraken_ledgers_v2": 1,
                 "kraken_trades": 1,
                 "bitpanda_pro_trades": 4,
                 "bitpanda": 7,
@@ -1416,6 +1436,19 @@ class Book:
                     "subtype",
                     "aclass",
                     "asset",
+                    "amount",
+                    "fee",
+                    "balance",
+                ],
+                "kraken_ledgers_v2": [
+                    "txid",
+                    "refid",
+                    "time",
+                    "type",
+                    "subtype",
+                    "aclass",
+                    "asset",
+                    "wallet",
                     "amount",
                     "fee",
                     "balance",
