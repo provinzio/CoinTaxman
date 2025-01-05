@@ -69,7 +69,7 @@ if COUNTRY == core.Country.GERMANY:
     PRINCIPLE = core.Principle.FIFO
     LOCAL_TIMEZONE = zoneinfo.ZoneInfo("CET")
     LOCAL_TIMEZONE_KEY = "MEZ"
-    locale_str = "de_DE"
+    locale_str = ["de_DE", "de_DE.utf8"] # try multiple german locales in order
 
 else:
     raise NotImplementedError(
@@ -79,4 +79,9 @@ else:
 
 # Program specific constants.
 FIAT = FIAT_CLASS.name  # Convert to string.
-locale.setlocale(locale.LC_ALL, locale_str)
+for loc in locale_str:
+    try:
+        locale.setlocale(locale.LC_ALL, loc)
+    except:
+        continue
+    break
