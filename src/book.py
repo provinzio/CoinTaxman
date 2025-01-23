@@ -536,6 +536,18 @@ class Book:
                     # If it's a buy, add the corresponding sell to complement
                     # the trading pair.
                     elif operation == "Buy":
+                        # If coins were bought with fiat, first add a corresponding deposit
+                        if misc.is_fiat(_currency_spot):
+                            eur_total = misc.force_decimal(_eur_total)
+                            self.append_operation(
+                                "Deposit",
+                                utc_time,
+                                platform,
+                                eur_total,
+                                _currency_spot,
+                                row,
+                                file_path,
+                            )
                         assert isinstance(eur_subtotal, decimal.Decimal)
                         self.append_operation(
                             "Sell",
@@ -564,7 +576,7 @@ class Book:
         self._read_coinbase(file_path=file_path, version=4)
 
     def _read_coinbase_pro(self, file_path: Path) -> None:
-        platform = "coinbase_pro"
+        platform = "coinbase"
         operation_mapping = {
             "BUY": "Buy",
             "SELL": "Sell",
