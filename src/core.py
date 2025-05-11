@@ -214,6 +214,7 @@ kraken_asset_map = {
     "ZJPY": "JPY",
     "ZUSD": "USD",
     # Crypto:
+    "BTC": "XBT",
     "XETC": "ETC",
     "XETH": "ETH",
     "XLTC": "LTC",

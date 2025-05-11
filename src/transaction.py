@@ -201,6 +201,26 @@ class Sell(Transaction):
     selling_value: Optional[decimal.Decimal] = None
 
 
+class MarginFee(Transaction):
+    """Fees for margin trading"""
+
+    pass
+
+
+class MarginGain(Transaction):
+    """Gains from margin trading.
+    This is already a taxable value, no buy/sell calculation required."""
+
+    pass
+
+
+class MarginLoss(Transaction):
+    """Losses from margin trading.
+    This is already a taxable value, no buy/sell calculation required."""
+
+    pass
+
+
 class CoinLendInterest(Transaction):
     pass
 
@@ -704,6 +724,60 @@ class BuyReportEntry(TaxReportEntry):
         ]
 
 
+class MarginReportEntry(TaxReportEntry):
+    event_type = "Margin-Trading"
+
+    def __init__(
+        self,
+        platform: str,
+        amount: decimal.Decimal,
+        utc_time: datetime.datetime,
+        coin: str,
+        interest_in_fiat: decimal.Decimal,
+        taxation_type: str,
+        remark: str,
+    ) -> None:
+        super().__init__(
+            first_platform=platform,
+            amount=amount,
+            first_utc_time=utc_time,
+            coin=coin,
+            first_value_in_fiat=interest_in_fiat,
+            is_taxable=True,
+            taxation_type=taxation_type,
+            remark=remark,
+        )
+
+    @classmethod
+    def _labels(cls) -> list[str]:
+        return [
+            "Börse",
+            "-",
+            #
+            "Anzahl",
+            "Währung",
+            #
+            "Erhalten oder ausgegeben am",
+            "-",
+            #
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
+            #
+            "-",
+            "-",
+            "-",
+            #
+            "Gewinn/Verlust in EUR",
+            "davon steuerbar in EUR",
+            "Einkunftsart",
+            "Bemerkung",
+        ]
+
+
 class InterestReportEntry(TaxReportEntry):
     event_type = "Zinsen"
 
@@ -960,6 +1034,7 @@ operations_order = gain_operations + loss_operations
 tax_report_entry_order = [
     BuyReportEntry,
     SellReportEntry,
+    MarginReportEntry,
     LendingInterestReportEntry,
     StakingInterestReportEntry,
     InterestReportEntry,
