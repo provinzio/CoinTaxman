@@ -51,8 +51,7 @@ def main() -> None:
     # Match fees with operations  AND
     # Resolve dependencies between sells and buys, which is
     # necessary to correctly calculate the buying cost of a sold coin
-    book.match_fees()
-    book.resolve_trades()
+    book.resolve_trades_and_fees()
 
     taxman.evaluate_taxation()
     evaluation_file_path = taxman.export_evaluation_as_excel()
