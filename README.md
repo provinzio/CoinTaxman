@@ -157,3 +157,76 @@ Weitere Besonderheiten die sich so nicht im BMF-Schreiben wiederfinden, sind im 
 Bei Binance gibt es die Möglichkeit, andere Personen über einen Link zu werben.
 Bei jeder Transaktion der Person erhält man einen kleinen Anteil derer Gebühren als Reward gutgeschrieben.
 Die Einkünfte durch diese Rewards werden durch CoinTaxman als Einkünfte aus sonstigen Leistungen ausgewiesen und damit wie eine übliche Kunden-werben-Kunden-Prämie erfasst.
+
+### Future- / Margin-Trading
+
+#### Unterscheidung Veräußerungsgeschäft / Termingeschäft
+
+> Gewinne aus Future-Trades stellen in der Regel Einkünfte aus Kapitalvermögen dar und unterliegen damit der Kapitalertragsteuer. Maßgebend für die steuerliche Beurteilung ist allerdings weniger die von der Börse gewählte Begrifflichkeit, sondern vielmehr die konkrete Ausgestaltung des angebotenen Finanzprodukts. Im Einzelfall kann deshalb unter Umständen auch bei Futures ein privates Veräußerungsgeschäft gemäß § 23 EStG vorliegen, das zu einer Besteuerung nach dem persönlichen Einkommensteuersatz führt. Im Kern kommt es für die Abgrenzung darauf an, ob das Geschäft wie beim Spot Trading auf die Lieferung einer Kryptowährung abzielt (dann ist § 23 EStG einschlägig) oder ob die Lieferung lediglich einen Differenzausgleich darstellt (dann liegen Kapitaleinkünfte gemäß § 23 Abs. 2 Satz. 1 Nr. 3 EStG vor). [...]
+> 
+> Parallel dazu lassen sich die Überlegungen auf das Margin Trading übertragen, weshalb Gewinne aus Margin Trades immer nur dann unter Kapitaleinkünfte (§ 20 EStG) fallen, wenn keine Lieferung einer Kryptowährung, sondern ein Differenzausgleich durchgeführt wird. Kommt es hingegen zu einer Lieferung einer Kryptowährung, liegt ein privates Veräußerungsgeschäft gemäß § 23 Abs. 1 Satz 1 Nr. 2 EStG vor.
+> 
+> [...]
+> 
+> Stammen die erhaltenen Bitcoins aus einer Auszahlung resultierend aus einem Differenzausgleich, ist anschließend eine steuerfreie Veräußerung möglich. Da die Gewinne in Bitcoin bereits nach Maßgabe der Kapitalertragsteuer gemäß § 20 EStG versteuert wurden, greift auch keine Jahresfrist.
+> 
+> [...]
+> 
+> Solange die Position offen ist, muss diese auch nicht versteuert werden. Erst ab dem Zeitpunkt, in dem Investoren tatsächlich Einnahmen zugeflossen sind, findet die Besteuerung statt (sog. Zufluss-/Abflussprinzip).
+> 
+> [...]
+> 
+> Entstandene Gebühren fallen unter die sog. Werbungskosten. Da in den meisten Fällen beim Future Trading Kapitaleinkünfte vorliegen, sind die Werbungskosten bereits durch den Pauschbetrag in Höhe von 801 Euro (bzw. 1.602 Euro für verheiratete Paare) abgegolten. Die Gebühren können deshalb nicht gesondert steuerlich geltend gemacht werden, um die Steuerlast zu mindern.
+
+[Quelle](https://winheller.com/blog/besteuerung-future-margin-trading/)
+[Wörtlich zitiert vom 18.02.2022]
+
+#### Fallbeispiel
+
+> Person A schließt mit Person B einen Vertrag, der A das Recht einräumt, in Zukunft einen BTC von B zu erhalten, der momentan 35.000 Euro wert ist. Wird der Kontrakt fällig und A erhält von B den BTC, liegt ein Fall von § 23 Abs. 1 Satz 1 Nr. 2 EStG vor. Das heißt für B, dass er die Veräußerung des BTC mit seinem persönlichen Einkommensteuersatz versteuern muss. Für A bedeutet das hingegen, dass eine Anschaffung vorliegt und damit die Jahresfrist gilt.
+> 
+> Treffen A und B hingegen im oben geschilderten Fall die Vereinbarung, dass A am Ende des Vertrages die Wahl hat, ob er einen BTC bekommt oder alternativ den Gegenwert der Differenz zum aktuellen Kurs, dann liegt ein Termingeschäft gem. § 20 Abs. 2 Satz 1 Nr. 3 EStG vor. Das gilt auch dann, wenn die Differenz in BTC gezahlt wird. Steigt der Kurs von BTC am Ende des Kontrakts auf 37.000 Euro an, erhält A den Gegenwert der Differenz (37.000 Euro – 35.000 Euro = 2.000 Euro) in BTC. Der Gewinn muss von A pauschal mit 25 Prozent Kapitalertragsteuer versteuert werden, die Jahresfrist aus § 23 EStG greift hingegen nicht. Gegebenenfalls liegt bei B ein privates Veräußerungsgeschäft i.S.v. § 23 EStG vor.
+
+[Quelle](https://hub.accointing.com/crypto-tax-regulations/germany/tax-break-germany-derivate-und-futures-winheller)
+[Wörtlich zitiert vom 18.02.2022]
+
+#### Werbungskosten für Termingeschäfte
+
+> Ab dem VZ 2009 ist als Werbungskosten ein Betrag von 801 € bzw. 1 602 € bei Zusammenveranlagung abzuziehen (Sparer-Pauschbetrag, § 20 Abs. 9 EStG); der Abzug der tatsächlichen Werbungskosten ist ausgeschlossen. Die früheren Regelungen zum Werbungskosten Pauschbetrag und Sparer-Freibetrag wurden mit Einführung der Abgeltungsteuer aufgehoben.
+> 
+> [...]
+> 
+> In folgenden Fällen sind die Kosten auch ab 2009 weiterhin abzugsfähig:
+> - Veräußerungskosten und Kosten in Zusammenhang mit Termingeschäften werden bei der Veräußerungsgewinnermittlung nach § 20 Abs. 4 EStG berücksichtigt.
+> 
+> [...]
+> 
+
+[Quelle](https://datenbank.nwb.de/Dokument/97088/)
+[Wörtlich zitiert vom 18.02.2022]
+
+#### Verrechnung von Verlusten aus Termingeschäften
+
+> Während es vor dem 01.01.2021 möglich war, Verluste aus Termingeschäften uneingeschränkt mit den Einkünften aus Kapitalvermögen zu verrechnen, ist dies aufgrund des neu eingeführten § 20 Abs. 6 Satz 5 EStG seit 2021 nicht mehr ohne Weiteres möglich:
+> 1. Verluste dürfen nur noch mit Gewinnen aus Termingeschäften und mit Erträgen aus Stillhaltergeschäften verrechnet werden.
+> 2. Außerdem ist die Verlustverrechnung auf 20.000 Euro jährlich begrenzt.
+> 
+> Zwar können die nicht verrechneten Verluste in die Folgejahre vorgetragen werden. Aber auch dann ist eine Verlustverrechnung der Höhe nach auf 20.000 Euro pro Jahr begrenzt. Das führt faktisch zu einer Mindestbesteuerung von Gewinnen.
+
+[Quelle](https://www.winheller.com/bankrecht-finanzrecht/bitcointrading/bitcoinundsteuer/verlustverrechnung.html)
+[Wörtlich zitiert vom 18.02.2022]
+
+#### Zusammenfassung
+
+Zusammenfassung der Besteuerung des Margin-Tradings in meinen Worten:
+- Gewinne/Verluste werden besteuert, sobald die Margin-Positionen ausgeglichen bzw. geschlossen werden
+- Wird eine Margin-Position ausgeglichen ("settled"), d.h. die Kryptowährung wird zu Vertragsende zum Startpreis ge-/verkauft, liegt ein privates Veräußerungsgeschäft vor
+  - Für private Veräußerungsgeschäfte gelten die oben angeführten Regeln, inklusive der einjährigen Haltefrist
+- Wird eine Margin-Position geschlossen ("closed", Differenzausgleich), liegt ein Termingeschäft vor
+  - Die Gewinne bzw. Verluste fallen unter Kapitaleinkünfte (§ 20 EStG)
+  - Erhaltene Kryptowährung aus Differenzausgleichen kann steuerfrei veräußert werden
+  - Es gibt keine einjährige Haltefrist
+  - Gebühren können nur abgezogen werden, wenn der Freibetrag von 801 / 1602 Euro bereits ausgeschöpft wird
+  - Die Verlustrechnung ist auf 20.000 Euro jährlich begrenzt und darf nicht mit Gewinnen aus privaten Veräußerungsgeschäften verrechnet werden
+- Steht es dem Investor bis zum Ende offen, ob eine Margin-Position ausgeglichen ("settled") oder geschlossen ("closed") werden kann, liegt automatisch ein Termingeschäft vor und es gelten die gleichen Regelungen wie für geschlossene Positionen. Dies trifft für folgende Börsen zu:
+  - Kraken

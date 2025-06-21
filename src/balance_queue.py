@@ -41,7 +41,9 @@ class BalancedOperation:
         """
         not_sold = self.op.change - self.sold
         # If the left over amount is <= 0, this coin shouldn't be in the queue.
-        assert not_sold > 0, f"{not_sold=} should be > 0"
+        assert (
+            not_sold > 0
+        ), f"{not_sold=} {self.op.coin} should be > 0 ({self.op.type_name})"
         return not_sold
 
 

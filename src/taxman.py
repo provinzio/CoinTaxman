@@ -170,7 +170,9 @@ class Taxman:
                     "previously sold coins of the trade. "
                     "The calculated buy cost might be wrong. "
                     "This may lead to a false tax evaluation.\n"
-                    f"{sc.op}"
+                    f"{sc.op.type_name} {sc.op.change} {sc.op.coin} @ "
+                    f"{sc.op.platform} {sc.op.utc_time}, "
+                    f"row(s) {sc.op.line} of {sc.op.file_path.name}"
                 )
                 buy_value = self.price_data.get_cost(sc)
         else:
@@ -472,6 +474,69 @@ class Taxman:
                     interest_in_fiat=self.price_data.get_cost(op),
                     taxation_type=taxation_type,
                     remark=op.remark,
+                )
+                self.tax_report_entries.append(report_entry)
+
+        elif isinstance(op, tr.MarginFee):
+            # Fees for margin trading
+            self.remove_from_balance(op)
+            if in_tax_year(op):
+                taxation_type = "Kapitaleinkünfte"
+                if not op.remark:
+                    _remark = "Margin Fee"
+                else:
+                    _remark = "Margin Fee, " + op.remark
+                assert op.change > 0, "Change should be positive."
+                report_entry = tr.MarginReportEntry(
+                    platform=op.platform,
+                    amount=-op.change,
+                    coin=op.coin,
+                    utc_time=op.utc_time,
+                    interest_in_fiat=-self.price_data.get_cost(op),
+                    taxation_type=taxation_type,
+                    remark=_remark,
+                )
+                self.tax_report_entries.append(report_entry)
+
+        elif isinstance(op, tr.MarginGain):
+            # Gains from margin trading
+            self.add_to_balance(op)
+            if in_tax_year(op):
+                taxation_type = "Kapitaleinkünfte"
+                if not op.remark:
+                    _remark = "Margin Gain"
+                else:
+                    _remark = "Margin Gain, " + op.remark
+                assert op.change > 0, "Change should be positive."
+                report_entry = tr.MarginReportEntry(
+                    platform=op.platform,
+                    amount=op.change,
+                    coin=op.coin,
+                    utc_time=op.utc_time,
+                    interest_in_fiat=self.price_data.get_cost(op),
+                    taxation_type=taxation_type,
+                    remark=_remark,
+                )
+                self.tax_report_entries.append(report_entry)
+
+        elif isinstance(op, tr.MarginLoss):
+            # Losses from margin trading
+            self.remove_from_balance(op)
+            if in_tax_year(op):
+                taxation_type = "Kapitaleinkünfte"
+                if not op.remark:
+                    _remark = "Margin Loss"
+                else:
+                    _remark = "Margin Loss, " + op.remark
+                assert op.change > 0, "Change should be positive."
+                report_entry = tr.MarginReportEntry(
+                    platform=op.platform,
+                    amount=-op.change,
+                    coin=op.coin,
+                    utc_time=op.utc_time,
+                    interest_in_fiat=-self.price_data.get_cost(op),
+                    taxation_type=taxation_type,
+                    remark=_remark,
                 )
                 self.tax_report_entries.append(report_entry)
 
