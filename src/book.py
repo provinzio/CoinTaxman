@@ -130,6 +130,8 @@ class Book:
             "Launchpool Airdrop": "Airdrop",
             "Megadrop Rewards": "Airdrop",
             "HODLer Airdrops Distribution": "Airdrop",
+            "Token Swap - Distribution": "Airdrop",
+            "Launchpool Airdrop - System Distribution": "Airdrop",
             #
             "Savings Interest": "CoinLendInterest",
             "Savings purchase": "CoinLend",
