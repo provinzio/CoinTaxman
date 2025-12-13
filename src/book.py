@@ -129,6 +129,7 @@ class Book:
             "Crypto Box": "Airdrop",
             "Launchpool Airdrop": "Airdrop",
             "Megadrop Rewards": "Airdrop",
+            "HODLer Airdrops Distribution": "Airdrop",
             #
             "Savings Interest": "CoinLendInterest",
             "Savings purchase": "CoinLend",
