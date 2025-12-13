@@ -16,6 +16,7 @@
 
 import configparser
 import locale
+import datetime
 import zoneinfo
 from os import environ
 from pathlib import Path
@@ -44,7 +45,7 @@ except KeyError as e:
         f"Your country {e} is currently not supported. Please create an Issue or PR."
     )
 
-TAX_YEAR = int(config["BASE"].get("TAX_YEAR", "2021"))
+TAX_YEAR = int(config["BASE"].get("TAX_YEAR", datetime.date.today().year - 1))
 REFETCH_MISSING_PRICES = config["BASE"].getboolean("REFETCH_MISSING_PRICES")
 MEAN_MISSING_PRICES = config["BASE"].getboolean("MEAN_MISSING_PRICES")
 CALCULATE_UNREALIZED_GAINS = config["BASE"].getboolean("CALCULATE_UNREALIZED_GAINS")
