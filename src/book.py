@@ -676,12 +676,13 @@ class Book:
 
         platform = "kraken"
         operation_mapping = {
-            "spend": "Sell",  # Sell ordered via 'Buy Crypto' button
-            "receive": "Buy",  # Buy ordered via 'Buy Crypto' button
+            "spend": "Sell",  # Sell ordered via 'Buy Crypto' or 'Dust Sweeping'
+            "receive": "Buy",  # Buy ordered via 'Buy Crypto' or 'Dust Sweeping'
             "reward": "StakingInterest",
             "staking": "StakingInterest",
             "deposit": "Deposit",
             "withdrawal": "Withdrawal",
+            "rollover": "MarginFee",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -693,8 +694,24 @@ class Book:
             for columns in reader:
 
                 num_columns = len(columns)
-                # Kraken ledgers export format from October 2020 and ongoing
-                if num_columns == 10:
+                # Kraken ledgers export format from 2025 and ongoing
+                if num_columns == 11:
+                    (
+                        txid,
+                        refid,
+                        _utc_time,
+                        _type,
+                        subtype,
+                        aclass,
+                        _asset,
+                        _wallet,
+                        _amount,
+                        _fee,
+                        balance,
+                    ) = columns
+
+                # Kraken ledgers export format from October 2020 until 2025
+                elif num_columns == 10:
                     (
                         txid,
                         refid,
@@ -762,12 +779,24 @@ class Book:
                 if operation is None:
                     if _type == "trade":
                         operation = "Sell" if change < 0 else "Buy"
-                    elif _type in ["margin trade", "rollover", "settled", "margin"]:
-                        log.error(
-                            f"{file_path} row {row}: Margin trading is currently not "
-                            "supported. Please create an Issue or PR."
-                        )
-                        raise RuntimeError
+                    elif _type == "margin":
+                        # Margin positions for Kraken always fall under income from
+                        # capital, as the user can decide until the end if it is closed
+                        # or settled. "rollover" entries contain margin fees between
+                        # start and end. The start of a margin position is denoted with
+                        # a "margin" entry with zero change. For closed positions, the
+                        # end is marked with a "margin" entry containing the net
+                        # gain/loss of the position.
+                        # If the change is zero, consider only the fees.
+                        if change == 0:
+                            operation = "MarginFee"
+                        elif change > 0:
+                            operation = "MarginGain"
+                        else:
+                            operation = "MarginLoss"
+                    elif _type == "settled":
+                        # "settled" entries mark the end of settled positions.
+                        operation = "MarginGain" if change > 0 else "MarginLoss"
                     elif _type == "transfer":
                         if num_columns == 9:
                             # for backwards compatibility assume Airdrop for staking
@@ -784,6 +813,34 @@ class Book:
                         elif subtype in ["spottostaking", "spotfromstaking"]:
                             # duplicate entries for staking actions
                             continue
+                        elif subtype in ["spottofutures", "spotfromfutures"]:
+                            # transfer between spot and futures
+                            continue
+                        else:
+                            log.error(
+                                f"{file_path} row {row}: Order subtype '{subtype}' is "
+                                "currently not supported. Please create an Issue or PR."
+                            )
+                            raise RuntimeError
+                    elif _type == "earn":
+                        if subtype == "reward":
+                            operation = "StakingInterest"
+                        elif subtype == "migration":
+                            # Migration of "x.S" legacy staking balance to new staking
+                            # infrastructure in "earn / bonded" wallet
+                            continue
+                        elif subtype == "allocation":
+                            if change > 0:
+                                operation = "Staking"
+                            else:
+                                # duplicate entries for staking actions
+                                continue
+                        elif subtype == "deallocation":
+                            if change > 0:
+                                operation = "StakingEnd"
+                            else:
+                                # duplicate entries for staking actions
+                                continue
                         else:
                             log.error(
                                 f"{file_path} row {row}: Order subtype '{subtype}' is "
@@ -801,7 +858,22 @@ class Book:
                 # Validate data.
                 assert operation
                 assert coin
-                assert change
+
+                # Margin trading: Add operations and fees to list.
+                if operation in ["MarginFee", "MarginGain", "MarginLoss"]:
+                    if operation == "MarginFee":
+                        assert (
+                            change == 0
+                        ), "Margin fee operation should only contain fee."
+                    if change:
+                        # Add margin gain/losses to operation list.
+                        self.append_operation(
+                            operation, utc_time, platform, change, coin, row, file_path
+                        )
+                    if fee:
+                        self.append_operation(
+                            "MarginFee", utc_time, platform, fee, coin, row, file_path
+                        )
 
                 # Skip duplicate entries for deposits / withdrawals and additional
                 # deposit / withdrawal lines for staking / unstaking / staking reward
@@ -817,7 +889,8 @@ class Book:
                 # == None: Initial value (first occurrence)
                 # == False: No operation has been appended (second occurrence)
                 # == True: Operation has already been appended, this should not happen
-                if operation in ["Deposit", "Withdrawal"]:
+                elif operation in ["Deposit", "Withdrawal"]:
+                    assert change
                     # First, create the operations
                     op = self._create_operation(
                         operation, utc_time, platform, change, coin, row, file_path
@@ -920,6 +993,7 @@ class Book:
 
                 # for all other operation types
                 else:
+                    assert change
                     self.append_operation(
                         operation, utc_time, platform, change, coin, row, file_path
                     )
@@ -937,6 +1011,9 @@ class Book:
                         )
 
     def _read_kraken_ledgers_old(self, file_path: Path) -> None:
+        self._read_kraken_ledgers(file_path)
+
+    def _read_kraken_ledgers_v2(self, file_path: Path) -> None:
         self._read_kraken_ledgers(file_path)
 
     def _read_bitpanda_pro_trades(self, file_path: Path) -> None:
@@ -1388,6 +1465,7 @@ class Book:
                 "coinbase_pro": 1,
                 "kraken_ledgers_old": 1,
                 "kraken_ledgers": 1,
+                "kraken_ledgers_v2": 1,
                 "kraken_trades": 1,
                 "bitpanda_pro_trades": 4,
                 "bitpanda": 7,
@@ -1478,6 +1556,19 @@ class Book:
                     "subtype",
                     "aclass",
                     "asset",
+                    "amount",
+                    "fee",
+                    "balance",
+                ],
+                "kraken_ledgers_v2": [
+                    "txid",
+                    "refid",
+                    "time",
+                    "type",
+                    "subtype",
+                    "aclass",
+                    "asset",
+                    "wallet",
                     "amount",
                     "fee",
                     "balance",
@@ -1769,9 +1860,10 @@ class Book:
                     log.warning(
                         "Fee matching is not implemented for this case. "
                         "Your fees will be discarded and are not evaluated in "
-                        "the tax evaluation.\n"
-                        "Please create an Issue or PR.\n\n"
-                        f"{matching_operations=}\n{fees=}"
+                        "the tax evaluation. "
+                        "Please create an Issue or PR. "
+                        f"Found {len(matching_operations)} matching operations:\n"
+                        f"{matching_operations=}\n{fees=}\n"
                     )
 
     def resolve_trades(self) -> None:
