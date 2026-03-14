@@ -52,6 +52,7 @@ CALCULATE_UNREALIZED_GAINS = config["BASE"].getboolean("CALCULATE_UNREALIZED_GAI
 MULTI_DEPOT = config["BASE"].getboolean("MULTI_DEPOT")
 LOG_LEVEL = config["BASE"].get("LOG_LEVEL", "INFO")
 ALL_AIRDROPS_ARE_GIFTS = config["BASE"].getboolean("ALL_AIRDROPS_ARE_GIFTS")
+EXPORT_WISO_CSV = config["BASE"].getboolean("EXPORT_WISO_CSV", fallback=False)
 
 # Read in environmental variables.
 if _env_country := environ.get("COUNTRY"):
