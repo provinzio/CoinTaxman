@@ -1028,7 +1028,7 @@ class Taxman:
                 sell_date_utc = entry.first_utc_time
                 buy_date_utc = entry.second_utc_time
                 sell_date = (
-                    sell_date_utc.astimezone(config.LOCAL_TIMEZONE)
+                    entry.total_fee_in_fiat
                     if sell_date_utc
                     else None
                 )
