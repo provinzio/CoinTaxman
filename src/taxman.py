@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import collections
+import csv
 import dataclasses
 import datetime
 import decimal
@@ -54,12 +55,12 @@ class Taxman:
         self.price_data = price_data
 
         self.tax_report_entries: list[tr.TaxReportEntry] = []
-        self.multi_depot_portfolio: dict[
-            str, dict[str, decimal.Decimal]
-        ] = collections.defaultdict(lambda: collections.defaultdict(decimal.Decimal))
-        self.single_depot_portfolio: dict[
-            str, decimal.Decimal
-        ] = collections.defaultdict(decimal.Decimal)
+        self.multi_depot_portfolio: dict[str, dict[str, decimal.Decimal]] = (
+            collections.defaultdict(lambda: collections.defaultdict(decimal.Decimal))
+        )
+        self.single_depot_portfolio: dict[str, decimal.Decimal] = (
+            collections.defaultdict(decimal.Decimal)
+        )
         self.unrealized_sells_faulty = False
 
         # Determine used functions/classes depending on the config.
@@ -73,9 +74,9 @@ class Taxman:
         if config.PRINCIPLE == core.Principle.FIFO:
             # Explicity define type for BalanceType on first declaration
             # to avoid mypy errors.
-            self.BalanceType: Type[
-                balance_queue.BalanceQueue
-            ] = balance_queue.BalanceFIFOQueue
+            self.BalanceType: Type[balance_queue.BalanceQueue] = (
+                balance_queue.BalanceFIFOQueue
+            )
         elif config.PRINCIPLE == core.Principle.LIFO:
             self.BalanceType = balance_queue.BalanceLIFOQueue
         else:
@@ -756,12 +757,14 @@ class Taxman:
             0,
             [
                 "Walletübergreifende Betrachtung?",
-                "Nein, separate Betrachtung je Wallet"
-                if config.MULTI_DEPOT
-                else (
-                    "Ja, Zusammenfassung aller Transaktion in einer virtuellen Wallet "
-                    "(Hinweis: ausgewiesene Bestände können sich von der Bilanz der "
-                    "einzelnen Wallets unterscheiden)"
+                (
+                    "Nein, separate Betrachtung je Wallet"
+                    if config.MULTI_DEPOT
+                    else (
+                        "Ja, Zusammenfassung aller Transaktion in einer virtuellen Wallet "
+                        "(Hinweis: ausgewiesene Bestände können sich von der Bilanz der "
+                        "einzelnen Wallets unterscheiden)"
+                    )
                 ),
             ],
             date_format,
@@ -965,3 +968,90 @@ class Taxman:
         wb.close()
         log.info("Saved evaluation in %s.", file_path)
         return file_path
+
+    def export_evaluation_as_wiso_csv(self, excel_path: Path) -> Path:
+        """Export sell events as CSV in CoinTracking format for WISO Steuer.
+
+        Format documented at:
+        https://www.steuer-web.de/hilfe-2023/est/import_trading_csv.html
+
+        The CSV uses the same revision number as the Excel export.
+
+        Args:
+            excel_path: Path to the Excel export (used to derive CSV filename).
+
+        Returns:
+            Path: Path to the exported CSV file.
+        """
+        csv_path = excel_path.with_name(excel_path.stem + "_wiso.csv")
+        date_fmt = "%d.%m.%Y"
+
+        sell_report_entries = [
+            tax_report_entry
+            for tax_report_entry in self.tax_report_entries
+            if isinstance(tax_report_entry, tr.SellReportEntry)
+        ]
+
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+
+            # WISO header line: metadata
+            writer.writerow(
+                [
+                    "Identifier:Capital_Gains",
+                    f"Method:{config.PRINCIPLE.name}",
+                    f"Tax_Year:{config.TAX_YEAR}",
+                    f"Base_Currency:{config.FIAT}",
+                ]
+            )
+
+            # Column headers
+            writer.writerow(
+                [
+                    "Amount",
+                    "Currency",
+                    "Date Sold",
+                    "Date Acquired",
+                    "Short/Long",
+                    "Buy/Input at",
+                    "Sell/Output at",
+                    "Proceeds",
+                    "Cost Basis",
+                    "Gain/Loss",
+                ]
+            )
+
+            for entry in sell_report_entries:
+                amount = misc.cdecimal(entry.amount)
+                # Convert to local timezone for display (consistent with Excel export)
+                sell_date = entry.first_local_time
+                buy_date = entry.second_local_time
+
+                proceeds = misc.cdecimal(entry.first_value_in_fiat)
+                cost_basis = misc.cdecimal(entry.second_value_in_fiat) + misc.cdecimal(
+                    entry.total_fee_in_fiat
+                )
+                gain_loss = proceeds - cost_basis
+
+                short_long = "Short" if entry.is_taxable else "Long"
+
+                buy_platform = entry.second_platform or ""
+                sell_platform = entry.first_platform or ""
+
+                writer.writerow(
+                    [
+                        f"{amount:.8f}",
+                        entry.coin,
+                        sell_date.strftime(date_fmt) if sell_date else "",
+                        buy_date.strftime(date_fmt) if buy_date else "",
+                        short_long,
+                        buy_platform,
+                        sell_platform,
+                        f"{proceeds:.2f}",
+                        f"{cost_basis:.2f}",
+                        f"{gain_loss:.2f}",
+                    ]
+                )
+
+        log.info("Saved WISO CSV in %s.", csv_path)
+        return csv_path

@@ -269,6 +269,28 @@ class TaxReportEntry:
     first_utc_time: Optional[datetime.datetime] = None
     second_utc_time: Optional[datetime.datetime] = None
 
+    @property
+    def first_local_time(self) -> Optional[datetime.datetime]:
+        """Get the first local time by converting the first UTC time to the local timezone.
+
+        Returns:
+            Optional[datetime.datetime]: First local time or None if the first time is not set.
+        """
+        if self.first_utc_time is None:
+            return None
+        return self.first_utc_time.astimezone(config.LOCAL_TIMEZONE)
+
+    @property
+    def second_local_time(self) -> Optional[datetime.datetime]:
+        """Get the second local time by converting the second UTC time to the local timezone.
+
+        Returns:
+            Optional[datetime.datetime]: Second local time or None if the second time is not set.
+        """
+        if self.second_utc_time is None:
+            return None
+        return self.second_utc_time.astimezone(config.LOCAL_TIMEZONE)
+
     # Fee might be paid in multiple coin types (e.g. Binance BNB)
     first_fee_amount: Optional[decimal.Decimal] = None
     first_fee_coin: Optional[str] = None

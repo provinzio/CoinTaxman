@@ -82,6 +82,17 @@ append_files(
     [f"CoinTaxman - Crypto Tax Report - {TAX_YEAR}.xlsx", "CoinTaxman.log"],
 )
 
+# WISO CSV (optional, only if it exists)
+wiso_csv = evaluation.removesuffix(".xlsx") + "_wiso.csv"
+wiso_csv_path = Path(EXPORT_PATH, wiso_csv)
+if wiso_csv_path.is_file():
+    log.debug("Found WISO CSV: %s", wiso_csv)
+    append_files(
+        EXPORT_PATH,
+        [wiso_csv],
+        [f"CoinTaxman - WISO Import - {TAX_YEAR}.csv"],
+    )
+
 # Config file
 log.debug("Archive config file")
 if CONFIG_FILE.is_file():
