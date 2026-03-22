@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import collections
+import csv
 import dataclasses
 import datetime
 import decimal
@@ -982,14 +983,13 @@ class Taxman:
         Returns:
             Path: Path to the exported CSV file.
         """
-        import csv
-
         csv_path = excel_path.with_name(excel_path.stem + "_wiso.csv")
+        date_fmt = "%d.%m.%Y"
 
-        sell_entries = [
-            tre
-            for tre in self.tax_report_entries
-            if isinstance(tre, tr.SellReportEntry)
+        sell_report_entries = [
+            tax_report_entry
+            for tax_report_entry in self.tax_report_entries
+            if isinstance(tax_report_entry, tr.SellReportEntry)
         ]
 
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
@@ -998,7 +998,7 @@ class Taxman:
             # WISO header line: metadata
             writer.writerow(
                 [
-                    f"Identifier:Capital_Gains",
+                    "Identifier:Capital_Gains",
                     f"Method:{config.PRINCIPLE.name}",
                     f"Tax_Year:{config.TAX_YEAR}",
                     f"Base_Currency:{config.FIAT}",
@@ -1021,22 +1021,12 @@ class Taxman:
                 ]
             )
 
-            date_fmt = "%d.%m.%Y"
-            for entry in sell_entries:
+            for entry in sell_report_entries:
                 amount = misc.cdecimal(entry.amount)
                 # Convert to local timezone for display (consistent with Excel export)
-                sell_date_utc = entry.first_utc_time
-                buy_date_utc = entry.second_utc_time
-                sell_date = (
-                    sell_date_utc.astimezone(config.LOCAL_TIMEZONE)
-                    if sell_date_utc
-                    else None
-                )
-                buy_date = (
-                    buy_date_utc.astimezone(config.LOCAL_TIMEZONE)
-                    if buy_date_utc
-                    else None
-                )
+                sell_date = entry.first_local_time
+                buy_date = entry.second_local_time
+
                 proceeds = misc.cdecimal(entry.first_value_in_fiat)
                 cost_basis = misc.cdecimal(entry.second_value_in_fiat) + misc.cdecimal(
                     entry.total_fee_in_fiat
