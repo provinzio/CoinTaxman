@@ -1753,17 +1753,18 @@ class Book:
         for platform, _fees in misc.group_by(all_fees, "platform").items():
             for utc_time, fees in misc.group_by(_fees, "utc_time").items():
 
-                # Find matching operations by platform and time.
-                matching_operations = {
+                # Find matching transactions by platform and time.
+                matching_transactions = {
                     idx: op
                     for idx, op in enumerate(self.operations)
                     if op.platform == platform and op.utc_time == utc_time
+                    if isinstance(op, tr.Transaction)
                 }
 
                 # Group matching operations in dict with
                 # { operation typename: list of indices }
                 t_op = collections.defaultdict(list)
-                for idx, op in matching_operations.items():
+                for idx, op in matching_transactions.items():
                     t_op[op.type_name].append(idx)
 
                 # Check if this is a buy/sell-pair.
@@ -1771,7 +1772,7 @@ class Book:
                 # but this is currently not implemented.
                 is_buy_sell_pair = all(
                     (
-                        len(matching_operations) == 2,
+                        len(matching_transactions) == 2,
                         len(t_op[tr.Buy.type_name_c()]) == 1,
                         len(t_op[tr.Sell.type_name_c()]) == 1,
                     )
@@ -1795,7 +1796,7 @@ class Book:
                         "Your fees will be discarded and are not evaluated in "
                         "the tax evaluation.\n"
                         "Please create an Issue or PR.\n\n"
-                        f"{matching_operations=}\n{fees=}"
+                        f"{matching_transactions=}\n{fees=}\n"
                     )
 
     def resolve_trades(self) -> None:
@@ -1815,7 +1816,14 @@ class Book:
                 # but this is currently not implemented.
                 is_buy_sell_pair = all(
                     (
-                        len(matching_operations) == 2,
+                        len(
+                            [
+                                op
+                                for op in matching_operations
+                                if isinstance(op, tr.Transaction)
+                            ]
+                        )
+                        == 2,
                         len(t_op[tr.Buy.type_name_c()]) == 1,
                         len(t_op[tr.Sell.type_name_c()]) == 1,
                     )
