@@ -19,6 +19,17 @@ from logging import getLogger, shutdown  # noqa: F401
 
 from config import LOG_LEVEL, TMP_LOG_FILEPATH
 
+
+class WarningCounterHandler(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.warning_count = 0
+
+    def emit(self, record):
+        if record.levelno == logging.WARNING:
+            self.warning_count += 1
+
+
 log = getLogger(None)
 log.setLevel(LOG_LEVEL)
 
@@ -27,6 +38,8 @@ for handler in log.handlers:
     log.removeHandler(handler)
 
 # Handler
+counter_handler = WarningCounterHandler()
+counter_handler.setLevel(logging.WARNING)
 ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
 fh = logging.FileHandler(TMP_LOG_FILEPATH, "w")
@@ -35,7 +48,7 @@ fh.setLevel(logging.WARNING)
 # Formatter
 formatter = logging.Formatter("%(asctime)s %(name)-12s %(levelname)-8s %(message)s")
 
-handlers: list[logging.Handler] = [ch, fh]
+handlers: list[logging.Handler] = [counter_handler, ch, fh]
 for handler in handlers:
     handler.setFormatter(formatter)
     log.addHandler(handler)

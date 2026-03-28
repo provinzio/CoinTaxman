@@ -69,6 +69,12 @@ def main() -> None:
         print(f"WISO CSV saved at {wiso_csv_path}")
     print("If you want to archive the evaluation, run `make archive`.")
 
+    if log_config.counter_handler.warning_count > 0:
+        print(
+            f"Warning: {log_config.counter_handler.warning_count} warnings were logged during the evaluation. "
+            "Please check the log file for details."
+        )
+
 
 if __name__ == "__main__":
     main()
