@@ -200,7 +200,7 @@ class Book:
             for rowlist in reader:
                 if version == 1:
                     _utc_time, account, operation, coin, _change, remark = rowlist
-                elif version == 2:
+                elif version in (2, 3):
                     (
                         _,
                         _utc_time,
@@ -217,7 +217,18 @@ class Book:
                 row = reader.line_num
 
                 # Parse data.
-                utc_time = datetime.datetime.strptime(_utc_time, "%Y-%m-%d %H:%M:%S")
+                if version in (1, 2):
+                    utc_time = datetime.datetime.strptime(
+                        _utc_time, "%Y-%m-%d %H:%M:%S"
+                    )
+                elif version == 3:
+                    utc_time = datetime.datetime.strptime(
+                        _utc_time, "%y-%m-%d %H:%M:%S"
+                    )
+                else:
+                    log.error("File version not Supported " + str(file_path))
+                    raise NotImplementedError
+
                 utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
                 change = misc.force_decimal(_change)
                 operation = operation_mapping.get(operation, operation)
@@ -300,6 +311,9 @@ class Book:
 
     def _read_binance_v2(self, file_path: Path) -> None:
         self._read_binance(file_path=file_path, version=2)
+
+    def _read_binance_v3(self, file_path: Path) -> None:
+        self._read_binance(file_path=file_path, version=3)
 
     def _read_coinbase(self, file_path: Path, version: int = 1) -> None:
         platform = "coinbase"
@@ -1381,6 +1395,7 @@ class Book:
             expected_header_row = {
                 "binance": 1,
                 "binance_v2": 1,
+                "binance_v3": 1,
                 "coinbase": 1,
                 "coinbase_v2": 1,
                 "coinbase_v3": 1,
@@ -1406,6 +1421,15 @@ class Book:
                 "binance_v2": [
                     "User_ID",
                     "UTC_Time",
+                    "Account",
+                    "Operation",
+                    "Coin",
+                    "Change",
+                    "Remark",
+                ],
+                "binance_v3": [
+                    "\ufeffUser ID",
+                    "Time",
                     "Account",
                     "Operation",
                     "Coin",
