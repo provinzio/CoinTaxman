@@ -389,6 +389,112 @@ class PriceData:
         return (high + low) / 2
 
     @misc.delayed
+    def _get_price_bitget(
+        self,
+        base_asset: str,
+        utc_time: datetime.datetime,
+        quote_asset: str,
+        swapped_symbols: bool = False,
+        fallback_mode: bool = False,
+        minute_interval: int = 1,
+    ) -> decimal.Decimal:
+        """Retrieve price from Bitget public market candles."""
+        assert base_asset != quote_asset
+
+        root_url = "https://api.bitget.com/api/spot/v1/market/candles"
+        symbol = f"{base_asset}{quote_asset}"
+        end = utc_time.astimezone(datetime.timezone.utc)
+        start = end - datetime.timedelta(minutes=minute_interval)
+
+        params = {
+            "symbol": symbol,
+            "granularity": minute_interval,
+            "startTime": str(int(start.timestamp() * 1000)),
+            "endTime": str(int(end.timestamp() * 1000)),
+        }
+
+        log.debug(
+            "Calling Bitget API for %s / %s price at %s: %s",
+            base_asset,
+            quote_asset,
+            utc_time,
+            root_url,
+        )
+        response = requests.get(root_url, params=params)
+        response.raise_for_status()
+        data = response.json()
+
+        if isinstance(data, dict) and data.get("code") == "00000":
+            data = data.get("data", [])
+
+        if not data:
+            if fallback_mode:
+                if swapped_symbols:
+                    raise FallbackPriceNotFound
+                price = self.get_price(
+                    "bitget",
+                    quote_asset,
+                    utc_time,
+                    base_asset,
+                    swapped_symbols=True,
+                    fallback_mode=fallback_mode,
+                    minute_interval=minute_interval,
+                )
+                return misc.reciprocal(price)
+
+            assert swapped_symbols is False
+            fallback_assets = ["BTC", "USDT", "USDC", "ETH"]
+            for fallback_asset in fallback_assets:
+                if base_asset != fallback_asset and quote_asset != fallback_asset:
+                    try:
+                        base = self.get_price(
+                            "bitget",
+                            base_asset,
+                            utc_time,
+                            fallback_asset,
+                            fallback_mode=True,
+                            minute_interval=minute_interval,
+                        )
+                        quote = self.get_price(
+                            "bitget",
+                            fallback_asset,
+                            utc_time,
+                            quote_asset,
+                            fallback_mode=True,
+                            minute_interval=minute_interval,
+                        )
+                    except FallbackPriceNotFound:
+                        continue
+                    else:
+                        return base * quote
+
+            log.warning(
+                f"Unable to retrieve price for {symbol=} from bitget at "
+                f"{utc_time=} even though multiple fallback assets were checked. "
+                "Set the price to 0 and consider adding a manual price entry."
+            )
+            return decimal.Decimal()
+
+        latest = data[-1]
+        if isinstance(latest, dict):
+            high = misc.force_decimal(latest.get("high", latest.get("highPrice")))
+            low = misc.force_decimal(latest.get("low", latest.get("lowPrice")))
+        elif len(latest) >= 5:
+            high = misc.force_decimal(latest[2])
+            low = misc.force_decimal(latest[3])
+        else:
+            raise RuntimeError(
+                f"Unexpected Bitget candle format for {symbol} at {utc_time}: {latest}"
+            )
+
+        if high == 0:
+            return decimal.Decimal()
+
+        if (high - low) / high > 0.03:
+            log.warning(f"Price spread is greater than 3%! High: {high}, Low: {low}")
+        return (high + low) / 2
+
+    @misc.delayed
     def _get_price_kraken(
         self,
         base_asset: str,
@@ -515,7 +621,7 @@ class PriceData:
                     price_timestamp = data_timestamps_ms[closest_match_index]
                     log.debug(
                         "Accepting price from "
-                        f"{datetime.datetime.fromtimestamp(price_timestamp/1000.0)} "
+                        f"{datetime.datetime.fromtimestamp(price_timestamp / 1000.0)} "
                         f"as latest price for {pair} at {utc_time}"
                     )
                     # This should normally only happen for virtual sells, therefore
