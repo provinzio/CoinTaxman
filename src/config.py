@@ -23,8 +23,11 @@ from pathlib import Path
 
 # Make sure, that module `tzdata` is installed.
 import tzdata  # noqa: F401
+from dotenv import load_dotenv
 
 import core
+
+load_dotenv()
 
 # Dir and file paths
 BASE_PATH = Path(__file__).parent.parent.absolute()
@@ -54,10 +57,22 @@ LOG_LEVEL = config["BASE"].get("LOG_LEVEL", "INFO")
 ALL_AIRDROPS_ARE_GIFTS = config["BASE"].getboolean("ALL_AIRDROPS_ARE_GIFTS")
 EXPORT_WISO_CSV = config["BASE"].getboolean("EXPORT_WISO_CSV", fallback=False)
 
-BITGET_API_KEY = environ.get("BITGET_API_KEY")
-BITGET_API_SECRET = environ.get("BITGET_API_SECRET")
-BITGET_API_PASSPHRASE = environ.get("BITGET_API_PASSPHRASE")
-BITGET_API_BASE_URL = environ.get("BITGET_API_BASE_URL", "https://api.bitget.com")
+BITGET_API_KEY = environ.get(
+    "BITGET_API_KEY",
+    config["BASE"].get("BITGET_API_KEY"),
+)
+BITGET_API_SECRET = environ.get(
+    "BITGET_API_SECRET",
+    config["BASE"].get("BITGET_API_SECRET"),
+)
+BITGET_API_PASSPHRASE = environ.get(
+    "BITGET_API_PASSPHRASE",
+    config["BASE"].get("BITGET_API_PASSPHRASE"),
+)
+BITGET_API_BASE_URL = environ.get(
+    "BITGET_API_BASE_URL",
+    config["BASE"].get("BITGET_API_BASE_URL", "https://api.bitget.com"),
+)
 
 # Read in environmental variables.
 if _env_country := environ.get("COUNTRY"):

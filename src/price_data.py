@@ -401,27 +401,81 @@ class PriceData:
         """Retrieve price from Bitget public market candles."""
         assert base_asset != quote_asset
 
-        root_url = "https://api.bitget.com/api/spot/v1/market/candles"
-        symbol = f"{base_asset}{quote_asset}"
+        root_url = "https://api.bitget.com/api/v2/spot/market/candles"
+        symbol = (
+            f"{quote_asset}{base_asset}" if swapped_symbols else f"{base_asset}{quote_asset}"
+        )
         end = utc_time.astimezone(datetime.timezone.utc)
         start = end - datetime.timedelta(minutes=minute_interval)
 
+        granularity_map = {
+            1: "1min",
+            3: "3min",
+            5: "5min",
+            15: "15min",
+            30: "30min",
+            60: "1h",
+            240: "4h",
+            360: "6h",
+            720: "12h",
+            1440: "1day",
+        }
+        granularity = granularity_map.get(minute_interval, "1min")
+
         params = {
             "symbol": symbol,
-            "granularity": minute_interval,
+            "granularity": granularity,
             "startTime": str(int(start.timestamp() * 1000)),
             "endTime": str(int(end.timestamp() * 1000)),
         }
 
         log.debug(
-            "Calling Bitget API for %s / %s price at %s: %s",
+            "Calling Bitget API for %s / %s price at %s: %s?%s",
             base_asset,
             quote_asset,
             utc_time,
             root_url,
+            params,
         )
-        response = requests.get(root_url, params=params)
-        response.raise_for_status()
+        try:
+            time.sleep(1)  # avoid hitting rate limits
+            response = requests.get(root_url, params=params)
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            if not swapped_symbols and e.response is not None:
+                response_text = e.response.text
+                response_data = {}
+                try:
+                    response_data = e.response.json()
+                except ValueError:
+                    pass
+
+                if (
+                    e.response.status_code == 400
+                    and (
+                        "does not exist" in response_text
+                        or response_data.get("code") == "40034"
+                        or response_data.get("msg", "").lower().startswith("parameter")
+                    )
+                ):
+                    log.warning(
+                        "Bitget symbol %s not found, retrying with swapped symbol %s.",
+                        symbol,
+                        f"{quote_asset}{base_asset}",
+                    )
+                    return self._get_price_bitget(
+                        base_asset,
+                        utc_time,
+                        quote_asset,
+                        swapped_symbols=True,
+                        fallback_mode=fallback_mode,
+                        minute_interval=minute_interval,
+                    )
+
+            print("Status:", e.response.status_code if e.response is not None else "<no response>")
+            print("Body:", e.response.text if e.response is not None else "<no response>")
+            raise
+
         data = response.json()
 
         if isinstance(data, dict) and data.get("code") == "00000":
@@ -492,7 +546,11 @@ class PriceData:
 
         if (high - low) / high > 0.03:
             log.warning(f"Price spread is greater than 3%! High: {high}, Low: {low}")
-        return (high + low) / 2
+
+        price = (high + low) / 2
+        if swapped_symbols:
+            price = misc.reciprocal(price)
+        return price
 
     @misc.delayed
     def _get_price_kraken(
