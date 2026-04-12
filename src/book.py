@@ -14,14 +14,22 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import base64
 import collections
 import csv
 import datetime
 import decimal
+import hashlib
+import hmac
+import json
 import re
+import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Optional, NamedTuple
+from typing import Any, NamedTuple, Optional
+from urllib.parse import urlencode
+
+import requests
 
 import config
 import log_config
@@ -1388,6 +1396,361 @@ class Book:
                             price,
                             overwrite=True,
                         )
+
+    def _bitget_headers(self, method: str, request_path: str, body: str = "") -> dict[str, str]:
+        if not (
+            config.BITGET_API_KEY
+            and config.BITGET_API_SECRET
+            and config.BITGET_API_PASSPHRASE
+        ):
+            raise RuntimeError(
+                "Bitget API credentials are not configured. Set BITGET_API_KEY, "
+                "BITGET_API_SECRET and BITGET_API_PASSPHRASE."
+            )
+
+        timestamp = str(int(time.time() * 1000))
+        signature_payload = f"{timestamp}{method.upper()}{request_path}{body}"
+        signature = base64.b64encode(
+            hmac.new(
+                config.BITGET_API_SECRET.encode(),
+                signature_payload.encode(),
+                hashlib.sha256,
+            ).digest()
+        ).decode()
+
+        return {
+            "ACCESS-KEY": config.BITGET_API_KEY,
+            "ACCESS-SIGN": signature,
+            "ACCESS-TIMESTAMP": timestamp,
+            "ACCESS-PASSPHRASE": config.BITGET_API_PASSPHRASE,
+            "Content-Type": "application/json",
+            "locale": "en-US",
+        }
+
+    def _bitget_get(
+        self, path: str, params: Optional[dict[str, Any]] = None
+    ) -> list[dict[str, Any]]:
+        params = params or {}
+        query_string = f"?{urlencode(params)}" if params else ""
+        request_path = f"{path}{query_string}"
+        url = f"{config.BITGET_API_BASE_URL}{request_path}"
+
+        log.debug("Calling Bitget API %s", url)
+        response = requests.get(url, headers=self._bitget_headers("GET", request_path))
+        response.raise_for_status()
+        data = response.json()
+
+        if not isinstance(data, dict):
+            raise RuntimeError("Bitget API returned unexpected response format.")
+
+        if data.get("code") != "00000":
+            raise RuntimeError(
+                f"Bitget API returned error {data.get('code')} {data.get('msg')}"
+            )
+
+        return data.get("data", [])
+
+    def _bitget_fetch_all(
+        self, path: str, params: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        params = params.copy()
+        params.setdefault("limit", 500)
+
+        while True:
+            page = self._bitget_get(path, params)
+            if not page:
+                break
+            records.extend(page)
+            if len(page) < int(params["limit"]):
+                break
+            params["idLessThan"] = page[-1]["id"]
+
+        return records
+
+    def _bitget_fetch_all_range(
+        self,
+        path: str,
+        start_time_ms: int,
+        end_time_ms: int,
+        extra_params: Optional[dict[str, Any]] = None,
+    ) -> list[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        cursor_start = start_time_ms
+        chunk_size = 10 * 24 * 60 * 60 * 1000
+
+        while cursor_start <= end_time_ms:
+            cursor_end = min(cursor_start + chunk_size - 1, end_time_ms)
+            params = {
+                "startTime": str(cursor_start),
+                "endTime": str(cursor_end),
+                "limit": 500,
+            }
+            if extra_params:
+                params.update(extra_params)
+
+            log.info(
+                "Fetching Bitget API records %s - %s",
+                datetime.datetime.fromtimestamp(
+                    cursor_start / 1000, tz=datetime.timezone.utc),
+                datetime.datetime.fromtimestamp(
+                    cursor_end / 1000, tz=datetime.timezone.utc),
+            )
+            segment = self._bitget_fetch_all(path, params)
+            records.extend(segment)
+
+            if cursor_end == end_time_ms:
+                break
+            cursor_start = cursor_end + 1
+
+        return records
+
+    def _map_bitget_spot_tax_type(self, spot_tax_type: str) -> Optional[str]:
+        mapping = {
+            "Deposit": "Deposit",
+            "Withdrawal": "Withdrawal",
+            "Buy": "Buy",
+            "Sell": "Sell",
+            "Buy Crypto": "Buy",
+            "Sell Crypto": "Sell",
+            "Crypto Voucher Distribution": "Airdrop",
+            "Airdrop Reward-A": "Airdrop",
+            "Airdrop Reward-B": "Airdrop",
+            "Interest": "StakingInterest",
+            "User fees": "Fee",
+            "Transaction fee deduct": "Fee",
+            "Trading fee rebate": "Commission",
+            "Fiat withdrawal success - Deduct": "Withdrawal",
+            "System charges fees": "Fee",
+            "Reward": "Airdrop",
+        }
+        return mapping.get(spot_tax_type)
+
+    def _map_bitget_future_tax_type(self, future_tax_type: str) -> Optional[str]:
+        mapping = {
+            "TRANSFER_IN": "Deposit",
+            "TRANSFER_OUT": "Withdrawal",
+            "ORDER_DEALT_IN": "Deposit",
+            "ORDER_DEALT_FROZEN_OUT": "Fee",
+            "ORDER_PLF_FEE_OUT": "Fee",
+            "EXCHANGE_SOURCE_TOKEN_USER_OUT": "Sell",
+            "EXCHANGE_TARGET_TOKEN_USER_IN": "Buy",
+            "OPEN_LONG": "Buy",
+            "OPEN_SHORT": "Buy",
+            "CLOSE_LONG": "Sell",
+            "CLOSE_SHORT": "Sell",
+            "BUY_DEAL": "Buy",
+            "SELL_DEAL": "Sell",
+            "FORCE_CLOSE_LONG": "Sell",
+            "FORCE_CLOSE_SHORT": "Sell",
+            "BURST_CLOSE_LONG": "Sell",
+            "BURST_CLOSE_SHORT": "Sell",
+            "INTEREST_SETTLEMENT_OUT": "Fee",
+            "CONTRACT_MAIN_SETTLE_FEE_USER_IN": "Commission",
+            "CONTRACT_MAIN_SETTLE_FEE_USER_OUT": "Fee",
+        }
+        return mapping.get(future_tax_type)
+
+    def _map_bitget_margin_tax_type(self, margin_tax_type: str) -> Optional[str]:
+        mapping = {
+            "transfer_in": "Deposit",
+            "transfer_out": "Withdrawal",
+            "borrow": "Deposit",
+            "repay": "Withdrawal",
+            "liquidation_fee": "Fee",
+            "deal_in": "Buy",
+            "deal_out": "Sell",
+            "interest_repay": "Fee",
+            "exchange_in": "Buy",
+            "exchange_out": "Sell",
+            "confiscated": "Fee",
+            "compensate": "Fee",
+        }
+        return mapping.get(margin_tax_type)
+
+    def _import_bitget_spot_records(
+        self, start_time_ms: int, end_time_ms: int
+    ) -> None:
+        records = self._bitget_fetch_all_range(
+            "/api/v2/tax/spot-record",
+            start_time_ms,
+            end_time_ms,
+        )
+
+        if not records:
+            log.info("No Bitget spot account records were returned.")
+            return
+
+        log.info("Importing %s Bitget spot records.", len(records))
+        for row_num, row in enumerate(records, start=1):
+            tax_type = row.get("spotTaxType", "")
+            operation = self._map_bitget_spot_tax_type(tax_type)
+            if operation is None:
+                log.warning(
+                    "Unsupported Bitget spot tax type '%s', skipping row %s.",
+                    tax_type,
+                    row_num,
+                )
+                continue
+
+            coin = row.get("coin") or "UNKNOWN"
+            change = abs(misc.force_decimal(row.get("amount", "0")))
+            fee = abs(misc.force_decimal(row.get("fee", "0")))
+            utc_time = datetime.datetime.fromtimestamp(
+                int(row.get("ts", 0)) / 1000.0,
+                datetime.timezone.utc,
+            )
+            remark = f"Bitget spot record {row.get('bizOrderId', '')}"
+            self.append_operation(
+                operation,
+                utc_time,
+                "bitget",
+                change,
+                coin,
+                row_num,
+                Path("bitget-api"),
+                remark=remark,
+            )
+            if fee and operation not in ("Fee", "Commission"):
+                self.append_operation(
+                    "Fee",
+                    utc_time,
+                    "bitget",
+                    fee,
+                    coin,
+                    row_num,
+                    Path("bitget-api"),
+                    remark=f"Bitget spot fee for {tax_type}",
+                )
+
+    def _import_bitget_future_records(
+        self, start_time_ms: int, end_time_ms: int
+    ) -> None:
+        records = self._bitget_fetch_all_range(
+            "/api/v2/tax/future-record",
+            start_time_ms,
+            end_time_ms,
+        )
+
+        if not records:
+            log.info("No Bitget future account records were returned.")
+            return
+
+        log.info("Importing %s Bitget future records.", len(records))
+        for row_num, row in enumerate(records, start=1):
+            tax_type = row.get("futureTaxType", "")
+            operation = self._map_bitget_future_tax_type(tax_type)
+            if operation is None:
+                log.warning(
+                    "Unsupported Bitget future tax type '%s', skipping row %s.",
+                    tax_type,
+                    row_num,
+                )
+                continue
+
+            coin = row.get("marginCoin") or row.get(
+                "symbol") or row.get("coin") or "UNKNOWN"
+            change = abs(misc.force_decimal(row.get("amount", "0")))
+            fee = abs(misc.force_decimal(row.get("fee", "0")))
+            utc_time = datetime.datetime.fromtimestamp(
+                int(row.get("ts", 0)) / 1000.0,
+                datetime.timezone.utc,
+            )
+            remark = f"Bitget future record {row.get('symbol', '')}"
+            self.append_operation(
+                operation,
+                utc_time,
+                "bitget",
+                change,
+                coin,
+                row_num,
+                Path("bitget-api"),
+                remark=remark,
+            )
+            if fee and operation not in ("Fee", "Commission"):
+                self.append_operation(
+                    "Fee",
+                    utc_time,
+                    "bitget",
+                    fee,
+                    coin,
+                    row_num,
+                    Path("bitget-api"),
+                    remark=f"Bitget future fee for {tax_type}",
+                )
+
+    def _import_bitget_margin_records(
+        self, start_time_ms: int, end_time_ms: int
+    ) -> None:
+        records = self._bitget_fetch_all_range(
+            "/api/v2/tax/margin-record",
+            start_time_ms,
+            end_time_ms,
+        )
+
+        if not records:
+            log.info("No Bitget margin account records were returned.")
+            return
+
+        log.info("Importing %s Bitget margin records.", len(records))
+        for row_num, row in enumerate(records, start=1):
+            tax_type = row.get("marginTaxType", "")
+            operation = self._map_bitget_margin_tax_type(tax_type)
+            if operation is None:
+                log.warning(
+                    "Unsupported Bitget margin tax type '%s', skipping row %s.",
+                    tax_type,
+                    row_num,
+                )
+                continue
+
+            coin = row.get("coin") or row.get("symbol") or "UNKNOWN"
+            change = abs(misc.force_decimal(row.get("amount", "0")))
+            fee = abs(misc.force_decimal(row.get("fee", "0")))
+            utc_time = datetime.datetime.fromtimestamp(
+                int(row.get("ts", 0)) / 1000.0,
+                datetime.timezone.utc,
+            )
+            remark = f"Bitget margin record {row.get('symbol', '')}"
+            self.append_operation(
+                operation,
+                utc_time,
+                "bitget",
+                change,
+                coin,
+                row_num,
+                Path("bitget-api"),
+                remark=remark,
+            )
+            if fee and operation not in ("Fee", "Commission"):
+                self.append_operation(
+                    "Fee",
+                    utc_time,
+                    "bitget",
+                    fee,
+                    coin,
+                    row_num,
+                    Path("bitget-api"),
+                    remark=f"Bitget margin fee for {tax_type}",
+                )
+
+    def import_bitget_api_records(self) -> None:
+        log.info("Importing Bitget records from API for tax year %s.", config.TAX_YEAR)
+        year_start = datetime.datetime(
+            config.TAX_YEAR, 1, 1, tzinfo=datetime.timezone.utc
+        )
+        year_end = datetime.datetime(
+            config.TAX_YEAR, 12, 31, 23, 59, 59, 999000, tzinfo=datetime.timezone.utc
+        )
+        self._import_bitget_spot_records(
+            int(year_start.timestamp() * 1000), int(year_end.timestamp() * 1000)
+        )
+        self._import_bitget_future_records(
+            int(year_start.timestamp() * 1000), int(year_end.timestamp() * 1000)
+        )
+        self._import_bitget_margin_records(
+            int(year_start.timestamp() * 1000), int(year_end.timestamp() * 1000)
+        )
 
     def detect_exchange(self, file_path: Path) -> Optional[str]:
         if file_path.suffix == ".csv":
