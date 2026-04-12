@@ -19,3 +19,6 @@ dev/
 !.gitkeep
 
 tmp.log
+
+.env
+*.log

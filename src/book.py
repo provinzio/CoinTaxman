@@ -1605,6 +1605,7 @@ class Book:
         return chunks
 
     def _map_bitget_spot_tax_type(self, spot_tax_type: str) -> Optional[str]:
+        normalized = spot_tax_type.strip()
         mapping = {
             "Deposit": "Deposit",
             "Withdrawal": "Withdrawal",
@@ -1624,8 +1625,37 @@ class Book:
             "Trading fee rebate": "Commission",
             "Fiat withdrawal success - Deduct": "Withdrawal",
             "Reward": "Airdrop",
+            "Automatic deposit": "Deposit",
+            "Automatic withdrawal": "Withdrawal",
+            "Transfer in": "Deposit",
+            "Transfer out": "Withdrawal",
+            "fiat_recharge_in": "Deposit",
+            "fiat_balance_success_user_in": "Deposit",
+            "fiat_balance_user_out": "Withdrawal",
+            "financial_rede_in": "Deposit",
+            "financial_unlock_in": "Deposit",
+            "financial_pos_out": "Withdrawal",
+            "financial_subs_out": "Withdrawal",
+            "Copy Trade expense": "Fee",
+            "Refund Copy Trade commission": "Commission",
+            "Consumption": "Sell",
+            "Gains": "Airdrop",
         }
-        return mapping.get(spot_tax_type)
+
+        if normalized in mapping:
+            return mapping[normalized]
+
+        lower_name = normalized.lower()
+        if lower_name.endswith("_in"):
+            return "Deposit"
+        if lower_name.endswith("_out"):
+            return "Withdrawal"
+        if "commission" in lower_name:
+            return "Commission"
+        if "expense" in lower_name or "fee" in lower_name:
+            return "Fee"
+
+        return mapping.get(normalized)
 
     def _map_bitget_future_tax_type(self, future_tax_type: str) -> Optional[str]:
         future_tax_type = future_tax_type.upper()
