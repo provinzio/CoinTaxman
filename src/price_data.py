@@ -438,26 +438,29 @@ class PriceData:
             params,
         )
         try:
-            time.sleep(1)  # avoid hitting rate limits
             response = requests.get(root_url, params=params)
             response.raise_for_status()
         except requests.exceptions.HTTPError as e:
-            if not swapped_symbols and e.response is not None:
-                response_text = e.response.text
-                response_data = {}
-                try:
+            response_text = e.response.text if e.response is not None else ""
+            response_data = {}
+            try:
+                if e.response is not None:
                     response_data = e.response.json()
-                except ValueError:
-                    pass
+            except ValueError:
+                pass
 
-                if (
-                    e.response.status_code == 400
-                    and (
-                        "does not exist" in response_text
-                        or response_data.get("code") == "40034"
-                        or response_data.get("msg", "").lower().startswith("parameter")
-                    )
-                ):
+            invalid_symbol_error = (
+                e.response is not None
+                and e.response.status_code == 400
+                and (
+                    "does not exist" in response_text
+                    or response_data.get("code") == "40034"
+                    or response_data.get("msg", "").lower().startswith("parameter")
+                )
+            )
+
+            if invalid_symbol_error:
+                if not swapped_symbols:
                     log.warning(
                         "Bitget symbol %s not found, retrying with swapped symbol %s.",
                         symbol,
@@ -472,11 +475,20 @@ class PriceData:
                         minute_interval=minute_interval,
                     )
 
-            print("Status:", e.response.status_code if e.response is not None else "<no response>")
-            print("Body:", e.response.text if e.response is not None else "<no response>")
-            raise
-
-        data = response.json()
+                log.warning(
+                    "Bitget symbol %s and swapped symbol %s both not found; "
+                    "falling back to intermediate assets.",
+                    symbol,
+                    f"{quote_asset}{base_asset}",
+                )
+                data = []
+            else:
+                print(
+                    "Status:", e.response.status_code if e.response is not None else "<no response>")
+                print("Body:", e.response.text if e.response is not None else "<no response>")
+                raise
+        else:
+            data = response.json()
 
         if isinstance(data, dict) and data.get("code") == "00000":
             data = data.get("data", [])
@@ -496,7 +508,6 @@ class PriceData:
                 )
                 return misc.reciprocal(price)
 
-            assert swapped_symbols is False
             fallback_assets = ["BTC", "USDT", "USDC", "ETH"]
             for fallback_asset in fallback_assets:
                 if base_asset != fallback_asset and quote_asset != fallback_asset:
