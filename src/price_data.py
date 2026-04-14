@@ -437,58 +437,78 @@ class PriceData:
             root_url,
             params,
         )
-        try:
-            response = requests.get(root_url, params=params)
-            response.raise_for_status()
-        except requests.exceptions.HTTPError as e:
-            response_text = e.response.text if e.response is not None else ""
-            response_data = {}
+
+        max_retries = 3
+        for attempt in range(max_retries):
             try:
-                if e.response is not None:
-                    response_data = e.response.json()
-            except ValueError:
-                pass
-
-            invalid_symbol_error = (
-                e.response is not None
-                and e.response.status_code == 400
-                and (
-                    "does not exist" in response_text
-                    or response_data.get("code") == "40034"
-                    or response_data.get("msg", "").lower().startswith("parameter")
+                response = requests.get(root_url, params=params, timeout=10)
+                response.raise_for_status()
+            except (requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError) as e:
+                if attempt == max_retries - 1:
+                    raise
+                sleep_duration = 2 ** attempt
+                log.warning(
+                    "Bitget request failed for %s at %s (%s). Retrying in %s s...",
+                    symbol,
+                    utc_time,
+                    e.__class__.__name__,
+                    sleep_duration,
                 )
-            )
+                time.sleep(sleep_duration)
+                continue
+            except requests.exceptions.HTTPError as e:
+                response_text = e.response.text if e.response is not None else ""
+                response_data = {}
+                try:
+                    if e.response is not None:
+                        response_data = e.response.json()
+                except ValueError:
+                    pass
 
-            if invalid_symbol_error:
-                if not swapped_symbols:
+                invalid_symbol_error = (
+                    e.response is not None
+                    and e.response.status_code == 400
+                    and (
+                        "does not exist" in response_text
+                        or response_data.get("code") == "40034"
+                        or response_data.get("msg", "").lower().startswith("parameter")
+                    )
+                )
+
+                if invalid_symbol_error:
+                    if not swapped_symbols:
+                        log.warning(
+                            "Bitget symbol %s not found, retrying with swapped symbol %s.",
+                            symbol,
+                            f"{quote_asset}{base_asset}",
+                        )
+                        return self._get_price_bitget(
+                            base_asset,
+                            utc_time,
+                            quote_asset,
+                            swapped_symbols=True,
+                            fallback_mode=fallback_mode,
+                            minute_interval=minute_interval,
+                        )
+
                     log.warning(
-                        "Bitget symbol %s not found, retrying with swapped symbol %s.",
+                        "Bitget symbol %s and swapped symbol %s both not found; "
+                        "falling back to intermediate assets.",
                         symbol,
                         f"{quote_asset}{base_asset}",
                     )
-                    return self._get_price_bitget(
-                        base_asset,
-                        utc_time,
-                        quote_asset,
-                        swapped_symbols=True,
-                        fallback_mode=fallback_mode,
-                        minute_interval=minute_interval,
-                    )
-
-                log.warning(
-                    "Bitget symbol %s and swapped symbol %s both not found; "
-                    "falling back to intermediate assets.",
-                    symbol,
-                    f"{quote_asset}{base_asset}",
-                )
-                data = []
+                    data = []
+                    break
+                else:
+                    print(
+                        "Status:", e.response.status_code if e.response is not None else "<no response>")
+                    print("Body:", e.response.text if e.response is not None else "<no response>")
+                    raise
             else:
-                print(
-                    "Status:", e.response.status_code if e.response is not None else "<no response>")
-                print("Body:", e.response.text if e.response is not None else "<no response>")
-                raise
+                data = response.json()
+                break
         else:
-            data = response.json()
+            raise RuntimeError("Bitget API request failed after retries.")
 
         if isinstance(data, dict) and data.get("code") == "00000":
             data = data.get("data", [])
