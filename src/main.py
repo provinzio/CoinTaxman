@@ -32,8 +32,7 @@ def main() -> None:
 
     price_data = PriceData()
     book = Book(price_data)
-    if config.BITGET_API_KEY and config.BITGET_API_SECRET and config.BITGET_API_PASSPHRASE:
-        book.import_bitget_api_records()
+    book.import_api_records()
     taxman = Taxman(book, price_data)
 
     status = book.read_files()

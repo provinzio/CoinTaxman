@@ -20,8 +20,11 @@ Pull Requests und Anfragen über Issues sind gerne gesehen (siehe `Key notes for
 ### Currently supported exchanges
 - [Binance](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-Binance)
 - [Bitpanda Pro](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-Bitpanda-Pro)
+- Bitget (API import)
+- Bitunix
 - [coinbase (pro)](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-coinbase)
 - [Kraken](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-Kraken)
+- Pionex
 
 It is also possible to import a custom transaction history file.
 See [here](https://github.com/provinzio/CoinTaxman/wiki/Custom-import-format) for more informations.
@@ -39,6 +42,23 @@ Quick and easy installation can be done with `pip`.
 1. Adjust `\config.ini` to your liking
 2. Add all your account statements in `account_statements/`
 2. Run `python "src/main.py"`
+
+### Bitget API import (optional)
+
+If Bitget API credentials are configured, CoinTaxman imports Bitget API records automatically for the configured `TAX_YEAR`.
+
+Default behavior (no extra configuration):
+- All supported Bitget API record groups are imported.
+- Supported groups are: `spot`, `future`, `margin`, `p2p`.
+
+Optional filtering via environment variable:
+- Environment variable: `BITGET_API_RECORD_TYPES`
+- Format: comma-separated list
+- Example (only spot + future):
+	- Linux/macOS: `BITGET_API_RECORD_TYPES=spot,future python src/main.py`
+	- Windows PowerShell: `$env:BITGET_API_RECORD_TYPES='spot,future'; python src/main.py`
+- If `BITGET_API_RECORD_TYPES` is missing or empty, all groups are imported.
+- Unknown values are ignored and logged as warnings.
 
 If not all your exchanges are supported, you can not (directly) calculate your taxes with this tool.
 You can use the custom import format [here](https://github.com/provinzio/CoinTaxman/wiki/Custom-import-format) to make it happen.
@@ -122,9 +142,12 @@ Hit the thumbs up button of that issue or participate in the process.
 
 #### Adding a new exchange
 
-- Add a read-in function like `Book._read_binance` in `src/book.py`
-- Add a way to retrieve price data from this exchange in `src/price_data.py` like `PriceData._get_price_binance`
-- Setup a wiki entry on how to retrieve the account statement and other useful information, which I can copy paste in our [Wiki](https://github.com/provinzio/CoinTaxman/wiki)
+- Add a dedicated reader in `src/exchanges/` (CSV/API parsing + operation mapping).
+- Register CSV detection and reader creation in `src/exchanges/registry.py`.
+- For API-based exchanges, add an API reader (similar to `BitgetApiReader`) and wire the call in `Book.import_api_records` in `src/book.py`.
+- Add price lookup support in `src/price_data.py` for assets traded on that exchange.
+- Add/update tests for detection and reader behavior.
+- Setup a wiki entry on how to retrieve the account statement and other useful information, which I can copy paste in our [Wiki](https://github.com/provinzio/CoinTaxman/wiki).
 
 #### Managing python module dependencies
 

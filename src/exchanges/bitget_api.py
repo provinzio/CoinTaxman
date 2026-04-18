@@ -9,7 +9,7 @@ import hmac
 import json
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import config
 import log_config
@@ -22,6 +22,8 @@ log = log_config.getLogger(__name__)
 
 class BitgetApiReader(ExchangeReader):
     """Reader for Bitget API data."""
+
+    SUPPORTED_RECORD_TYPES = ("spot", "future", "margin", "p2p")
 
     def __init__(self):
         super().__init__("bitget")
@@ -311,6 +313,68 @@ class BitgetApiReader(ExchangeReader):
             "COMMISSION": "Commission",
         }
         return mapping.get(p2p_tax_type)
+
+    def import_tax_year_records(
+        self,
+        book,
+        tax_year: int,
+        record_types: Optional[list[str]] = None,
+    ) -> None:
+        """Import selected Bitget API record groups for one tax year.
+
+        Args:
+            book: Book instance receiving parsed operations.
+            tax_year: Tax year to import.
+            record_types: Optional list of groups to import.
+                Supported values are: spot, future, margin, p2p.
+                If omitted, all supported groups are imported.
+        """
+        year_start = datetime.datetime(tax_year, 1, 1, tzinfo=datetime.timezone.utc)
+        year_end = datetime.datetime(
+            tax_year, 12, 31, 23, 59, 59, 999000, tzinfo=datetime.timezone.utc
+        )
+        self.import_api_records(
+            book,
+            int(year_start.timestamp() * 1000),
+            int(year_end.timestamp() * 1000),
+            record_types=record_types,
+        )
+
+    def import_api_records(
+        self,
+        book,
+        start_time_ms: int,
+        end_time_ms: int,
+        record_types: Optional[list[str]] = None,
+    ) -> None:
+        """Import selected Bitget API record groups for a timestamp range."""
+        importers: dict[str, Callable[[Any, int, int], None]] = {
+            "spot": self.import_spot_records,
+            "future": self.import_future_records,
+            "margin": self.import_margin_records,
+            "p2p": self.import_p2p_records,
+        }
+
+        selected = record_types or list(self.SUPPORTED_RECORD_TYPES)
+        normalized = [record_type.strip().lower() for record_type in selected]
+
+        unknown_types = [
+            record_type
+            for record_type in normalized
+            if record_type not in importers
+        ]
+        if unknown_types:
+            log.warning(
+                "Unknown Bitget API record types requested: %s. Supported: %s",
+                ", ".join(sorted(set(unknown_types))),
+                ", ".join(self.SUPPORTED_RECORD_TYPES),
+            )
+
+        for record_type in normalized:
+            importer = importers.get(record_type)
+            if importer is None:
+                continue
+            importer(book, start_time_ms, end_time_ms)
 
     def import_spot_records(self, book, start_time_ms: int, end_time_ms: int) -> None:
         chunks = self._fetch_all_range(

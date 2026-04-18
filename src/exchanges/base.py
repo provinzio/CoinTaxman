@@ -4,7 +4,7 @@ import datetime
 import decimal
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import misc
 import transaction as tr
@@ -20,11 +20,12 @@ class ExchangeReader(ABC):
         self.platform = platform
 
     @abstractmethod
-    def read_file(self, file_path: Path) -> None:
+    def read_file(self, file_path: Path, book: Any) -> None:
         """Read and parse the CSV file, appending operations to the book.
 
         Args:
             file_path: Path to the CSV file to read
+            book: Book instance collecting parsed operations
         """
         pass
 
