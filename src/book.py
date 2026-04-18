@@ -1498,6 +1498,395 @@ class Book:
                             file_path,
                         )
 
+    def _read_pionex(self, file_path: Path) -> None:
+        """Dispatcher method for Pionex CSV files.
+
+        Routes to appropriate reader based on filename.
+
+        Args:
+            file_path (Path): Path to Pionex CSV file
+        """
+        filename = file_path.name
+
+        if filename == "deposit-withdraw.csv":
+            self._read_pionex_deposit_withdraw(file_path)
+        elif filename == "trading.csv":
+            self._read_pionex_trading(file_path)
+        elif filename == "staking.csv":
+            self._read_pionex_staking(file_path)
+        elif filename == "others.csv":
+            self._read_pionex_others(file_path)
+        else:
+            log.warning(
+                f"Unknown Pionex file format: {filename}. "
+                "Skipping file."
+            )
+
+    def _read_pionex_deposit_withdraw(self, file_path: Path) -> None:
+        """Reads deposit/withdrawal records from Pionex.
+
+        Args:
+            file_path (Path): Path to Pionex deposit-withdraw.csv
+        """
+        platform = "pionex"
+
+        with open(file_path, encoding="utf8") as f:
+            reader = csv.reader(f)
+
+            # Skip header.
+            next(reader)
+
+            for columns in reader:
+                if len(columns) != 7:
+                    log.warning(
+                        f"{file_path}: Expected 7 columns, got {len(columns)}. "
+                        "Skipping row."
+                    )
+                    continue
+
+                (
+                    _utc_time,
+                    tx_type,
+                    _amount,
+                    coin,
+                    _network,
+                    _txid,
+                    _fee,
+                ) = columns
+
+                row = reader.line_num
+
+                # Parse data.
+                utc_time = datetime.datetime.strptime(
+                    _utc_time, "%Y-%m-%d %H:%M:%S"
+                )
+                utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
+
+                amount = misc.force_decimal(_amount)
+                fee = misc.xdecimal(_fee) or decimal.Decimal(0)
+
+                # Map transaction type
+                if tx_type == "DEPOSIT":
+                    self.append_operation(
+                        "Deposit",
+                        utc_time,
+                        platform,
+                        amount,
+                        coin,
+                        row,
+                        file_path,
+                    )
+                elif tx_type == "WITHDRAW":
+                    self.append_operation(
+                        "Withdrawal",
+                        utc_time,
+                        platform,
+                        amount,
+                        coin,
+                        row,
+                        file_path,
+                    )
+                    # Add withdrawal fee if present
+                    if fee > 0:
+                        self.append_operation(
+                            "Fee",
+                            utc_time,
+                            platform,
+                            fee,
+                            coin,
+                            row,
+                            file_path,
+                        )
+                else:
+                    log.warning(
+                        f"{file_path} row {row}: Unknown tx_type '{tx_type}'. "
+                        "Skipping row."
+                    )
+
+    def _read_pionex_trading(self, file_path: Path) -> None:
+        """Reads trading records from Pionex (spot and futures).
+
+        Args:
+            file_path (Path): Path to Pionex trading.csv
+        """
+        platform = "pionex"
+
+        with open(file_path, encoding="utf8") as f:
+            reader = csv.reader(f)
+
+            # Skip header.
+            next(reader)
+
+            for columns in reader:
+                if len(columns) != 10:
+                    log.warning(
+                        f"{file_path}: Expected 10 columns, got {len(columns)}. "
+                        "Skipping row."
+                    )
+                    continue
+
+                (
+                    _utc_time,
+                    _executed_qty,
+                    _amount,
+                    _price,
+                    side,
+                    symbol,
+                    _fee,
+                    fee_coin,
+                    _market_type,
+                    _tax_id,
+                ) = columns
+
+                row = reader.line_num
+
+                # Parse data.
+                utc_time = datetime.datetime.strptime(
+                    _utc_time, "%Y-%m-%d %H:%M:%S"
+                )
+                utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
+
+                executed_qty = misc.force_decimal(_executed_qty)
+                amount = misc.force_decimal(_amount)
+                fee = misc.force_decimal(_fee)
+
+                # Extract base and quote coin from symbol (e.g. DOT_USDT_PERP -> DOT, USDT)
+                # Format: BASE_QUOTE or BASE_QUOTE_PERP
+                symbol_parts = symbol.split("_")
+                if len(symbol_parts) >= 2:
+                    base_coin = symbol_parts[0]
+                    quote_coin = symbol_parts[1]
+                else:
+                    log.warning(
+                        f"{file_path} row {row}: Could not parse symbol '{symbol}'. "
+                        "Skipping row."
+                    )
+                    continue
+
+                # Record buy/sell transactions
+                if side == "BUY":
+                    # Buying: spending quote coin, getting base coin
+                    self.append_operation(
+                        "Buy",
+                        utc_time,
+                        platform,
+                        executed_qty,
+                        base_coin,
+                        row,
+                        file_path,
+                    )
+                    self.append_operation(
+                        "Sell",
+                        utc_time,
+                        platform,
+                        amount,
+                        quote_coin,
+                        row,
+                        file_path,
+                    )
+                elif side == "SELL":
+                    # Selling: spending base coin, getting quote coin
+                    self.append_operation(
+                        "Sell",
+                        utc_time,
+                        platform,
+                        executed_qty,
+                        base_coin,
+                        row,
+                        file_path,
+                    )
+                    self.append_operation(
+                        "Buy",
+                        utc_time,
+                        platform,
+                        amount,
+                        quote_coin,
+                        row,
+                        file_path,
+                    )
+                else:
+                    log.warning(
+                        f"{file_path} row {row}: Unknown side '{side}'. "
+                        "Skipping row."
+                    )
+                    continue
+
+                # Add trading fee if present
+                if fee > 0:
+                    self.append_operation(
+                        "Fee",
+                        utc_time,
+                        platform,
+                        fee,
+                        fee_coin,
+                        row,
+                        file_path,
+                    )
+
+    def _read_pionex_staking(self, file_path: Path) -> None:
+        """Reads staking records from Pionex.
+
+        Args:
+            file_path (Path): Path to Pionex staking.csv
+        """
+        platform = "pionex"
+
+        with open(file_path, encoding="utf8") as f:
+            reader = csv.reader(f)
+
+            # Skip header.
+            next(reader)
+
+            for columns in reader:
+                if len(columns) != 6:
+                    log.warning(
+                        f"{file_path}: Expected 6 columns, got {len(columns)}. "
+                        "Skipping row."
+                    )
+                    continue
+
+                (
+                    _utc_time,
+                    _received_qty,
+                    received_currency,
+                    _sent_qty,
+                    sent_currency,
+                    _tag,
+                ) = columns
+
+                row = reader.line_num
+
+                # Skip empty rows
+                if not _received_qty.strip() or _received_qty == "0":
+                    continue
+
+                # Parse data.
+                utc_time = datetime.datetime.strptime(
+                    _utc_time, "%Y-%m-%d %H:%M:%S"
+                )
+                utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
+
+                received_qty = misc.xdecimal(_received_qty) or decimal.Decimal(0)
+                sent_qty = misc.xdecimal(_sent_qty) or decimal.Decimal(0)
+
+                # Staking record: sent asset (being staked) and received interest
+                if sent_qty > 0 and sent_currency:
+                    self.append_operation(
+                        "Staking",
+                        utc_time,
+                        platform,
+                        sent_qty,
+                        sent_currency,
+                        row,
+                        file_path,
+                    )
+
+                if received_qty > 0 and received_currency:
+                    self.append_operation(
+                        "StakingInterest",
+                        utc_time,
+                        platform,
+                        received_qty,
+                        received_currency,
+                        row,
+                        file_path,
+                    )
+
+    def _read_pionex_others(self, file_path: Path) -> None:
+        """Reads other transaction records from Pionex (fees, funding, etc).
+
+        Args:
+            file_path (Path): Path to Pionex others.csv
+        """
+        platform = "pionex"
+
+        with open(file_path, encoding="utf8") as f:
+            reader = csv.reader(f)
+
+            # Skip header.
+            next(reader)
+
+            for columns in reader:
+                if len(columns) != 5:
+                    log.warning(
+                        f"{file_path}: Expected 5 columns, got {len(columns)}. "
+                        "Skipping row."
+                    )
+                    continue
+
+                (
+                    _utc_time,
+                    coin,
+                    _amount,
+                    tag,
+                    _comment,
+                ) = columns
+
+                row = reader.line_num
+
+                # Parse data.
+                utc_time = datetime.datetime.strptime(
+                    _utc_time, "%Y-%m-%d %H:%M:%S"
+                )
+                utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
+
+                amount = misc.force_decimal(_amount)
+                amount_abs = abs(amount)
+
+                # Handle different tag types
+                if tag == "FundingFee":
+                    # Funding fees are costs, record as Fee
+                    if amount_abs > 0:
+                        self.append_operation(
+                            "Fee",
+                            utc_time,
+                            platform,
+                            amount_abs,
+                            coin,
+                            row,
+                            file_path,
+                        )
+                elif tag == "Commission":
+                    # Commission/rewards
+                    if amount > 0:
+                        self.append_operation(
+                            "Commission",
+                            utc_time,
+                            platform,
+                            amount,
+                            coin,
+                            row,
+                            file_path,
+                        )
+                elif tag == "Airdrop":
+                    # Airdrop/reward distribution
+                    if amount > 0:
+                        self.append_operation(
+                            "Airdrop",
+                            utc_time,
+                            platform,
+                            amount,
+                            coin,
+                            row,
+                            file_path,
+                        )
+                else:
+                    # Log unknown tags for reference
+                    if amount > 0:
+                        log.debug(
+                            f"{file_path} row {row}: Unknown tag '{tag}' "
+                            f"with amount {amount}. Recording as income."
+                        )
+                        self.append_operation(
+                            "Airdrop",
+                            utc_time,
+                            platform,
+                            amount,
+                            coin,
+                            row,
+                            file_path,
+                        )
+
     def _read_custom_eur(self, file_path: Path) -> None:
         fiat = "EUR"
 
@@ -1552,33 +1941,33 @@ class Book:
                     tuple[str, decimal.Decimal, str, Optional[decimal.Decimal]]
                 ] = []
                 if operation_type != "Withdrawal":
-                    assert buy_quantity
                     assert buy_asset
 
-                    op = "Buy" if operation_type == "Trade" else operation_type
-                    add_operations.append(
-                        (op, buy_quantity, buy_asset, buy_value_in_fiat)
-                    )
-
                 if operation_type not in ("Deposit", "Airdrop"):
-                    assert sell_quantity
                     assert sell_asset
-
-                    op = "Sell" if operation_type == "Trade" else operation_type
-                    add_operations.append(
-                        (op, sell_quantity, sell_asset, sell_value_in_fiat)
-                    )
 
                 if fee_asset:
                     assert fee_quantity
-                    assert fee_value_in_fiat
 
+                # Map operation_type to standard operation
+                operation = operation_type  # or use a mapping if needed
+
+                if buy_quantity and buy_quantity != 0:
                     add_operations.append(
-                        ("Fee", fee_quantity, fee_asset, fee_value_in_fiat)
-                    )
+                        (operation, buy_quantity, buy_asset, buy_value_in_fiat))
+
+                if sell_quantity and sell_quantity != 0:
+                    # For sell, quantity is negative
+                    add_operations.append(
+                        (operation, -sell_quantity, sell_asset, sell_value_in_fiat))
+
+                if fee_quantity and fee_quantity != 0:
+                    add_operations.append(
+                        ("Fee", -fee_quantity, fee_asset, fee_value_in_fiat))
 
                 for operation, change, coin, change_in_fiat in add_operations:
-                    # Add operation to book.
+                    assert change
+                    assert coin
                     self.append_operation(
                         operation,
                         utc_time,
@@ -2222,6 +2611,10 @@ class Book:
                 "bitpanda_pro_trades": 4,
                 "bitpanda": 7,
                 "bitunix": 1,
+                "pionex_deposit_withdraw": 1,
+                "pionex_trading": 1,
+                "pionex_staking": 1,
+                "pionex_others": 1,
                 "custom_eur": 1,
             }
 
@@ -2380,6 +2773,42 @@ class Book:
                     "Trx. ID",
                     "Comment",
                 ],
+                "pionex_deposit_withdraw": [
+                    "date(UTC+0)",
+                    "tx_type",
+                    "amount",
+                    "coin",
+                    "network",
+                    "txid",
+                    "fee",
+                ],
+                "pionex_trading": [
+                    "date(UTC+0)",
+                    "executed_qty",
+                    "amount",
+                    "price",
+                    "side",
+                    "symbol",
+                    "fee",
+                    "fee_coin",
+                    "market_type",
+                    "tax_id",
+                ],
+                "pionex_staking": [
+                    "date(UTC+0)",
+                    "Received Quantity",
+                    "Received Currency",
+                    "Sent Quantity",
+                    "Sent Currency",
+                    "tag",
+                ],
+                "pionex_others": [
+                    "date(UTC+0)",
+                    "coin",
+                    "amount",
+                    "tag",
+                    "comment",
+                ],
                 "custom_eur": [
                     "Type",
                     "Buy Quantity",
@@ -2396,10 +2825,31 @@ class Book:
                     "Note",
                 ],
             }
+
+            # Special handling for Pionex which has multiple file types
+            filename = file_path.name
+            pionex_files = {
+                "deposit-withdraw.csv": "pionex_deposit_withdraw",
+                "trading.csv": "pionex_trading",
+                "staking.csv": "pionex_staking",
+                "others.csv": "pionex_others",
+            }
+            if filename in pionex_files:
+                exchange_type = pionex_files[filename]
+                with open(file_path, encoding="utf8") as f:
+                    reader = csv.reader(f)
+                    expected = expected_headers[exchange_type]
+                    header = next(reader, None)
+                    if header == expected:
+                        return exchange_type
+
             with open(file_path, encoding="utf8") as f:
                 reader = csv.reader(f)
                 # check all potential headers at their expected header row
                 for exchange, expected in expected_headers.items():
+                    # Skip Pionex entries as they're handled above
+                    if exchange.startswith("pionex_"):
+                        continue
                     header_row_num = expected_header_row[exchange]
                     # iterate since header row may appear earlier
                     for _ in range(header_row_num):
