@@ -1,0 +1,38 @@
+from price_providers.bitunix import BitunixPriceProvider
+import datetime
+import decimal
+import os
+import sys
+import unittest
+from unittest.mock import Mock, patch
+
+import requests
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+
+
+class BitunixProviderTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.utc_time = datetime.datetime(2025, 1, 1, tzinfo=datetime.timezone.utc)
+
+    @patch("price_providers.bitunix.requests.get")
+    def test_403_falls_back_to_binance(self, mock_get: Mock) -> None:
+        response = Mock()
+        response.status_code = 403
+        http_error = requests.exceptions.HTTPError(response=response)
+        response.raise_for_status.side_effect = http_error
+        mock_get.return_value = response
+
+        def fake_get_price(platform: str, *args, **kwargs):
+            if platform == "binance":
+                return decimal.Decimal("99")
+            raise AssertionError("unexpected platform")
+
+        provider = BitunixPriceProvider(fake_get_price)
+        price = provider.fetch_price("BTC", self.utc_time, "USDT")
+
+        self.assertEqual(price, decimal.Decimal("99"))
+
+
+if __name__ == "__main__":
+    unittest.main()
