@@ -389,11 +389,15 @@ class BitgetApiReader(ExchangeReader):
 
         total_records = sum(len(segment) for _, _, segment, _, _ in chunks)
         log.info("Importing %s Bitget spot records.", total_records)
+        empty_tax_type_rows: list[int] = []
         for chunk_start, chunk_end, records, resume_state, endpoint_state in chunks:
             for row_num, row in enumerate(records, start=1):
                 tax_type = row.get("taxType", "")
                 operation = self._map_spot_tax_type(tax_type)
                 if operation is None:
+                    if not tax_type.strip():
+                        empty_tax_type_rows.append(row_num)
+                        continue
                     log.warning(
                         f"Unknown Bitget spot tax type '{tax_type}' in row {row_num}. "
                         "Skipping."
@@ -416,6 +420,16 @@ class BitgetApiReader(ExchangeReader):
                     self.append_operation(
                         book, "Fee", utc_time, fee, coin, row_num, Path("bitget-api")
                     )
+
+        if empty_tax_type_rows:
+            preview = ", ".join(map(str, empty_tax_type_rows[:10]))
+            suffix = "..." if len(empty_tax_type_rows) > 10 else ""
+            log.info(
+                "Skipped %s Bitget spot rows with empty tax type (rows: %s%s).",
+                len(empty_tax_type_rows),
+                preview,
+                suffix,
+            )
 
     def import_future_records(self, book, start_time_ms: int, end_time_ms: int) -> None:
         chunks = self._fetch_all_range(

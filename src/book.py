@@ -515,6 +515,14 @@ class Book:
         """
         assert file_path.is_file()
 
+        bitget_api_configured = all(
+            (
+                config.BITGET_API_KEY,
+                config.BITGET_API_SECRET,
+                config.BITGET_API_PASSPHRASE,
+            )
+        )
+
         if reader := self.detect_exchange(file_path):
             log.info("Reading file from exchange %s at %s", reader.platform, file_path)
             reader.read_file(file_path, self)
@@ -522,6 +530,14 @@ class Book:
             ".zip",
             ".rar",
         ):
+            lower_file_path = str(file_path).lower()
+            if bitget_api_configured and "bitget" in lower_file_path:
+                log.info(
+                    "Skipping undetected Bitget CSV file %s because Bitget API import is enabled.",
+                    file_path,
+                )
+                return
+
             log.warning(
                 f"Unable to detect the exchange of file `{file_path}`. "
                 "Skipping file."

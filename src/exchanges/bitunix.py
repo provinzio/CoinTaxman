@@ -161,7 +161,7 @@ class BitunixReader(ExchangeReader):
                     if incoming_amount > 0 and incoming_asset:
                         self.append_operation(
                             book,
-                            "Profit",
+                            "Commission",
                             utc_time,
                             incoming_amount,
                             incoming_asset,
