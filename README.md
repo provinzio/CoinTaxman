@@ -20,7 +20,7 @@ Pull Requests und Anfragen über Issues sind gerne gesehen (siehe `Key notes for
 ### Currently supported exchanges
 - [Binance](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-Binance)
 - [Bitpanda Pro](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-Bitpanda-Pro)
-- Bitget (API import)
+- Bitget (API import and CSV export)
 - Bitunix
 - [coinbase (pro)](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-coinbase)
 - [Kraken](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-Kraken)
@@ -59,6 +59,36 @@ Optional filtering via environment variable:
 	- Windows PowerShell: `$env:BITGET_API_RECORD_TYPES='spot,future'; python src/main.py`
 - If `BITGET_API_RECORD_TYPES` is missing or empty, all groups are imported.
 - Unknown values are ignored and logged as warnings.
+
+### Bitget CSV export import (alternative)
+
+Bitget CSV exports are supported as an alternative when API credentials are not configured.
+
+Currently supported Bitget CSV export files:
+- `...withdrawal records....csv`
+- `...spot transactions....csv`
+- `...spot order details....csv`
+- `...spot order history....csv`
+- `...futures transactions....csv`
+- `...futures order details....csv`
+- `...futures order history....csv`
+- `...futures position history....csv`
+- `...margin transactions....csv`
+- `...margin order history....csv`
+- `...Onchain transactions....csv`
+- `...Onchain history....csv`
+- `...transactions of unified trading account....csv`
+- `...order history of unified trading account....csv`
+- `...position history of unified trading account....csv`
+- `...convert history of unified trading account....csv`
+- `...small balance conversion history....csv`
+- `...Earn....csv` for Simple Earn, On-chain Earn, Dual Investment and Shark Fin exports
+
+If Bitget API credentials are configured, Bitget CSV files are skipped to avoid duplicate imports.
+
+Some Bitget CSV files are used as fallbacks only:
+- order/history files may be skipped when a more detailed transaction export from the same area is available
+- some history-style files are detected and intentionally ignored when no safe tax mapping is available
 
 If not all your exchanges are supported, you can not (directly) calculate your taxes with this tool.
 You can use the custom import format [here](https://github.com/provinzio/CoinTaxman/wiki/Custom-import-format) to make it happen.

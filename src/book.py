@@ -524,6 +524,13 @@ class Book:
         )
 
         if reader := self.detect_exchange(file_path):
+            if bitget_api_configured and reader.platform == "bitget":
+                log.info(
+                    "Skipping Bitget CSV file %s because Bitget API import is enabled.",
+                    file_path,
+                )
+                return
+
             log.info("Reading file from exchange %s at %s", reader.platform, file_path)
             reader.read_file(file_path, self)
         elif file_path.suffix not in (
