@@ -3240,13 +3240,14 @@ class Book:
         file_paths: list[Path] = []
 
         if statements_dir.is_dir():
-            for file_path in statements_dir.iterdir():
-                # Ignore .gitkeep and temporary excel files.
-                filename = file_path.stem
-                if filename == ".gitkeep" or filename.startswith("~$"):
-                    continue
+            for file_path in statements_dir.rglob("*"):
+                if file_path.is_file():
+                    # Ignore .gitkeep and temporary excel files.
+                    filename = file_path.stem
+                    if filename == ".gitkeep" or filename.startswith("~$"):
+                        continue
 
-                file_paths.append(file_path)
+                    file_paths.append(file_path)
         return file_paths
 
     def read_files(self) -> bool:
