@@ -1290,6 +1290,214 @@ class Book:
                         file_path,
                     )
 
+    def _read_bitunix(self, file_path: Path) -> None:
+        """Reads a transaction history from Bitunix.
+
+        Args:
+            file_path (Path): Path to Bitunix transaction history CSV.
+        """
+        platform = "bitunix"
+        operation_mapping = {
+            "Deposit": "Deposit",
+            "Withdraw": "Withdrawal",
+            "Spot Trade": "Trade",
+            "Futures Profit": "Profit",
+            "Futures Loss": "Loss",
+            "Rebate (Agent)": "Commission",
+        }
+
+        with open(file_path, encoding="utf8") as f:
+            reader = csv.reader(f)
+
+            # Skip header.
+            next(reader)
+
+            for columns in reader:
+                if len(columns) != 10:
+                    log.warning(
+                        f"{file_path}: Expected 10 columns, got {len(columns)}. "
+                        "Skipping row."
+                    )
+                    continue
+
+                (
+                    _utc_time,
+                    label,
+                    outgoing_asset,
+                    _outgoing_amount,
+                    incoming_asset,
+                    _incoming_amount,
+                    fee_asset,
+                    _fee_amount,
+                    _trx_id,
+                    _comment,
+                ) = columns
+
+                row = reader.line_num
+
+                # Parse data.
+                utc_time = datetime.datetime.strptime(
+                    _utc_time, "%Y-%m-%d %H:%M:%S"
+                )
+                utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
+
+                outgoing_amount = misc.xdecimal(_outgoing_amount) or decimal.Decimal(0)
+                incoming_amount = misc.xdecimal(_incoming_amount) or decimal.Decimal(0)
+                fee_amount = misc.xdecimal(_fee_amount) or decimal.Decimal(0)
+
+                operation = operation_mapping.get(label)
+
+                if operation is None:
+                    log.warning(
+                        f"{file_path} row {row}: Unknown operation type '{label}'. "
+                        "Skipping row."
+                    )
+                    continue
+
+                # Handle different operation types
+                if operation == "Deposit":
+                    # Deposit: incoming_asset and incoming_amount
+                    if incoming_amount > 0:
+                        self.append_operation(
+                            "Deposit",
+                            utc_time,
+                            platform,
+                            incoming_amount,
+                            incoming_asset,
+                            row,
+                            file_path,
+                        )
+                    if fee_amount > 0:
+                        self.append_operation(
+                            "Fee",
+                            utc_time,
+                            platform,
+                            fee_amount,
+                            fee_asset,
+                            row,
+                            file_path,
+                        )
+
+                elif operation == "Withdrawal":
+                    # Withdrawal: outgoing_asset and outgoing_amount
+                    if outgoing_amount > 0:
+                        self.append_operation(
+                            "Withdrawal",
+                            utc_time,
+                            platform,
+                            outgoing_amount,
+                            outgoing_asset,
+                            row,
+                            file_path,
+                        )
+                    if fee_amount > 0:
+                        self.append_operation(
+                            "Fee",
+                            utc_time,
+                            platform,
+                            fee_amount,
+                            fee_asset,
+                            row,
+                            file_path,
+                        )
+
+                elif operation == "Trade":
+                    # Spot Trade: sell outgoing, buy incoming
+                    if outgoing_amount > 0 and outgoing_asset:
+                        self.append_operation(
+                            "Sell",
+                            utc_time,
+                            platform,
+                            outgoing_amount,
+                            outgoing_asset,
+                            row,
+                            file_path,
+                        )
+
+                    if incoming_amount > 0 and incoming_asset:
+                        self.append_operation(
+                            "Buy",
+                            utc_time,
+                            platform,
+                            incoming_amount,
+                            incoming_asset,
+                            row,
+                            file_path,
+                        )
+
+                    if fee_amount > 0 and fee_asset:
+                        self.append_operation(
+                            "Fee",
+                            utc_time,
+                            platform,
+                            fee_amount,
+                            fee_asset,
+                            row,
+                            file_path,
+                        )
+
+                elif operation == "Profit":
+                    # Futures Profit: incoming amount is the profit
+                    if incoming_amount > 0 and incoming_asset:
+                        self.append_operation(
+                            "StakingInterest",
+                            utc_time,
+                            platform,
+                            incoming_amount,
+                            incoming_asset,
+                            row,
+                            file_path,
+                        )
+
+                    if fee_amount > 0 and fee_asset:
+                        self.append_operation(
+                            "Fee",
+                            utc_time,
+                            platform,
+                            fee_amount,
+                            fee_asset,
+                            row,
+                            file_path,
+                        )
+
+                elif operation == "Loss":
+                    # Futures Loss: outgoing amount is the loss
+                    # Record as a sell operation (loss is like selling at unfavorable rate)
+                    if outgoing_amount > 0 and outgoing_asset:
+                        self.append_operation(
+                            "Sell",
+                            utc_time,
+                            platform,
+                            outgoing_amount,
+                            outgoing_asset,
+                            row,
+                            file_path,
+                        )
+
+                    if fee_amount > 0 and fee_asset:
+                        self.append_operation(
+                            "Fee",
+                            utc_time,
+                            platform,
+                            fee_amount,
+                            fee_asset,
+                            row,
+                            file_path,
+                        )
+
+                elif operation == "Commission":
+                    # Rebate (Agent): incoming amount is the commission/rebate
+                    if incoming_amount > 0 and incoming_asset:
+                        self.append_operation(
+                            "Commission",
+                            utc_time,
+                            platform,
+                            incoming_amount,
+                            incoming_asset,
+                            row,
+                            file_path,
+                        )
+
     def _read_custom_eur(self, file_path: Path) -> None:
         fiat = "EUR"
 
@@ -2013,6 +2221,7 @@ class Book:
                 "kraken_trades": 1,
                 "bitpanda_pro_trades": 4,
                 "bitpanda": 7,
+                "bitunix": 1,
                 "custom_eur": 1,
             }
 
@@ -2158,6 +2367,18 @@ class Book:
                     "Fee asset",
                     "Spread",
                     "Spread Currency",
+                ],
+                "bitunix": [
+                    "Date (UTC)",
+                    "Label",
+                    "Outgoing Asset",
+                    "Outgoing Amount",
+                    "Incoming Asset",
+                    "Incoming Amount",
+                    "Fee Asset",
+                    "Fee Amount",
+                    "Trx. ID",
+                    "Comment",
                 ],
                 "custom_eur": [
                     "Type",
