@@ -392,7 +392,7 @@ class BitgetApiReader(ExchangeReader):
         empty_tax_type_rows: list[int] = []
         for chunk_start, chunk_end, records, resume_state, endpoint_state in chunks:
             for row_num, row in enumerate(records, start=1):
-                tax_type = row.get("taxType", "")
+                tax_type = row.get("spotTaxType", row.get("taxType", ""))
                 operation = self._map_spot_tax_type(tax_type)
                 if operation is None:
                     if not tax_type.strip():
