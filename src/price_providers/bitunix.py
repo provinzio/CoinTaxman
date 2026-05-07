@@ -55,7 +55,24 @@ class BitunixPriceProvider(PriceProvider):
                     swapped_symbols=swapped_symbols,
                     fallback_mode=fallback_mode,
                 )
-            raise
+            if fallback_mode:
+                raise FallbackPriceNotFound from e
+            log.warning(
+                "Unable to retrieve price for symbol=%s from bitunix at utc_time=%s due to HTTPError.",
+                symbol,
+                utc_time,
+            )
+            return decimal.Decimal()
+        except requests.exceptions.RequestException as e:
+            if fallback_mode:
+                raise FallbackPriceNotFound from e
+            log.warning(
+                "Unable to retrieve price for symbol=%s from bitunix at utc_time=%s due to %s.",
+                symbol,
+                utc_time,
+                e.__class__.__name__,
+            )
+            return decimal.Decimal()
 
         data = response.json()
         tickers = []

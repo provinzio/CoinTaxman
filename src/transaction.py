@@ -229,8 +229,21 @@ class Withdrawal(Transaction):
 
     def partial_withdrawn_coins(self, percent: decimal.Decimal) -> list[SoldCoin]:
         assert self.withdrawn_coins
-        withdrawn_coins = [wc.partial(percent) for wc in self.withdrawn_coins]
-        assert percent * self.change == misc.dsum(
+        target_total = percent * self.change
+
+        if len(self.withdrawn_coins) == 1:
+            withdrawn_coins = [SoldCoin(self.withdrawn_coins[0].op, target_total)]
+        else:
+            withdrawn_coins = [
+                wc.partial(percent) for wc in self.withdrawn_coins[:-1]
+            ]
+            allocated_total = misc.dsum(wsc.sold for wsc in withdrawn_coins)
+            remaining_total = target_total - allocated_total
+            withdrawn_coins.append(
+                SoldCoin(self.withdrawn_coins[-1].op, remaining_total)
+            )
+
+        assert target_total == misc.dsum(
             (wsc.sold for wsc in withdrawn_coins)
         ), "Withdrawn coins total must be equal to the sum if the single coins."
         return withdrawn_coins

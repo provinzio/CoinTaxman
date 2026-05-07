@@ -32,6 +32,7 @@ class BitunixReader(ExchangeReader):
         """Read Bitunix CSV file."""
         with open(file_path, encoding="utf8") as f:
             reader = csv.reader(f)
+            skipped_futures_rows: list[int] = []
 
             # Skip header.
             next(reader)
@@ -72,6 +73,10 @@ class BitunixReader(ExchangeReader):
                         f"{file_path} row {row}: Unknown operation type '{label}'. "
                         "Skipping row."
                     )
+                    continue
+
+                if label in {"Futures Profit", "Futures Loss"}:
+                    skipped_futures_rows.append(row)
                     continue
 
                 # Handle different operation types
@@ -217,3 +222,11 @@ class BitunixReader(ExchangeReader):
                             row,
                             file_path,
                         )
+
+            if skipped_futures_rows:
+                log.warning(
+                    "%s: Skipping %s unsupported Bitunix futures PnL rows: %s",
+                    file_path,
+                    len(skipped_futures_rows),
+                    skipped_futures_rows[:10],
+                )

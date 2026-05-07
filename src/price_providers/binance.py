@@ -33,7 +33,19 @@ class BinancePriceProvider(PriceProvider):
         )
         url = f"{root_url}?symbol={symbol}&startTime={start_time}&endTime={end_time}"
 
-        response = requests.get(url)
+        try:
+            response = requests.get(url, timeout=10)
+        except requests.exceptions.RequestException as e:
+            if fallback_mode:
+                raise FallbackPriceNotFound from e
+            log.warning(
+                "Unable to retrieve price for symbol=%s from binance at utc_time=%s due to %s.",
+                symbol,
+                utc_time,
+                e.__class__.__name__,
+            )
+            return decimal.Decimal()
+
         data = json.loads(response.text)
 
         if (
@@ -90,7 +102,18 @@ class BinancePriceProvider(PriceProvider):
             )
             return decimal.Decimal()
 
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            if fallback_mode:
+                raise FallbackPriceNotFound from e
+            log.warning(
+                "Unable to retrieve price for symbol=%s from binance at utc_time=%s due to %s.",
+                symbol,
+                utc_time,
+                e.__class__.__name__,
+            )
+            return decimal.Decimal()
 
         total_cost = decimal.Decimal()
         total_quantity = decimal.Decimal()

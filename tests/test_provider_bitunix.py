@@ -49,6 +49,15 @@ class BitunixProviderTests(unittest.TestCase):
         self.assertEqual(second, decimal.Decimal("0"))
         self.assertEqual(mock_get.call_count, 2)
 
+    @patch("price_providers.bitunix.requests.get")
+    def test_connection_error_returns_zero(self, mock_get: Mock) -> None:
+        mock_get.side_effect = requests.exceptions.ConnectionError()
+
+        provider = BitunixPriceProvider(lambda *args, **kwargs: decimal.Decimal("0"))
+        price = provider.fetch_price("BTC", self.utc_time, "USDT")
+
+        self.assertEqual(price, decimal.Decimal("0"))
+
 
 if __name__ == "__main__":
     unittest.main()

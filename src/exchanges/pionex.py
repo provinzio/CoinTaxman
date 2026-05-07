@@ -113,6 +113,7 @@ class PionexReader(ExchangeReader):
         """Reads trading records from Pionex (spot and futures)."""
         with open(file_path, encoding="utf8") as f:
             reader = csv.reader(f)
+            skipped_derivative_rows: list[int] = []
 
             # Skip header.
             next(reader)
@@ -145,6 +146,11 @@ class PionexReader(ExchangeReader):
                 executed_qty = force_decimal(_executed_qty)
                 amount = force_decimal(_amount)
                 fee = force_decimal(_fee)
+                market_type = _market_type.strip().lower()
+
+                if "future" in market_type or symbol.endswith("_PERP"):
+                    skipped_derivative_rows.append(row)
+                    continue
 
                 # Extract base and quote coin from symbol (e.g. DOT_USDT_PERP -> DOT, USDT)
                 # Format: BASE_QUOTE or BASE_QUOTE_PERP
@@ -218,6 +224,14 @@ class PionexReader(ExchangeReader):
                         row,
                         file_path,
                     )
+
+            if skipped_derivative_rows:
+                log.warning(
+                    "%s: Skipping %s unsupported Pionex derivative trading rows: %s",
+                    file_path,
+                    len(skipped_derivative_rows),
+                    skipped_derivative_rows[:10],
+                )
 
     def _read_staking(self, file_path: Path, book) -> None:
         """Reads staking records from Pionex."""

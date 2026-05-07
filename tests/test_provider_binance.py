@@ -7,6 +7,8 @@ import sys
 import unittest
 from unittest.mock import Mock, patch
 
+import requests
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 
@@ -40,6 +42,28 @@ class BinanceProviderTests(unittest.TestCase):
                 self.utc_time,
                 "USDT",
                 swapped_symbols=True,
+                fallback_mode=True,
+            )
+
+    @patch("price_providers.binance.requests.get")
+    def test_connection_error_returns_zero(self, mock_get: Mock) -> None:
+        mock_get.side_effect = requests.exceptions.ConnectionError()
+
+        provider = BinancePriceProvider(lambda *args, **kwargs: decimal.Decimal("0"))
+        price = provider.fetch_price("BTC", self.utc_time, "USDT")
+
+        self.assertEqual(price, decimal.Decimal("0"))
+
+    @patch("price_providers.binance.requests.get")
+    def test_connection_error_in_fallback_mode_raises(self, mock_get: Mock) -> None:
+        mock_get.side_effect = requests.exceptions.ConnectionError()
+
+        provider = BinancePriceProvider(lambda *args, **kwargs: decimal.Decimal("0"))
+        with self.assertRaises(FallbackPriceNotFound):
+            provider.fetch_price(
+                "BTC",
+                self.utc_time,
+                "USDT",
                 fallback_mode=True,
             )
 
