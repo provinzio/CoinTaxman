@@ -29,6 +29,10 @@ class PionexPriceProvider(PriceProvider):
             if swapped_symbols
             else f"{base_asset}_{quote_asset}"
         )
+        if self.is_known_missing_symbol(symbol):
+            if fallback_mode:
+                raise FallbackPriceNotFound
+            return decimal.Decimal()
 
         response = requests.get(root_url, timeout=10)
         response.raise_for_status()
@@ -53,6 +57,7 @@ class PionexPriceProvider(PriceProvider):
                 break
 
         if price == 0:
+            self.mark_missing_symbol(symbol)
             if not swapped_symbols:
                 log.warning(
                     "Pionex symbol %s not found, retrying with swapped symbol %s.",

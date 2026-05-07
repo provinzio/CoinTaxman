@@ -16,6 +16,7 @@
 
 import datetime
 import decimal
+import json
 import sqlite3
 from pathlib import Path
 from typing import Any, Union
@@ -30,6 +31,75 @@ log = log_config.getLogger(__name__)
 
 
 class PriceData:
+    def __init__(self) -> None:
+        self._providers = {}
+        self._missing_symbols_cache_path = Path(
+            config.DATA_PATH) / "missing_price_symbols.json"
+        self._provider_missing_symbols = self._load_missing_symbols_cache()
+
+    def _load_missing_symbols_cache(self) -> dict[str, set[str]]:
+        try:
+            with open(self._missing_symbols_cache_path, encoding="utf8") as f:
+                raw_data = json.load(f)
+        except FileNotFoundError:
+            return {}
+        except json.JSONDecodeError:
+            log.warning(
+                "Unable to parse missing symbol cache at %s. Starting with empty cache.",
+                self._missing_symbols_cache_path,
+            )
+            return {}
+
+        if not isinstance(raw_data, dict):
+            log.warning(
+                "Unexpected missing symbol cache format at %s. Starting with empty cache.",
+                self._missing_symbols_cache_path,
+            )
+            return {}
+
+        cache: dict[str, set[str]] = {}
+        for platform, symbols in raw_data.items():
+            if isinstance(platform, str) and isinstance(symbols, list):
+                cache[platform] = {
+                    symbol for symbol in symbols if isinstance(symbol, str)}
+        return cache
+
+    def _save_missing_symbols_cache(self) -> None:
+        Path(config.DATA_PATH).mkdir(parents=True, exist_ok=True)
+        serializable_cache = {
+            platform: sorted(symbols)
+            for platform, symbols in sorted(self._provider_missing_symbols.items())
+            if symbols
+        }
+        with open(self._missing_symbols_cache_path, "w", encoding="utf8") as f:
+            json.dump(serializable_cache, f, indent=2, sort_keys=True)
+
+    def _get_provider(self, platform: str):
+        provider = self._providers.get(platform)
+        if provider is not None:
+            return provider
+
+        provider = create_price_provider(
+            platform,
+            self.get_price,
+            missing_symbols=self._provider_missing_symbols.get(platform, set()),
+        )
+        if provider is not None:
+            self._providers[platform] = provider
+        return provider
+
+    def _persist_provider_missing_symbols(self, platform: str, provider) -> None:
+        if not provider.has_missing_symbols_update():
+            return
+
+        symbols = provider.get_missing_symbols()
+        if symbols:
+            self._provider_missing_symbols[platform] = symbols
+        else:
+            self._provider_missing_symbols.pop(platform, None)
+        self._save_missing_symbols_cache()
+        provider.mark_missing_symbols_persisted()
+
     def get_price(
         self,
         platform: str,
@@ -59,13 +129,15 @@ class PriceData:
         # Check if price exists already in our database.
         if (price := get_price_db(platform, coin, reference_coin, utc_time)) is None:
             # Price doesn't exists. Fetch price from platform.
-            provider = create_price_provider(platform, self.get_price)
+            provider = self._get_provider(platform)
             if provider is None:
                 raise NotImplementedError(f"Unable to read data from {platform=}")
 
             get_price = provider.fetch_price
-
-            price = get_price(coin, utc_time, reference_coin, **kwargs)
+            try:
+                price = get_price(coin, utc_time, reference_coin, **kwargs)
+            finally:
+                self._persist_provider_missing_symbols(platform, provider)
             assert isinstance(price, decimal.Decimal)
             set_price_db(platform, coin, reference_coin, utc_time, price)
 
@@ -105,7 +177,7 @@ class PriceData:
             if db_path.is_file():
                 platform = db_path.stem
                 stats[platform] = {"fix": 0, "rem": 0}
-                provider = create_price_provider(platform, self.get_price)
+                provider = self._get_provider(platform)
                 if provider is None:
                     log.warning(
                         "No price provider registered for %s. "
@@ -202,6 +274,8 @@ class PriceData:
                                 stats[platform]["fix"] += 1
 
                     conn.commit()
+
+                self._persist_provider_missing_symbols(platform, provider)
 
         log.info("Check Database Result:")
         for platform, result in stats.items():

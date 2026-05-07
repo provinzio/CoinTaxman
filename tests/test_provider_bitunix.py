@@ -33,6 +33,22 @@ class BitunixProviderTests(unittest.TestCase):
 
         self.assertEqual(price, decimal.Decimal("99"))
 
+    @patch("price_providers.bitunix.requests.get")
+    def test_missing_symbol_is_cached(self, mock_get: Mock) -> None:
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"data": {"tickers": []}}
+        mock_get.return_value = response
+
+        provider = BitunixPriceProvider(lambda *args, **kwargs: decimal.Decimal("0"))
+
+        first = provider.fetch_price("EUR", self.utc_time, "ATH")
+        second = provider.fetch_price("EUR", self.utc_time, "ATH")
+
+        self.assertEqual(first, decimal.Decimal("0"))
+        self.assertEqual(second, decimal.Decimal("0"))
+        self.assertEqual(mock_get.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

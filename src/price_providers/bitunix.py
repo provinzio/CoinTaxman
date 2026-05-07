@@ -29,6 +29,10 @@ class BitunixPriceProvider(PriceProvider):
             if swapped_symbols
             else f"{base_asset}_{quote_asset}"
         )
+        if self.is_known_missing_symbol(symbol):
+            if fallback_mode:
+                raise FallbackPriceNotFound
+            return decimal.Decimal()
 
         try:
             response = requests.get(
@@ -73,6 +77,7 @@ class BitunixPriceProvider(PriceProvider):
                 break
 
         if price == 0:
+            self.mark_missing_symbol(symbol)
             if not swapped_symbols:
                 log.warning(
                     "Bitunix symbol %s not found, retrying with swapped symbol %s.",

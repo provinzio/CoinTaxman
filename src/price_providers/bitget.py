@@ -33,6 +33,11 @@ class BitgetPriceProvider(PriceProvider):
             if swapped_symbols
             else f"{base_asset}{quote_asset}"
         )
+        if self.is_known_missing_symbol(symbol):
+            if fallback_mode:
+                raise FallbackPriceNotFound
+            return decimal.Decimal()
+
         end = utc_time.astimezone(datetime.timezone.utc)
         start = end - datetime.timedelta(minutes=minute_interval)
 
@@ -100,6 +105,7 @@ class BitgetPriceProvider(PriceProvider):
                 )
 
                 if invalid_symbol_error:
+                    self.mark_missing_symbol(symbol)
                     if not swapped_symbols:
                         return self.fetch_price(
                             base_asset,
@@ -162,6 +168,7 @@ class BitgetPriceProvider(PriceProvider):
                     else:
                         return base * quote
 
+            self.mark_missing_symbol(symbol)
             log.warning(
                 f"Unable to retrieve price for {symbol=} from bitget at "
                 f"{utc_time=} even though multiple fallback assets were checked. "

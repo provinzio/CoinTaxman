@@ -341,6 +341,124 @@ class Book:
         grouped_ops = misc.group_by(self.operations, tr.Operation.identical_columns)
         self.operations = [tr.Operation.merge(*ops) for ops in grouped_ops.values()]
 
+    @staticmethod
+    def _split_fee_by_line(fee: tr.Fee) -> list[tr.Fee]:
+        # Merged fees can span multiple source rows. Split them into
+        # per-line shares so they can be matched to per-line trade pairs.
+        if len(fee.line) <= 1:
+            return [fee]
+
+        line_count = decimal.Decimal(len(fee.line))
+        fee_share = fee.change / line_count
+        return [
+            tr.Fee(
+                utc_time=fee.utc_time,
+                platform=fee.platform,
+                change=fee_share,
+                coin=fee.coin,
+                line=[line],
+                file_path=fee.file_path,
+                remarks=list(fee.remarks),
+            )
+            for line in fee.line
+        ]
+
+    def _match_fees_by_line(
+        self,
+        matching_transactions: dict[int, tr.Transaction],
+        fees: list[tr.Fee],
+    ) -> bool:
+        line_to_transaction_indices: dict[int,
+                                          list[int]] = collections.defaultdict(list)
+        for idx, op in matching_transactions.items():
+            for line in op.line:
+                line_to_transaction_indices[line].append(idx)
+
+        # Expand merged fees into per-line shares first.
+        split_fees: list[tr.Fee] = []
+        for fee in fees:
+            split_fees.extend(self._split_fee_by_line(fee))
+
+        line_to_fees: dict[int, list[tr.Fee]] = collections.defaultdict(list)
+        for fee in split_fees:
+            assert len(fee.line) == 1
+            line_to_fees[fee.line[0]].append(fee)
+
+        assigned_fees: dict[int, list[tr.Fee]] = collections.defaultdict(list)
+        assigned_line_count = 0
+
+        for line, tx_indices in line_to_transaction_indices.items():
+            line_buys = [idx for idx in tx_indices if isinstance(
+                matching_transactions[idx], tr.Buy)]
+            line_sells = [idx for idx in tx_indices if isinstance(
+                matching_transactions[idx], tr.Sell)]
+
+            if len(line_buys) != 1 or len(line_sells) != 1:
+                # Keep fallback strict: only assign fees for clear buy/sell pairs.
+                continue
+
+            line_fees = line_to_fees.get(line)
+            if not line_fees:
+                # No fee for this source line.
+                continue
+
+            assigned_line_count += 1
+            (buy_idx,) = line_buys
+            (sell_idx,) = line_sells
+            assigned_fees[buy_idx].extend(line_fees)
+            assigned_fees[sell_idx].extend(line_fees)
+
+        if assigned_line_count == 0:
+            return False
+
+        for idx, fee_list in assigned_fees.items():
+            op = self.operations[idx]
+            assert isinstance(op, tr.Transaction)
+            assert op.fees is None
+            op.fees = fee_list
+
+        return True
+
+    def _match_single_transaction_fees(
+        self,
+        matching_transactions: dict[int, tr.Transaction],
+        fees: list[tr.Fee],
+    ) -> bool:
+        if len(matching_transactions) != 1:
+            return False
+
+        ((tx_idx, tx_op),) = matching_transactions.items()
+        tx_lines = set(tx_op.line)
+        has_line_overlap = any(tx_lines.intersection(fee.line) for fee in fees)
+        if not has_line_overlap:
+            return False
+
+        if isinstance(tx_op, (tr.Buy, tr.Sell)):
+            assert self.operations[tx_idx].fees is None
+            self.operations[tx_idx].fees = fees
+            return True
+
+        # Keep fee effects in evaluation for non-buy/sell transactions.
+        self._convert_fees_to_sell_operations(fees)
+        return True
+
+    def _convert_fees_to_sell_operations(self, fees: list[tr.Fee]) -> None:
+        for fee in fees:
+            self.operations.append(
+                tr.Sell(
+                    utc_time=fee.utc_time,
+                    platform=fee.platform,
+                    change=fee.change,
+                    coin=fee.coin,
+                    line=list(fee.line),
+                    file_path=fee.file_path,
+                    remarks=[
+                        *fee.remarks,
+                        "Unmatched standalone fee treated as sell",
+                    ],
+                )
+            )
+
     def match_fees(self) -> None:
         # Split operations in fees and other operations.
         operations = []
@@ -397,6 +515,18 @@ class Book:
                     self.operations[sell_idx].fees = fees
                     self.operations[buy_idx].fees = fees
                 else:
+                    if len(matching_transactions) == 0:
+                        self._convert_fees_to_sell_operations(fees)
+                        continue
+
+                    if self._match_single_transaction_fees(
+                        matching_transactions, fees
+                    ):
+                        continue
+
+                    if self._match_fees_by_line(matching_transactions, fees):
+                        continue
+
                     log.debug(
                         "Unsupported fee matching group for platform=%s utc_time=%s: "
                         "%s fees, %s transactions",

@@ -13,6 +13,7 @@ from .pionex import PionexPriceProvider
 def create_price_provider(
     platform: str,
     get_price_func: Callable,
+    missing_symbols: Optional[set[str]] = None,
 ) -> Optional[PriceProvider]:
     provider_map = {
         "binance": BinancePriceProvider,
@@ -29,4 +30,4 @@ def create_price_provider(
     provider_class = provider_map.get(platform)
     if provider_class is None:
         return None
-    return provider_class(get_price_func)
+    return provider_class(get_price_func, missing_symbols=missing_symbols)

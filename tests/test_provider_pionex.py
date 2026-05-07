@@ -46,6 +46,22 @@ class PionexProviderTests(unittest.TestCase):
 
         self.assertEqual(price, decimal.Decimal("0.5"))
 
+    @patch("price_providers.pionex.requests.get")
+    def test_missing_symbol_is_cached(self, mock_get: Mock) -> None:
+        response = Mock()
+        response.json.return_value = {"data": {"tickers": []}}
+        response.raise_for_status.return_value = None
+        mock_get.return_value = response
+
+        provider = PionexPriceProvider(lambda *args, **kwargs: decimal.Decimal("0"))
+
+        first = provider.fetch_price("EUR", self.utc_time, "ATH")
+        second = provider.fetch_price("EUR", self.utc_time, "ATH")
+
+        self.assertEqual(first, decimal.Decimal("0"))
+        self.assertEqual(second, decimal.Decimal("0"))
+        self.assertEqual(mock_get.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
