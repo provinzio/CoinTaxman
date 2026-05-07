@@ -102,7 +102,3 @@ class PionexReaderTests(unittest.TestCase):
         self.assertEqual(book.operations[1].coin, "USDT")
         self.assertEqual(book.operations[2].type_name, "Fee")
         self.assertEqual(book.operations[2].coin, "USDT")
-
-
-if __name__ == "__main__":
-    unittest.main()
