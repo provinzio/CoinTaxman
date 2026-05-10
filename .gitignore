@@ -22,3 +22,4 @@ tmp.log
 
 .env
 *.log
+*.tmp*
