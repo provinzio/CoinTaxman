@@ -56,6 +56,7 @@ def create_exchange_reader(exchange_name: str) -> Optional[ExchangeReader]:
         "bitunix": BitunixReader,
         "pionex_deposit_withdraw": PionexReader,
         "pionex_trading": PionexReader,
+        "pionex_position_futures": PionexReader,
         "pionex_staking": PionexReader,
         "pionex_others": PionexReader,
         "custom_eur": CustomEurReader,
@@ -110,6 +111,7 @@ def detect_exchange_reader(file_path: Path) -> Optional[ExchangeReader]:
         "bitget_futures_position_history": 1,
         "pionex_deposit_withdraw": 1,
         "pionex_trading": 1,
+        "pionex_position_futures": 1,
         "pionex_staking": 1,
         "pionex_others": 1,
         "custom_eur": 1,
@@ -537,6 +539,16 @@ def detect_exchange_reader(file_path: Path) -> Optional[ExchangeReader]:
             "market_type",
             "tax_id",
         ],
+        "pionex_position_futures": [
+            "position_id",
+            "symbol",
+            "position_side",
+            "open_time",
+            "close_time",
+            "pnl",
+            "fee",
+            "funding_fee",
+        ],
         "pionex_staking": [
             "date(UTC+0)",
             "Received Quantity",
@@ -574,6 +586,7 @@ def detect_exchange_reader(file_path: Path) -> Optional[ExchangeReader]:
     pionex_files = {
         "deposit-withdraw.csv": "pionex_deposit_withdraw",
         "trading.csv": "pionex_trading",
+        "position_futures.csv": "pionex_position_futures",
         "staking.csv": "pionex_staking",
         "others.csv": "pionex_others",
     }

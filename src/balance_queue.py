@@ -125,6 +125,7 @@ class BalanceQueue(abc.ABC):
             op (tr.Operation)
         """
         assert not isinstance(op, tr.Fee)
+        assert not isinstance(op, (tr.FuturesProfit, tr.FuturesLoss))
         assert op.coin == self.coin
         self._put(op)
 
@@ -196,6 +197,17 @@ class BalanceQueue(abc.ABC):
         assert op.coin == self.coin
         sold_coins, unsold_change = self._remove(op.change)
 
+        if 0 < unsold_change <= config.BALANCE_DUST_TOLERANCE:
+            log.warning(
+                "Ignoring tiny rounding residue while removing %s: "
+                "missing %s %s (tolerance %s)",
+                op.coin,
+                unsold_change,
+                op.coin,
+                config.BALANCE_DUST_TOLERANCE,
+            )
+            unsold_change = decimal.Decimal()
+
         if unsold_change:
             # Queue ran out of items to sell and not all coins could be sold.
             msg = (
@@ -234,6 +246,15 @@ class BalanceQueue(abc.ABC):
             fee: decimal.Decimal
         """
         _, left_over_fee = self._remove(fee)
+        if 0 < left_over_fee <= config.BALANCE_DUST_TOLERANCE:
+            log.warning(
+                "Ignoring tiny rounding residue while removing fee in %s: "
+                "left over %s (tolerance %s)",
+                self.coin,
+                left_over_fee,
+                config.BALANCE_DUST_TOLERANCE,
+            )
+            left_over_fee = decimal.Decimal()
         if left_over_fee and self.coin != config.FIAT:
             log.warning(
                 "Not enough coins in queue to remove fee. Buffer the fee for "

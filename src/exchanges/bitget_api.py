@@ -243,23 +243,23 @@ class BitgetApiReader(ExchangeReader):
         mapping = {
             "TRANSFER_IN": "Deposit",
             "TRANSFER_OUT": "Withdrawal",
-            "ORDER_DEALT_IN": "Deposit",
+            "ORDER_DEALT_IN": "FuturesPnlSigned",
             "ORDER_DEALT_FROZEN_OUT": "Fee",
             "ORDER_PLF_FEE_OUT": "Fee",
-            "EXCHANGE_SOURCE_TOKEN_USER_OUT": "Sell",
-            "EXCHANGE_TARGET_TOKEN_USER_IN": "Buy",
-            "OPEN_LONG": "Buy",
-            "OPEN_SHORT": "Buy",
-            "CLOSE_LONG": "Sell",
-            "CLOSE_SHORT": "Sell",
-            "BUY_DEAL": "Buy",
-            "SELL_DEAL": "Sell",
-            "FORCE_CLOSE_LONG": "Sell",
-            "FORCE_CLOSE_SHORT": "Sell",
-            "BURST_CLOSE_LONG": "Sell",
-            "BURST_CLOSE_SHORT": "Sell",
+            "EXCHANGE_SOURCE_TOKEN_USER_OUT": "FuturesPnlSigned",
+            "EXCHANGE_TARGET_TOKEN_USER_IN": "FuturesPnlSigned",
+            "OPEN_LONG": "FuturesPnlSigned",
+            "OPEN_SHORT": "FuturesPnlSigned",
+            "CLOSE_LONG": "FuturesPnlSigned",
+            "CLOSE_SHORT": "FuturesPnlSigned",
+            "BUY_DEAL": "FuturesPnlSigned",
+            "SELL_DEAL": "FuturesPnlSigned",
+            "FORCE_CLOSE_LONG": "FuturesPnlSigned",
+            "FORCE_CLOSE_SHORT": "FuturesPnlSigned",
+            "BURST_CLOSE_LONG": "FuturesPnlSigned",
+            "BURST_CLOSE_SHORT": "FuturesPnlSigned",
             "INTEREST_SETTLEMENT_OUT": "Fee",
-            "CONTRACT_MAIN_SETTLE_FEE_USER_IN": "Commission",
+            "CONTRACT_MAIN_SETTLE_FEE_USER_IN": "FuturesPnlSigned",
             "CONTRACT_MAIN_SETTLE_FEE_USER_OUT": "Fee",
             "BONUS_ISSUE": "Airdrop",
             "RISK_CAPTITAL_USER_TRANSFER": "Deposit",
@@ -279,9 +279,9 @@ class BitgetApiReader(ExchangeReader):
         if future_tax_type.endswith("_FEE") or "SETTLE_FEE" in future_tax_type:
             return "Fee"
         if future_tax_type.endswith("_LONG"):
-            return "Buy" if "OPEN" in future_tax_type else "Sell"
+            return "FuturesPnlSigned"
         if future_tax_type.endswith("_SHORT"):
-            return "Buy" if "OPEN" in future_tax_type else "Sell"
+            return "FuturesPnlSigned"
         return None
 
     def _map_margin_tax_type(self, margin_tax_type: str) -> Optional[str]:
@@ -456,7 +456,15 @@ class BitgetApiReader(ExchangeReader):
                     continue
 
                 coin = row.get("coin", "UNKNOWN")
-                change = abs(force_decimal(row.get("amount", "0")))
+                signed_change = force_decimal(row.get("amount", "0"))
+                if operation == "FuturesPnlSigned":
+                    if signed_change > 0:
+                        operation = "FuturesProfit"
+                    elif signed_change < 0:
+                        operation = "FuturesLoss"
+                    else:
+                        continue
+                change = abs(signed_change)
                 fee = abs(force_decimal(row.get("fee", "0")))
                 utc_time = datetime.datetime.fromtimestamp(
                     int(row.get("ts", 0)) / 1000.0, datetime.timezone.utc

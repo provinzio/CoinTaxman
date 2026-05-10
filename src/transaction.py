@@ -219,6 +219,14 @@ class Commission(Transaction):
     pass
 
 
+class FuturesProfit(Transaction):
+    pass
+
+
+class FuturesLoss(Transaction):
+    pass
+
+
 class Deposit(Transaction):
     link: Optional[Withdrawal] = None
 
@@ -243,9 +251,18 @@ class Withdrawal(Transaction):
                 SoldCoin(self.withdrawn_coins[-1].op, remaining_total)
             )
 
-        assert target_total == misc.dsum(
-            (wsc.sold for wsc in withdrawn_coins)
-        ), "Withdrawn coins total must be equal to the sum if the single coins."
+        actual_total = misc.dsum(wsc.sold for wsc in withdrawn_coins)
+        rounding_residue = target_total - actual_total
+        if rounding_residue:
+            if abs(rounding_residue) <= config.BALANCE_DUST_TOLERANCE:
+                # Keep partial withdrawals stable even with tiny Decimal
+                # rounding drift from chained multiplications.
+                withdrawn_coins[-1].sold += rounding_residue
+            else:
+                raise AssertionError(
+                    "Withdrawn coins total must be equal to the sum if the single "
+                    "coins."
+                )
         return withdrawn_coins
 
 
@@ -859,6 +876,138 @@ class CommissionReportEntry(AirdropReportEntry):
     event_type = "Belohnungen-Bonus"
 
 
+class FuturesProfitReportEntry(TaxReportEntry):
+    event_type = "Termingeschaeft Gewinn"
+
+    def __init__(
+        self,
+        platform: str,
+        amount: decimal.Decimal,
+        coin: str,
+        utc_time: datetime.datetime,
+        realized_pnl_in_fiat: decimal.Decimal,
+        taxation_type: str,
+        remark: str,
+        first_fee_amount: decimal.Decimal = decimal.Decimal(0),
+        first_fee_coin: str = "",
+        first_fee_in_fiat: decimal.Decimal = decimal.Decimal(0),
+        second_fee_amount: decimal.Decimal = decimal.Decimal(0),
+        second_fee_coin: str = "",
+        second_fee_in_fiat: decimal.Decimal = decimal.Decimal(0),
+    ) -> None:
+        super().__init__(
+            first_platform=platform,
+            amount=amount,
+            coin=coin,
+            first_utc_time=utc_time,
+            first_fee_amount=first_fee_amount,
+            first_fee_coin=first_fee_coin,
+            first_fee_in_fiat=first_fee_in_fiat,
+            second_fee_amount=second_fee_amount,
+            second_fee_coin=second_fee_coin,
+            second_fee_in_fiat=second_fee_in_fiat,
+            first_value_in_fiat=realized_pnl_in_fiat,
+            is_taxable=True,
+            taxation_type=taxation_type,
+            remark=remark,
+        )
+
+    @classmethod
+    def _labels(cls) -> list[str]:
+        return [
+            "Börse",
+            "-",
+            #
+            "Anzahl",
+            "Währung",
+            #
+            "Realisierung am",
+            "-",
+            #
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
+            #
+            "Realisierter Gewinn in EUR",
+            "-",
+            "-",
+            #
+            "Gewinn/Verlust in EUR",
+            "davon steuerbar in EUR",
+            "Einkunftsart",
+            "Bemerkung",
+        ]
+
+
+class FuturesLossReportEntry(TaxReportEntry):
+    event_type = "Termingeschaeft Verlust"
+
+    def __init__(
+        self,
+        platform: str,
+        amount: decimal.Decimal,
+        coin: str,
+        utc_time: datetime.datetime,
+        realized_loss_in_fiat: decimal.Decimal,
+        taxation_type: str,
+        remark: str,
+        first_fee_amount: decimal.Decimal = decimal.Decimal(0),
+        first_fee_coin: str = "",
+        first_fee_in_fiat: decimal.Decimal = decimal.Decimal(0),
+        second_fee_amount: decimal.Decimal = decimal.Decimal(0),
+        second_fee_coin: str = "",
+        second_fee_in_fiat: decimal.Decimal = decimal.Decimal(0),
+    ) -> None:
+        super().__init__(
+            first_platform=platform,
+            amount=amount,
+            coin=coin,
+            first_utc_time=utc_time,
+            first_fee_amount=first_fee_amount,
+            first_fee_coin=first_fee_coin,
+            first_fee_in_fiat=first_fee_in_fiat,
+            second_fee_amount=second_fee_amount,
+            second_fee_coin=second_fee_coin,
+            second_fee_in_fiat=second_fee_in_fiat,
+            second_value_in_fiat=realized_loss_in_fiat,
+            is_taxable=True,
+            taxation_type=taxation_type,
+            remark=remark,
+        )
+
+    @classmethod
+    def _labels(cls) -> list[str]:
+        return [
+            "Börse",
+            "-",
+            #
+            "Anzahl",
+            "Währung",
+            #
+            "Realisierung am",
+            "-",
+            #
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
+            #
+            "-",
+            "Realisierter Verlust in EUR",
+            "-",
+            #
+            "Gewinn/Verlust in EUR",
+            "davon steuerbar in EUR",
+            "Einkunftsart",
+            "Bemerkung",
+        ]
+
+
 class TransferReportEntry(TaxReportEntry):
     event_type = "Ein-&Auszahlungen"
     abs_gain_loss = True
@@ -981,6 +1130,7 @@ gain_operations = [
     StakingInterest,
     Airdrop,
     Commission,
+    FuturesProfit,
     Deposit,
 ]
 loss_operations = [
@@ -988,6 +1138,7 @@ loss_operations = [
     CoinLend,
     Staking,
     Sell,
+    FuturesLoss,
     Withdrawal,
 ]
 operations_order = gain_operations + loss_operations
@@ -995,6 +1146,8 @@ operations_order = gain_operations + loss_operations
 tax_report_entry_order = [
     BuyReportEntry,
     SellReportEntry,
+    FuturesProfitReportEntry,
+    FuturesLossReportEntry,
     LendingInterestReportEntry,
     StakingInterestReportEntry,
     InterestReportEntry,

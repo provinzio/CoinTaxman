@@ -438,6 +438,11 @@ class Book:
             self.operations[tx_idx].fees = fees
             return True
 
+        if isinstance(tx_op, (tr.FuturesProfit, tr.FuturesLoss)):
+            assert self.operations[tx_idx].fees is None
+            self.operations[tx_idx].fees = fees
+            return True
+
         # Keep fee effects in evaluation for non-buy/sell transactions.
         self._convert_fees_to_sell_operations(fees)
         return True

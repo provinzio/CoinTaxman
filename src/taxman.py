@@ -50,6 +50,8 @@ def in_tax_year(op: tr.Operation) -> bool:
 
 
 class Taxman:
+    TERMINGESCHAEFTE_TAXATION_TYPE = "Einkünfte aus Termingeschäften"
+
     def __init__(self, book: Book, price_data: PriceData) -> None:
         self.book = book
         self.price_data = price_data
@@ -221,11 +223,14 @@ class Taxman:
         second_fee_in_fiat = decimal.Decimal(0)
         if op.fees is None or len(op.fees) == 0:
             pass
-        elif len(op.fees) >= 1:
+        elif len(op.fees) == 1:
             first_fee_amount, first_fee_coin, first_fee_in_fiat = self._evaluate_fee(
                 op.fees[0], percent
             )
-        elif len(op.fees) >= 2:
+        elif len(op.fees) == 2:
+            first_fee_amount, first_fee_coin, first_fee_in_fiat = self._evaluate_fee(
+                op.fees[0], percent
+            )
             second_fee_amount, second_fee_coin, second_fee_in_fiat = self._evaluate_fee(
                 op.fees[1], percent
             )
@@ -334,6 +339,18 @@ class Taxman:
                 assert (
                     sc.op.link.change >= sc.op.change
                 ), "Withdrawal must be equal or greater than the deposited amount."
+
+                if not sc.op.link.withdrawn_coins:
+                    log.warning(
+                        "Linked withdrawal coins are missing for deposited coins. "
+                        "Falling back to direct sell evaluation for %s %s on %s.",
+                        sc.sold,
+                        sc.op.coin,
+                        sc.op.platform,
+                    )
+                    self._evaluate_sell(op, sc)
+                    continue
+
                 deposit_fee = sc.op.link.change - sc.op.change
                 sold_percent = sc.sold / sc.op.change
                 sold_deposit_fee = deposit_fee * sold_percent
@@ -516,6 +533,40 @@ class Taxman:
                 )
                 self.tax_report_entries.append(report_entry)
 
+        elif isinstance(op, tr.FuturesProfit):
+            # Futures PnL is tax relevant but must not flow through the
+            # spot inventory queue.
+            if in_tax_year(op):
+                fee_params = self._get_fee_param_dict(op, decimal.Decimal(1))
+                report_entry = tr.FuturesProfitReportEntry(
+                    platform=op.platform,
+                    amount=op.change,
+                    coin=op.coin,
+                    utc_time=op.utc_time,
+                    **fee_params,
+                    realized_pnl_in_fiat=self.price_data.get_cost(op),
+                    taxation_type="Einkünfte aus Termingeschäften",
+                    remark=op.remark,
+                )
+                self.tax_report_entries.append(report_entry)
+
+        elif isinstance(op, tr.FuturesLoss):
+            # Keep futures losses separate from spot sells to avoid inventory
+            # side effects.
+            if in_tax_year(op):
+                fee_params = self._get_fee_param_dict(op, decimal.Decimal(1))
+                report_entry = tr.FuturesLossReportEntry(
+                    platform=op.platform,
+                    amount=op.change,
+                    coin=op.coin,
+                    utc_time=op.utc_time,
+                    **fee_params,
+                    realized_loss_in_fiat=self.price_data.get_cost(op),
+                    taxation_type="Einkünfte aus Termingeschäften",
+                    remark=op.remark,
+                )
+                self.tax_report_entries.append(report_entry)
+
         elif isinstance(op, tr.Deposit):
             # Coins get deposited onto this platform/balance.
             self.add_to_balance(op)
@@ -640,6 +691,22 @@ class Taxman:
         if config.CALCULATE_UNREALIZED_GAINS:
             self._evaluate_unrealized_sells()
 
+    def _apply_taxable_gain_adjustments(
+        self,
+        taxation_type: str,
+        taxable_gain: decimal.Decimal,
+    ) -> decimal.Decimal:
+        if taxation_type != self.TERMINGESCHAEFTE_TAXATION_TYPE:
+            return taxable_gain
+
+        loss_limit = config.TERMINGESCHAEFTE_VERLUSTVERRECHNUNG_LIMIT_EUR
+        if loss_limit is None:
+            return taxable_gain
+
+        if taxable_gain < -loss_limit:
+            return -loss_limit
+        return taxable_gain
+
     ###########################################################################
     # Export / Summary
     ###########################################################################
@@ -660,7 +727,18 @@ class Taxman:
                 for tre in tax_report_entries
                 if not isinstance(tre, tr.UnrealizedSellReportEntry)
             )
+            taxable_gain = self._apply_taxable_gain_adjustments(
+                taxation_type, taxable_gain
+            )
             eval_str += f"{taxation_type}: {taxable_gain:.2f} {config.FIAT}\n"
+
+        loss_limit = config.TERMINGESCHAEFTE_VERLUSTVERRECHNUNG_LIMIT_EUR
+        if loss_limit is not None:
+            eval_str += (
+                "Hinweis Termingeschäfte: "
+                "angewendete Verlustverrechnungsgrenze "
+                f"{loss_limit:.2f} {config.FIAT}\n"
+            )
 
         unrealized_report_entries = [
             tre
@@ -774,6 +852,20 @@ class Taxman:
             row, 0, ["Alle Zeiten in Zeitzone", config.LOCAL_TIMEZONE_KEY]
         )
         row += 1
+        ws_general.write_row(
+            row,
+            0,
+            [
+                "Verlustverrechnungsgrenze Termingeschäfte",
+                (
+                    f"{config.TERMINGESCHAEFTE_VERLUSTVERRECHNUNG_LIMIT_EUR:.2f} {config.FIAT}"
+                    if config.TERMINGESCHAEFTE_VERLUSTVERRECHNUNG_LIMIT_EUR
+                    is not None
+                    else "Keine"
+                ),
+            ],
+        )
+        row += 1
         row += 1
         ws_general.write_row(
             row,
@@ -806,7 +898,8 @@ class Taxman:
                 "steuerbarer Veräußerungserlös in EUR",
                 "steuerbare Anschaffungskosten in EUR",
                 "steuerbare Werbungskosten in EUR",
-                "steuerbarer Gewinn/Verlust in EUR",
+                "steuerbarer Gewinn/Verlust in EUR (roh)",
+                "steuerbarer Gewinn/Verlust in EUR (nach Grenzen)",
             ],
             header_format,
         )
@@ -842,10 +935,13 @@ class Taxman:
                         and tre.taxable_gain_in_fiat
                     )
                 )
-            taxable_gain = misc.dsum(
+            taxable_gain_raw = misc.dsum(
                 tre.taxable_gain_in_fiat
                 for tre in tax_report_entries
                 if not isinstance(tre, tr.UnrealizedSellReportEntry)
+            )
+            taxable_gain_adjusted = self._apply_taxable_gain_adjustments(
+                taxation_type, taxable_gain_raw
             )
             ws_summary.write_row(
                 row,
@@ -855,7 +951,8 @@ class Taxman:
                     first_value_in_fiat,
                     second_value_in_fiat,
                     total_fee_in_fiat,
-                    taxable_gain,
+                    taxable_gain_raw,
+                    taxable_gain_adjusted,
                 ],
             )
             row += 1
@@ -921,7 +1018,7 @@ class Taxman:
         # Set column format and freeze first row.
         ws_summary.set_column(0, 0, 43)
         ws_summary.set_column(1, 2, 18.29, fiat_format)
-        ws_summary.set_column(3, 4, 15.57, fiat_format)
+        ws_summary.set_column(3, 5, 20.0, fiat_format)
         ws_summary.freeze_panes(1, 0)
 
         #

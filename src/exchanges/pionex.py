@@ -28,6 +28,8 @@ class PionexReader(ExchangeReader):
             self._read_deposit_withdraw(file_path, book)
         elif filename == "trading.csv":
             self._read_trading(file_path, book)
+        elif filename == "position_futures.csv":
+            self._read_position_futures(file_path, book)
         elif filename == "staking.csv":
             self._read_staking(file_path, book)
         elif filename == "others.csv":
@@ -113,7 +115,9 @@ class PionexReader(ExchangeReader):
         """Reads trading records from Pionex (spot and futures)."""
         with open(file_path, encoding="utf8") as f:
             reader = csv.reader(f)
-            skipped_derivative_rows: list[int] = []
+            heuristic_futures_rows: list[int] = []
+            skipped_futures_rows: list[int] = []
+            has_position_futures = (file_path.parent / "position_futures.csv").exists()
 
             # Skip header.
             next(reader)
@@ -149,7 +153,69 @@ class PionexReader(ExchangeReader):
                 market_type = _market_type.strip().lower()
 
                 if "future" in market_type or symbol.endswith("_PERP"):
-                    skipped_derivative_rows.append(row)
+                    if has_position_futures:
+                        skipped_futures_rows.append(row)
+                        continue
+
+                    # Pionex trading exports do not expose a dedicated realized
+                    # PnL column in this format. We map futures cashflow
+                    # heuristically into profit/loss without touching inventory.
+                    if side == "BUY":
+                        op_type = "FuturesLoss"
+                        heuristic_futures_rows.append(row)
+                    elif side == "SELL":
+                        op_type = "FuturesProfit"
+                        heuristic_futures_rows.append(row)
+                    elif amount < 0:
+                        op_type = "FuturesLoss"
+                    elif amount > 0:
+                        op_type = "FuturesProfit"
+                    else:
+                        log.warning(
+                            f"{file_path} row {row}: Unknown futures side '{side}'. "
+                            "Skipping row."
+                        )
+                        continue
+
+                    cashflow = abs(amount)
+                    if cashflow == 0:
+                        log.warning(
+                            f"{file_path} row {row}: Futures cashflow is zero. "
+                            "Skipping row."
+                        )
+                        continue
+
+                    # Use quote coin from symbol as settlement coin.
+                    symbol_parts = symbol.split("_")
+                    if len(symbol_parts) < 2:
+                        log.warning(
+                            f"{file_path} row {row}: Could not parse symbol '{symbol}'. "
+                            "Skipping row."
+                        )
+                        continue
+                    quote_coin = symbol_parts[1]
+
+                    self.append_operation(
+                        book,
+                        op_type,
+                        utc_time,
+                        cashflow,
+                        quote_coin,
+                        row,
+                        file_path,
+                        remark=f"Pionex futures {side} {symbol}",
+                    )
+
+                    if fee > 0:
+                        self.append_operation(
+                            book,
+                            "Fee",
+                            utc_time,
+                            fee,
+                            fee_coin,
+                            row,
+                            file_path,
+                        )
                     continue
 
                 # Extract base and quote coin from symbol (e.g. DOT_USDT_PERP -> DOT, USDT)
@@ -225,13 +291,113 @@ class PionexReader(ExchangeReader):
                         file_path,
                     )
 
-            if skipped_derivative_rows:
+            if heuristic_futures_rows:
                 log.warning(
-                    "%s: Skipping %s unsupported Pionex derivative trading rows: %s",
+                    "%s: Used side-based heuristic for %s Pionex futures rows: %s",
                     file_path,
-                    len(skipped_derivative_rows),
-                    skipped_derivative_rows[:10],
+                    len(heuristic_futures_rows),
+                    heuristic_futures_rows[:10],
                 )
+
+            if skipped_futures_rows:
+                log.info(
+                    "%s: Skipped %s futures rows in trading.csv because "
+                    "position_futures.csv is available: %s",
+                    file_path,
+                    len(skipped_futures_rows),
+                    skipped_futures_rows[:10],
+                )
+
+    def _read_position_futures(self, file_path: Path, book) -> None:
+        """Reads realized futures positions from Pionex."""
+        with open(file_path, encoding="utf8") as f:
+            reader = csv.reader(f)
+
+            # Skip header.
+            next(reader)
+
+            for columns in reader:
+                if len(columns) != 8:
+                    log.warning(
+                        f"{file_path}: Expected 8 columns, got {len(columns)}. "
+                        "Skipping row."
+                    )
+                    continue
+
+                (
+                    _position_id,
+                    symbol,
+                    _position_side,
+                    _open_time,
+                    _close_time,
+                    _pnl,
+                    _fee,
+                    _funding_fee,
+                ) = columns
+
+                row = reader.line_num
+                close_time = parse_utc_time(_close_time, "%Y-%m-%d %H:%M:%S")
+
+                symbol_parts = symbol.split("_")
+                if len(symbol_parts) < 2:
+                    log.warning(
+                        f"{file_path} row {row}: Could not parse symbol '{symbol}'. "
+                        "Skipping row."
+                    )
+                    continue
+                settlement_coin = symbol_parts[1]
+
+                pnl = force_decimal(_pnl)
+                fee = force_decimal(_fee)
+                funding_fee = force_decimal(_funding_fee)
+
+                if pnl > 0:
+                    self.append_operation(
+                        book,
+                        "FuturesProfit",
+                        close_time,
+                        pnl,
+                        settlement_coin,
+                        row,
+                        file_path,
+                        remark=f"Pionex futures position {symbol}",
+                    )
+                elif pnl < 0:
+                    self.append_operation(
+                        book,
+                        "FuturesLoss",
+                        close_time,
+                        abs(pnl),
+                        settlement_coin,
+                        row,
+                        file_path,
+                        remark=f"Pionex futures position {symbol}",
+                    )
+
+                # A negative value is a paid fee, positive values are rebates.
+                for amount, source in ((fee, "trading fee"), (funding_fee, "funding")):
+                    if amount < 0:
+                        self.append_operation(
+                            book,
+                            "Fee",
+                            close_time,
+                            abs(amount),
+                            settlement_coin,
+                            row,
+                            file_path,
+                            remark=f"Pionex futures {source} {symbol}",
+                        )
+                    elif amount > 0:
+                        self.append_operation(
+                            book,
+                            "FuturesProfit",
+                            close_time,
+                            amount,
+                            settlement_coin,
+                            row,
+                            file_path,
+                            remark=f"Pionex futures {source} rebate {symbol}",
+                        )
 
     def _read_staking(self, file_path: Path, book) -> None:
         """Reads staking records from Pionex."""

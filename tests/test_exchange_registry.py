@@ -67,6 +67,24 @@ class ExchangeRegistryTests(unittest.TestCase):
 
         self.assertIsInstance(reader, PionexReader)
 
+    def test_detect_exchange_reader_detects_pionex_position_futures(self) -> None:
+        header = [
+            "position_id",
+            "symbol",
+            "position_side",
+            "open_time",
+            "close_time",
+            "pnl",
+            "fee",
+            "funding_fee",
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "position_futures.csv"
+            self._write_csv(csv_path, [header])
+            reader = detect_exchange_reader(csv_path)
+
+        self.assertIsInstance(reader, PionexReader)
+
     def test_detect_exchange_reader_detects_bitget_deposit_withdraw(self) -> None:
         header = [
             "Date",

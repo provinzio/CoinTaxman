@@ -382,6 +382,14 @@ class BitgetCsvReader(ExchangeReader):
                     )
                     continue
 
+                if operation == "FuturesPnlSigned":
+                    if amount_raw > 0:
+                        operation = "FuturesProfit"
+                    elif amount_raw < 0:
+                        operation = "FuturesLoss"
+                    else:
+                        continue
+
                 coin = (row.get("Coin") or "").strip() or "UNKNOWN"
                 order_id = (row.get("Order") or "").strip()
                 futures_symbol = (row.get("Futures") or "").strip()

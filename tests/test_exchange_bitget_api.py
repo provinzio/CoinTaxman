@@ -1,5 +1,6 @@
 from exchanges.bitget_api import BitgetApiReader
 import datetime
+import decimal
 import os
 import sys
 import unittest
@@ -77,6 +78,41 @@ class BitgetApiReaderTests(unittest.TestCase):
             book.operations[0]["utc_time"],
             datetime.datetime.fromtimestamp(1758198095, datetime.timezone.utc),
         )
+
+    def test_import_future_records_maps_signed_pnl_to_futures_operations(self) -> None:
+        reader = BitgetApiReader()
+        book = _BookStub()
+        records = [
+            {
+                "coin": "USDT",
+                "taxType": "CLOSE_LONG",
+                "amount": "120.5",
+                "fee": "0",
+                "ts": "1758198095000",
+                "bizOrderId": "future-1",
+            },
+            {
+                "coin": "USDT",
+                "taxType": "OPEN_LONG",
+                "amount": "-42.25",
+                "fee": "0",
+                "ts": "1758199095000",
+                "bizOrderId": "future-2",
+            },
+        ]
+
+        with patch.object(
+            reader,
+            "_fetch_all_range",
+            return_value=[(0, 0, records, {}, {})],
+        ):
+            reader.import_future_records(book, 0, 0)
+
+        self.assertEqual(len(book.operations), 2)
+        self.assertEqual(book.operations[0]["operation"], "FuturesProfit")
+        self.assertEqual(book.operations[0]["change"], decimal.Decimal("120.5"))
+        self.assertEqual(book.operations[1]["operation"], "FuturesLoss")
+        self.assertEqual(book.operations[1]["change"], decimal.Decimal("42.25"))
 
 
 if __name__ == "__main__":

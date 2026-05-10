@@ -23,7 +23,7 @@ class BitunixReaderTests(unittest.TestCase):
             encoding="utf8",
         )
 
-    def test_read_file_skips_futures_pnl_rows(self) -> None:
+    def test_read_file_parses_futures_pnl_rows(self) -> None:
         reader = BitunixReader()
         book = Book(DummyPriceData())
         rows = [
@@ -70,7 +70,15 @@ class BitunixReaderTests(unittest.TestCase):
             self._write_csv(csv_path, rows)
             reader.read_file(csv_path, book)
 
-        self.assertEqual(book.operations, [])
+        self.assertEqual(len(book.operations), 4)
+        self.assertEqual(book.operations[0].type_name, "FuturesLoss")
+        self.assertEqual(book.operations[0].coin, "USDT")
+        self.assertEqual(book.operations[1].type_name, "Fee")
+        self.assertEqual(book.operations[1].coin, "USDT")
+        self.assertEqual(book.operations[2].type_name, "FuturesProfit")
+        self.assertEqual(book.operations[2].coin, "USDT")
+        self.assertEqual(book.operations[3].type_name, "Fee")
+        self.assertEqual(book.operations[3].coin, "USDT")
 
     def test_read_file_keeps_spot_trade_rows(self) -> None:
         reader = BitunixReader()
