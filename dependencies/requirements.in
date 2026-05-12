@@ -1,4 +1,4 @@
 python-dateutil==2.9.0.post0
-requests==2.32.5
+requests==2.33.0
 tzdata==2025.2
 xlsxwriter==3.2.9
