@@ -114,6 +114,43 @@ class BitgetApiReaderTests(unittest.TestCase):
         self.assertEqual(book.operations[1]["operation"], "FuturesLoss")
         self.assertEqual(book.operations[1]["change"], decimal.Decimal("42.25"))
 
+    def test_import_spot_records_maps_consumption_and_gains(self) -> None:
+        reader = BitgetApiReader()
+        book = _BookStub()
+        records = [
+            {
+                "coin": "USDT",
+                "spotTaxType": "Consumption",
+                "amount": "-3876.8169",
+                "fee": "0",
+                "ts": "1748242582267",
+                "bizOrderId": "order-3",
+            },
+            {
+                "coin": "NEAR",
+                "spotTaxType": "Gains",
+                "amount": "1359.32",
+                "fee": "0",
+                "ts": "1748242582250",
+                "bizOrderId": "order-3",
+            },
+        ]
+
+        with patch.object(
+            reader,
+            "_fetch_all_range",
+            return_value=[(0, 0, records, {}, {})],
+        ):
+            reader.import_spot_records(book, 0, 0)
+
+        self.assertEqual(len(book.operations), 2)
+        self.assertEqual(book.operations[0]["operation"], "Sell")
+        self.assertEqual(book.operations[0]["coin"], "USDT")
+        self.assertEqual(book.operations[0]["change"], decimal.Decimal("3876.8169"))
+        self.assertEqual(book.operations[1]["operation"], "Buy")
+        self.assertEqual(book.operations[1]["coin"], "NEAR")
+        self.assertEqual(book.operations[1]["change"], decimal.Decimal("1359.32"))
+
     def test_import_spot_copy_trade_records_maps_buy_sell_and_fees(self) -> None:
         reader = BitgetApiReader()
         book = _BookStub()

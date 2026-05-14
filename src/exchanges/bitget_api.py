@@ -498,6 +498,8 @@ class BitgetApiReader(ExchangeReader):
             "Withdrawal": "Withdrawal",
             "Buy": "Buy",
             "Sell": "Sell",
+            "Gains": "Buy",
+            "Consumption": "Sell",
             "Buy Crypto": "Buy",
             "Sell Crypto": "Sell",
             "Crypto Voucher Distribution": "Airdrop",

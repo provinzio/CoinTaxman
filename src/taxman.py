@@ -107,8 +107,52 @@ class Taxman:
     def add_to_balance(self, op: tr.Operation) -> None:
         self.balance_op(op).add(op)
 
+    def _available_balance(self, balance: balance_queue.BalanceQueue) -> decimal.Decimal:
+        return misc.dsum(bop.not_sold for bop in balance.queue)
+
+    def _add_unknown_source_deposit(
+        self,
+        op: tr.Operation,
+        missing: decimal.Decimal,
+    ) -> None:
+        synthetic_deposit = tr.Deposit(
+            utc_time=op.utc_time,
+            platform=op.platform,
+            change=missing,
+            coin=op.coin,
+            line=list(op.line),
+            file_path=op.file_path,
+            remarks=[
+                "Synthetic deposit added because imported history "
+                f"is missing {missing} {op.coin} for "
+                f"{op.type_name} ({op.file_path} lines {op.line})."
+            ],
+        )
+        self.add_to_balance(synthetic_deposit)
+        log.warning(
+            "Missing %s %s before %s on %s (%s %s). "
+            "Added synthetic unknown-source deposit so taxation can continue.",
+            missing,
+            op.coin,
+            op.utc_time,
+            op.platform,
+            op.file_path,
+            op.line,
+        )
+
     def remove_from_balance(self, op: tr.Operation) -> list[tr.SoldCoin]:
-        return self.balance_op(op).remove(op)
+        balance = self.balance_op(op)
+
+        # Bitget API spot records may be incomplete (e.g. missing opening
+        # inventory for conversions). Add an unknown-source deposit so we keep
+        # a best-effort report instead of aborting.
+        if op.coin != config.FIAT and op.file_path.name == "bitget-api":
+            available = self._available_balance(balance)
+            missing = op.change - available
+            if missing > config.BALANCE_DUST_TOLERANCE:
+                self._add_unknown_source_deposit(op, missing)
+
+        return balance.remove(op)
 
     def remove_fees_from_balance(self, fees: Optional[list[tr.Fee]]) -> None:
         if fees is not None:

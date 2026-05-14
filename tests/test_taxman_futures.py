@@ -190,6 +190,26 @@ class TaxmanFuturesTests(unittest.TestCase):
         self.assertEqual(len(taxman.tax_report_entries), 1)
         self.assertIsInstance(taxman.tax_report_entries[0], tr.SellReportEntry)
 
+    def test_bitget_api_sell_adds_synthetic_deposit_on_missing_balance(self) -> None:
+        sell = tr.Sell(
+            utc_time=self._utc(5, 26),
+            platform="bitget",
+            change=decimal.Decimal("226.64500148028"),
+            coin="USDT",
+            line=[94],
+            file_path=Path("bitget-api"),
+        )
+
+        taxman = Taxman(_BookStub([sell]), _PriceDataStub())
+        taxman.evaluate_taxation()
+
+        self.assertEqual(len(taxman.tax_report_entries), 1)
+        self.assertIsInstance(taxman.tax_report_entries[0], tr.SellReportEntry)
+        self.assertEqual(
+            taxman.tax_report_entries[0].taxable_gain_in_fiat,
+            decimal.Decimal("0"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
