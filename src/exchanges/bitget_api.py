@@ -10,6 +10,7 @@ import json
 import time
 from pathlib import Path
 from typing import Any, Callable, Optional
+from urllib.parse import urlencode
 
 import config
 import log_config
@@ -23,7 +24,25 @@ log = log_config.getLogger(__name__)
 class BitgetApiReader(ExchangeReader):
     """Reader for Bitget API data."""
 
-    SUPPORTED_RECORD_TYPES = ("spot", "future", "margin", "p2p")
+    SUPPORTED_RECORD_TYPES = ("spot", "future", "margin", "p2p", "copy")
+    DEFAULT_RECORD_TYPES = ("spot", "future", "margin", "p2p")
+    KNOWN_QUOTE_COINS = (
+        "USDT",
+        "USDC",
+        "BUSD",
+        "FDUSD",
+        "EUR",
+        "USD",
+        "BTC",
+        "ETH",
+        "BNB",
+        "TRY",
+        "BRL",
+        "GBP",
+        "AUD",
+        "JPY",
+    )
+    FUTURE_COPY_PRODUCT_TYPES = ("USDT-FUTURES", "COIN-FUTURES", "USDC-FUTURES")
 
     def __init__(self):
         super().__init__("bitget")
@@ -66,11 +85,71 @@ class BitgetApiReader(ExchangeReader):
 
     def _get(self, path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         import requests
-        url = f"{config.BITGET_API_BASE_URL}{path}"
-        headers = self._headers("GET", path)
-        response = requests.get(url, headers=headers, params=params)
-        response.raise_for_status()
-        return response.json()
+        query_string = urlencode(params or {}, doseq=True)
+        signed_path = f"{path}?{query_string}" if query_string else path
+        url = f"{config.BITGET_API_BASE_URL}{signed_path}"
+        max_attempts = 6
+        backoff_seconds = 1.0
+        for attempt in range(1, max_attempts + 1):
+            headers = self._headers("GET", signed_path)
+            try:
+                response = requests.get(url, headers=headers)
+            except requests.RequestException:
+                if attempt == max_attempts:
+                    raise
+                log.warning(
+                    "Bitget API request error on attempt %s/%s for %s. Retrying in %.1fs.",
+                    attempt,
+                    max_attempts,
+                    signed_path,
+                    backoff_seconds,
+                )
+                time.sleep(backoff_seconds)
+                backoff_seconds = min(backoff_seconds * 2, 10.0)
+                continue
+
+            if response.status_code in (429, 500, 502, 503, 504):
+                if attempt == max_attempts:
+                    response.raise_for_status()
+                retry_after = response.headers.get("Retry-After")
+                sleep_for = backoff_seconds
+                if retry_after:
+                    try:
+                        sleep_for = max(float(retry_after), sleep_for)
+                    except ValueError:
+                        pass
+                payload = response.text.strip()
+                log.warning(
+                    "Bitget API temporary failure %s on %s (attempt %s/%s). "
+                    "Retrying in %.1fs. Response=%s",
+                    response.status_code,
+                    signed_path,
+                    attempt,
+                    max_attempts,
+                    sleep_for,
+                    payload,
+                )
+                time.sleep(sleep_for)
+                backoff_seconds = min(max(backoff_seconds * 2, sleep_for), 10.0)
+                continue
+
+            try:
+                response.raise_for_status()
+            except requests.HTTPError:
+                payload = response.text.strip()
+                if payload:
+                    log.error(
+                        "Bitget API request failed: %s %s params=%s status=%s response=%s",
+                        "GET",
+                        path,
+                        params,
+                        response.status_code,
+                        payload,
+                    )
+                raise
+            return response.json()
+
+        raise RuntimeError("Bitget API request retry loop exited unexpectedly")
 
     def _fetch_all(self, path: str, params: dict[str, Any]) -> list[dict[str, Any]]:
         records = []
@@ -84,6 +163,86 @@ class BitgetApiReader(ExchangeReader):
                 params["cursor"] = data["cursor"]
             else:
                 break
+        return records
+
+    def _fetch_copy_trade_history(
+        self,
+        start_time_ms: int,
+        end_time_ms: int,
+    ) -> list[dict[str, Any]]:
+        path = "/api/v2/copy/spot-follower/query-history-orders"
+        id_less_than: Optional[str] = None
+        records: list[dict[str, Any]] = []
+
+        while True:
+            params: dict[str, Any] = {
+                "startTime": start_time_ms,
+                "endTime": end_time_ms,
+                "limit": 50,
+            }
+            if id_less_than:
+                params["idLessThan"] = id_less_than
+
+            response = self._get(path, params)
+            payload = response.get("data", {})
+            if not isinstance(payload, dict):
+                break
+
+            page_records = payload.get("trackingList", [])
+            if not isinstance(page_records, list) or not page_records:
+                break
+
+            records.extend(page_records)
+            end_id = payload.get("endId")
+            if not end_id:
+                break
+
+            next_id = str(end_id)
+            if next_id == id_less_than:
+                break
+            id_less_than = next_id
+
+        return records
+
+    def _fetch_future_copy_trade_history(
+        self,
+        start_time_ms: int,
+        end_time_ms: int,
+        product_type: str,
+    ) -> list[dict[str, Any]]:
+        path = "/api/v2/copy/mix-follower/query-history-orders"
+        id_less_than: Optional[str] = None
+        records: list[dict[str, Any]] = []
+
+        while True:
+            params: dict[str, Any] = {
+                "productType": product_type,
+                "startTime": start_time_ms,
+                "endTime": end_time_ms,
+                "limit": 100,
+            }
+            if id_less_than:
+                params["idLessThan"] = id_less_than
+
+            response = self._get(path, params)
+            payload = response.get("data", {})
+            if not isinstance(payload, dict):
+                break
+
+            page_records = payload.get("trackingList", [])
+            if not isinstance(page_records, list) or not page_records:
+                break
+
+            records.extend(page_records)
+            end_id = payload.get("endId")
+            if not end_id:
+                break
+
+            next_id = str(end_id)
+            if next_id == id_less_than:
+                break
+            id_less_than = next_id
+
         return records
 
     def _get_cached_chunk(
@@ -139,7 +298,8 @@ class BitgetApiReader(ExchangeReader):
             params = {
                 "startTime": cursor_start,
                 "endTime": cursor_end,
-                "limit": 500,
+                # Bitget tax endpoints reject oversized page sizes (HTTP 400).
+                "limit": 100,
             }
             if extra_params:
                 params.update(extra_params)
@@ -185,6 +345,152 @@ class BitgetApiReader(ExchangeReader):
 
         return chunks
 
+    def _fetch_copy_trade_history_range(
+        self,
+        start_time_ms: int,
+        end_time_ms: int,
+    ) -> list[tuple[int, int, list[dict[str, Any]], dict[str, Any], dict[str, Any]]]:
+        cursor_start = start_time_ms
+        chunk_size = 10 * 24 * 60 * 60 * 1000
+        endpoint_key = "api_v2_copy_spot-follower_query-history-orders"
+
+        resume_state = self._load_resume_state()
+        if resume_state.get("tax_year") != config.TAX_YEAR:
+            resume_state = {"tax_year": config.TAX_YEAR, "endpoints": {}}
+
+        endpoints = resume_state.setdefault("endpoints", {})
+        endpoint_state = endpoints.setdefault(endpoint_key, {})
+        endpoint_state.setdefault("chunks", [])
+
+        chunks: list[tuple[int, int, list[dict[str, Any]],
+                           dict[str, Any], dict[str, Any]]] = []
+        while cursor_start <= end_time_ms:
+            cursor_end = min(cursor_start + chunk_size - 1, end_time_ms)
+
+            cached_chunk = self._get_cached_chunk(
+                endpoint_state, cursor_start, cursor_end
+            )
+            if cached_chunk is not None:
+                log.info(
+                    "Reusing cached Bitget copy-trade records %s - %s",
+                    datetime.datetime.fromtimestamp(
+                        cursor_start / 1000, tz=datetime.timezone.utc),
+                    datetime.datetime.fromtimestamp(
+                        cursor_end / 1000, tz=datetime.timezone.utc),
+                )
+                segment = cached_chunk["records"]
+            else:
+                log.info(
+                    "Fetching Bitget copy-trade records %s - %s",
+                    datetime.datetime.fromtimestamp(
+                        cursor_start / 1000, tz=datetime.timezone.utc),
+                    datetime.datetime.fromtimestamp(
+                        cursor_end / 1000, tz=datetime.timezone.utc),
+                )
+                segment = self._fetch_copy_trade_history(cursor_start, cursor_end)
+                endpoint_state["chunks"].append(
+                    {
+                        "start_ms": cursor_start,
+                        "end_ms": cursor_end,
+                        "records": segment,
+                        "processed": False,
+                    }
+                )
+                self._save_resume_state(resume_state)
+
+            chunks.append(
+                (cursor_start, cursor_end, segment, resume_state, endpoint_state)
+            )
+
+            if cursor_end == end_time_ms:
+                break
+            cursor_start = cursor_end + 1
+
+        return chunks
+
+    def _fetch_future_copy_trade_history_range(
+        self,
+        start_time_ms: int,
+        end_time_ms: int,
+        product_type: str,
+    ) -> list[tuple[int, int, list[dict[str, Any]], dict[str, Any], dict[str, Any]]]:
+        cursor_start = start_time_ms
+        chunk_size = 10 * 24 * 60 * 60 * 1000
+        endpoint_key = (
+            "api_v2_copy_mix-follower_query-history-orders_"
+            f"{product_type.lower()}"
+        )
+
+        resume_state = self._load_resume_state()
+        if resume_state.get("tax_year") != config.TAX_YEAR:
+            resume_state = {"tax_year": config.TAX_YEAR, "endpoints": {}}
+
+        endpoints = resume_state.setdefault("endpoints", {})
+        endpoint_state = endpoints.setdefault(endpoint_key, {})
+        endpoint_state.setdefault("chunks", [])
+
+        chunks: list[tuple[int, int, list[dict[str, Any]],
+                           dict[str, Any], dict[str, Any]]] = []
+        while cursor_start <= end_time_ms:
+            cursor_end = min(cursor_start + chunk_size - 1, end_time_ms)
+
+            cached_chunk = self._get_cached_chunk(
+                endpoint_state, cursor_start, cursor_end
+            )
+            if cached_chunk is not None:
+                log.info(
+                    "Reusing cached Bitget future copy-trade records %s - %s (%s)",
+                    datetime.datetime.fromtimestamp(
+                        cursor_start / 1000, tz=datetime.timezone.utc),
+                    datetime.datetime.fromtimestamp(
+                        cursor_end / 1000, tz=datetime.timezone.utc),
+                    product_type,
+                )
+                segment = cached_chunk["records"]
+            else:
+                log.info(
+                    "Fetching Bitget future copy-trade records %s - %s (%s)",
+                    datetime.datetime.fromtimestamp(
+                        cursor_start / 1000, tz=datetime.timezone.utc),
+                    datetime.datetime.fromtimestamp(
+                        cursor_end / 1000, tz=datetime.timezone.utc),
+                    product_type,
+                )
+                segment = self._fetch_future_copy_trade_history(
+                    cursor_start,
+                    cursor_end,
+                    product_type,
+                )
+                endpoint_state["chunks"].append(
+                    {
+                        "start_ms": cursor_start,
+                        "end_ms": cursor_end,
+                        "records": segment,
+                        "processed": False,
+                    }
+                )
+                self._save_resume_state(resume_state)
+
+            chunks.append(
+                (cursor_start, cursor_end, segment, resume_state, endpoint_state)
+            )
+
+            if cursor_end == end_time_ms:
+                break
+            cursor_start = cursor_end + 1
+
+        return chunks
+
+    def _split_symbol_pair(self, symbol: str) -> tuple[Optional[str], Optional[str]]:
+        normalized = symbol.strip().upper().replace("-", "").replace("_", "")
+        if not normalized:
+            return None, None
+
+        for quote in self.KNOWN_QUOTE_COINS:
+            if normalized.endswith(quote) and len(normalized) > len(quote):
+                return normalized[:-len(quote)], quote
+        return None, None
+
     def _map_spot_tax_type(self, spot_tax_type: str) -> Optional[str]:
         normalized = spot_tax_type.strip()
         mapping = {
@@ -202,7 +508,6 @@ class BitgetApiReader(ExchangeReader):
             "User fees": "Fee",
             "Transaction fee deduct": "Fee",
             "System charges fees": "Fee",
-            "financial_lock_out": "Fee",
             "Trading fee rebate": "Commission",
             "Fiat withdrawal success - Deduct": "Withdrawal",
             "Reward": "Airdrop",
@@ -213,20 +518,18 @@ class BitgetApiReader(ExchangeReader):
             "fiat_recharge_in": "Deposit",
             "fiat_balance_success_user_in": "Deposit",
             "fiat_balance_user_out": "Withdrawal",
-            "financial_rede_in": "Deposit",
-            "financial_unlock_in": "Deposit",
-            "financial_pos_out": "Withdrawal",
-            "financial_subs_out": "Withdrawal",
             "Copy Trade expense": "Fee",
             "Refund Copy Trade commission": "Commission",
-            "Consumption": "Sell",
-            "Gains": "Airdrop",
         }
 
         if normalized in mapping:
             return mapping[normalized]
 
         lower_name = normalized.lower()
+        if lower_name.startswith("financial_"):
+            # Internal earn/subscription account movements often come as
+            # paired bookkeeping entries and are not safe to map 1:1 here.
+            return None
         if lower_name.endswith("_in"):
             return "Deposit"
         if lower_name.endswith("_out"):
@@ -326,10 +629,18 @@ class BitgetApiReader(ExchangeReader):
             book: Book instance receiving parsed operations.
             tax_year: Tax year to import.
             record_types: Optional list of groups to import.
-                Supported values are: spot, future, margin, p2p.
-                If omitted, all supported groups are imported.
+                Supported values are: spot, future, margin, p2p, copy.
+                If omitted, the default groups are imported.
         """
-        year_start = datetime.datetime(tax_year, 1, 1, tzinfo=datetime.timezone.utc)
+        start_year = min(tax_year, config.BITGET_API_START_YEAR)
+        if start_year < tax_year:
+            log.info(
+                "Bitget API import includes opening inventory lookback: %s-%s.",
+                start_year,
+                tax_year,
+            )
+
+        year_start = datetime.datetime(start_year, 1, 1, tzinfo=datetime.timezone.utc)
         year_end = datetime.datetime(
             tax_year, 12, 31, 23, 59, 59, 999000, tzinfo=datetime.timezone.utc
         )
@@ -353,9 +664,10 @@ class BitgetApiReader(ExchangeReader):
             "future": self.import_future_records,
             "margin": self.import_margin_records,
             "p2p": self.import_p2p_records,
+            "copy": self.import_copy_trade_records,
         }
 
-        selected = record_types or list(self.SUPPORTED_RECORD_TYPES)
+        selected = record_types or list(self.DEFAULT_RECORD_TYPES)
         normalized = [record_type.strip().lower() for record_type in selected]
 
         unknown_types = [
@@ -375,6 +687,226 @@ class BitgetApiReader(ExchangeReader):
             if importer is None:
                 continue
             importer(book, start_time_ms, end_time_ms)
+
+    def import_copy_trade_records(
+        self, book, start_time_ms: int, end_time_ms: int
+    ) -> None:
+        self.import_spot_copy_trade_records(book, start_time_ms, end_time_ms)
+        self.import_future_copy_trade_records(book, start_time_ms, end_time_ms)
+
+    def import_spot_copy_trade_records(
+        self, book, start_time_ms: int, end_time_ms: int
+    ) -> None:
+        chunks = self._fetch_copy_trade_history_range(start_time_ms, end_time_ms)
+
+        if not chunks:
+            log.info("No Bitget spot copy-trade records were returned.")
+            return
+
+        total_records = sum(len(segment) for _, _, segment, _, _ in chunks)
+        log.info("Importing %s Bitget spot copy-trade records.", total_records)
+        for chunk_start, chunk_end, records, resume_state, endpoint_state in chunks:
+            for row_num, row in enumerate(records, start=1):
+                symbol = str(row.get("symbol", ""))
+                base_coin, quote_coin = self._split_symbol_pair(symbol)
+                if base_coin is None:
+                    log.warning(
+                        "Unknown Bitget copy-trade symbol '%s' in row %s. "
+                        "Skipping.",
+                        symbol,
+                        row_num,
+                    )
+                    continue
+
+                fill_size = abs(force_decimal(row.get("fillSize", "0")))
+                if fill_size == 0:
+                    continue
+
+                buy_time_raw = row.get("buyTime")
+                sell_time_raw = row.get("sellTime")
+                if not buy_time_raw or not sell_time_raw:
+                    log.warning(
+                        "Incomplete Bitget copy-trade timestamps in row %s. "
+                        "Skipping.",
+                        row_num,
+                    )
+                    continue
+
+                buy_time = datetime.datetime.fromtimestamp(
+                    int(buy_time_raw) / 1000.0,
+                    datetime.timezone.utc,
+                )
+                sell_time = datetime.datetime.fromtimestamp(
+                    int(sell_time_raw) / 1000.0,
+                    datetime.timezone.utc,
+                )
+
+                tracking_no = row.get("trackingNo", "")
+                trader_id = row.get("traderId", "")
+                remark = (
+                    f"Bitget spot copy-trade {tracking_no} "
+                    f"(trader: {trader_id}, symbol: {symbol})"
+                )
+
+                self.append_operation(
+                    book,
+                    "Buy",
+                    buy_time,
+                    fill_size,
+                    base_coin,
+                    row_num,
+                    Path("bitget-api"),
+                    remark=remark,
+                )
+
+                buy_fee = abs(force_decimal(row.get("buyFee", "0")))
+                if buy_fee and quote_coin:
+                    self.append_operation(
+                        book,
+                        "Fee",
+                        buy_time,
+                        buy_fee,
+                        quote_coin,
+                        row_num,
+                        Path("bitget-api"),
+                        remark=remark,
+                    )
+
+                self.append_operation(
+                    book,
+                    "Sell",
+                    sell_time,
+                    fill_size,
+                    base_coin,
+                    row_num,
+                    Path("bitget-api"),
+                    remark=remark,
+                )
+
+                sell_fee = abs(force_decimal(row.get("sellFee", "0")))
+                if sell_fee and quote_coin:
+                    self.append_operation(
+                        book,
+                        "Fee",
+                        sell_time,
+                        sell_fee,
+                        quote_coin,
+                        row_num,
+                        Path("bitget-api"),
+                        remark=remark,
+                    )
+
+            self._mark_chunk_processed(
+                resume_state,
+                endpoint_state,
+                chunk_start,
+                chunk_end,
+            )
+
+    def import_future_copy_trade_records(
+        self, book, start_time_ms: int, end_time_ms: int
+    ) -> None:
+        total_records = 0
+        for product_type in self.FUTURE_COPY_PRODUCT_TYPES:
+            chunks = self._fetch_future_copy_trade_history_range(
+                start_time_ms,
+                end_time_ms,
+                product_type,
+            )
+            total_records += sum(len(segment) for _, _, segment, _, _ in chunks)
+            for chunk_start, chunk_end, records, resume_state, endpoint_state in chunks:
+                for row_num, row in enumerate(records, start=1):
+                    symbol = str(row.get("symbol", ""))
+                    base_coin, quote_coin = self._split_symbol_pair(symbol)
+                    if quote_coin is None:
+                        log.warning(
+                            "Unknown Bitget future copy-trade symbol '%s' in row %s. "
+                            "Skipping.",
+                            symbol,
+                            row_num,
+                        )
+                        continue
+
+                    close_time_raw = row.get("closeTime") or row.get("openTime")
+                    if not close_time_raw:
+                        log.warning(
+                            "Missing Bitget future copy-trade time in row %s. "
+                            "Skipping.",
+                            row_num,
+                        )
+                        continue
+
+                    utc_time = datetime.datetime.fromtimestamp(
+                        int(close_time_raw) / 1000.0,
+                        datetime.timezone.utc,
+                    )
+
+                    tracking_no = row.get("trackingNo", "")
+                    trader_id = row.get("traderId", "")
+                    remark = (
+                        f"Bitget future copy-trade {tracking_no} "
+                        f"(trader: {trader_id}, symbol: {symbol}, "
+                        f"productType: {product_type})"
+                    )
+
+                    signed_pnl = force_decimal(
+                        row.get("netProfit", row.get("achievedPL", "0")))
+                    if signed_pnl > 0:
+                        operation = "FuturesProfit"
+                    elif signed_pnl < 0:
+                        operation = "FuturesLoss"
+                    else:
+                        operation = None
+
+                    if operation is not None:
+                        self.append_operation(
+                            book,
+                            operation,
+                            utc_time,
+                            abs(signed_pnl),
+                            quote_coin,
+                            row_num,
+                            Path("bitget-api"),
+                            remark=remark,
+                        )
+
+                    open_fee = abs(force_decimal(row.get("openFee", "0")))
+                    if open_fee:
+                        self.append_operation(
+                            book,
+                            "Fee",
+                            utc_time,
+                            open_fee,
+                            quote_coin,
+                            row_num,
+                            Path("bitget-api"),
+                            remark=remark,
+                        )
+
+                    close_fee = abs(force_decimal(row.get("closeFee", "0")))
+                    if close_fee:
+                        self.append_operation(
+                            book,
+                            "Fee",
+                            utc_time,
+                            close_fee,
+                            quote_coin,
+                            row_num,
+                            Path("bitget-api"),
+                            remark=remark,
+                        )
+
+                self._mark_chunk_processed(
+                    resume_state,
+                    endpoint_state,
+                    chunk_start,
+                    chunk_end,
+                )
+
+        if total_records == 0:
+            log.info("No Bitget future copy-trade records were returned.")
+            return
+        log.info("Importing %s Bitget future copy-trade records.", total_records)
 
     def import_spot_records(self, book, start_time_ms: int, end_time_ms: int) -> None:
         chunks = self._fetch_all_range(

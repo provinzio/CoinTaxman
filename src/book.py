@@ -143,7 +143,7 @@ class Book:
         """Parse selected Bitget API record groups from environment.
 
         The env var `BITGET_API_RECORD_TYPES` accepts a comma separated list,
-        for example: `spot,future,margin,p2p`.
+        for example: `spot,future,margin,p2p,copy`.
         """
         configured = os.environ.get("BITGET_API_RECORD_TYPES", "").strip()
         if not configured:

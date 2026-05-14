@@ -96,6 +96,12 @@ BITGET_API_BASE_URL = environ.get(
     "BITGET_API_BASE_URL",
     config["BASE"].get("BITGET_API_BASE_URL", "https://api.bitget.com"),
 )
+BITGET_API_START_YEAR = int(
+    environ.get(
+        "BITGET_API_START_YEAR",
+        config["BASE"].get("BITGET_API_START_YEAR", str(TAX_YEAR - 1)),
+    )
+)
 
 # Read in environmental variables.
 if _env_country := environ.get("COUNTRY"):

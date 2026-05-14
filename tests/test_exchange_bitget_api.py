@@ -114,6 +114,94 @@ class BitgetApiReaderTests(unittest.TestCase):
         self.assertEqual(book.operations[1]["operation"], "FuturesLoss")
         self.assertEqual(book.operations[1]["change"], decimal.Decimal("42.25"))
 
+    def test_import_spot_copy_trade_records_maps_buy_sell_and_fees(self) -> None:
+        reader = BitgetApiReader()
+        book = _BookStub()
+        records = [
+            {
+                "trackingNo": "123",
+                "traderId": "999",
+                "fillSize": "0.0316",
+                "buyFee": "-0.00001902",
+                "sellFee": "-0.66104988",
+                "symbol": "BTCUSDT",
+                "buyTime": "1695729617968",
+                "sellTime": "1695729886269",
+            }
+        ]
+
+        with patch.object(
+            reader,
+            "_fetch_copy_trade_history_range",
+            return_value=[(0, 0, records, {}, {})],
+        ):
+            reader.import_spot_copy_trade_records(book, 0, 0)
+
+        self.assertEqual(len(book.operations), 4)
+        self.assertEqual(book.operations[0]["operation"], "Buy")
+        self.assertEqual(book.operations[0]["coin"], "BTC")
+        self.assertEqual(book.operations[0]["change"], decimal.Decimal("0.0316"))
+        self.assertEqual(book.operations[1]["operation"], "Fee")
+        self.assertEqual(book.operations[1]["coin"], "USDT")
+        self.assertEqual(
+            book.operations[1]["change"],
+            decimal.Decimal("0.00001902"),
+        )
+        self.assertEqual(book.operations[2]["operation"], "Sell")
+        self.assertEqual(book.operations[2]["coin"], "BTC")
+        self.assertEqual(book.operations[3]["operation"], "Fee")
+        self.assertEqual(book.operations[3]["coin"], "USDT")
+        self.assertEqual(
+            book.operations[3]["change"],
+            decimal.Decimal("0.66104988"),
+        )
+
+    def test_import_future_copy_trade_records_maps_pnl_and_fees(self) -> None:
+        reader = BitgetApiReader()
+        book = _BookStub()
+        records = [
+            {
+                "trackingNo": "456",
+                "traderId": "888",
+                "symbol": "BTCUSDT",
+                "netProfit": "-697.74100000",
+                "openFee": "-5.92649260",
+                "closeFee": "-5.22875160",
+                "closeTime": "1695353868557",
+            }
+        ]
+
+        with patch.object(
+            reader,
+            "_fetch_future_copy_trade_history_range",
+            side_effect=[
+                [(0, 0, records, {}, {})],
+                [(0, 0, [], {}, {})],
+                [(0, 0, [], {}, {})],
+            ],
+        ):
+            reader.import_future_copy_trade_records(book, 0, 0)
+
+        self.assertEqual(len(book.operations), 3)
+        self.assertEqual(book.operations[0]["operation"], "FuturesLoss")
+        self.assertEqual(book.operations[0]["coin"], "USDT")
+        self.assertEqual(
+            book.operations[0]["change"],
+            decimal.Decimal("697.74100000"),
+        )
+        self.assertEqual(book.operations[1]["operation"], "Fee")
+        self.assertEqual(book.operations[1]["coin"], "USDT")
+        self.assertEqual(
+            book.operations[1]["change"],
+            decimal.Decimal("5.92649260"),
+        )
+        self.assertEqual(book.operations[2]["operation"], "Fee")
+        self.assertEqual(book.operations[2]["coin"], "USDT")
+        self.assertEqual(
+            book.operations[2]["change"],
+            decimal.Decimal("5.22875160"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
