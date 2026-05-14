@@ -18,6 +18,12 @@ log = log_config.getLogger(__name__)
 
 class KrakenPriceProvider(PriceProvider):
     kraken_invalid_pairs: list[str] = []
+    _INVALID_PAIR_ERRORS = {
+        "EGeneral:Invalid arguments",
+        "EQuery:Unknown asset pair",
+    }
+    _MAX_RETRIES = 6
+    _MAX_RETRY_SLEEP_SECONDS = 5
 
     def fetch_price(
         self,
@@ -40,7 +46,7 @@ class KrakenPriceProvider(PriceProvider):
                 utc_time - datetime.timedelta(minutes=minutes_offset)
             )
 
-            num_retries = 10
+            num_retries = self._MAX_RETRIES
             while num_retries:
                 pair = base_asset + quote_asset
                 pair = kraken_pair_map.get(pair, pair)
@@ -57,17 +63,43 @@ class KrakenPriceProvider(PriceProvider):
 
                 url = f"{root_url}?pair={pair}&since={since}"
 
-                response = requests.get(url)
-                response.raise_for_status()
-                data = json.loads(response.text)
+                try:
+                    response = requests.get(url, timeout=10)
+                    response.raise_for_status()
+                    data = json.loads(response.text)
+                except (
+                    requests.exceptions.ReadTimeout,
+                    requests.exceptions.ConnectionError,
+                    requests.exceptions.HTTPError,
+                    requests.exceptions.RequestException,
+                ):
+                    num_retries -= 1
+                    if num_retries <= 0:
+                        raise RuntimeError(
+                            f"Failed to retrieve Kraken trades for {pair}."
+                        )
+                    retry_index = self._MAX_RETRIES - num_retries
+                    sleep_duration = min(
+                        self._MAX_RETRY_SLEEP_SECONDS,
+                        2 ** max(retry_index - 1, 0),
+                    )
+                    time.sleep(sleep_duration)
+                    continue
 
                 if not data["error"]:
                     break
-                if data["error"] == ["EGeneral:Invalid arguments"]:
+                if any(error in self._INVALID_PAIR_ERRORS for error in data["error"]):
                     self.kraken_invalid_pairs.append(pair)
+                    continue
                 else:
                     num_retries -= 1
-                    sleep_duration = 2 ** (10 - num_retries)
+                    if num_retries <= 0:
+                        break
+                    retry_index = self._MAX_RETRIES - num_retries
+                    sleep_duration = min(
+                        self._MAX_RETRY_SLEEP_SECONDS,
+                        2 ** max(retry_index - 1, 0),
+                    )
                     time.sleep(sleep_duration)
                     continue
             else:

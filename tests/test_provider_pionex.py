@@ -62,6 +62,21 @@ class PionexProviderTests(unittest.TestCase):
         self.assertEqual(second, decimal.Decimal("0"))
         self.assertEqual(mock_get.call_count, 2)
 
+    @patch("price_providers.pionex.requests.get")
+    def test_usdt_to_eur_uses_usd_bridge(self, mock_get: Mock) -> None:
+        provider = PionexPriceProvider(
+            lambda platform, base, utc_time, quote, **kwargs: (
+                decimal.Decimal("0.92")
+                if (platform, base, quote) == ("kraken", "USD", "EUR")
+                else decimal.Decimal("0")
+            )
+        )
+
+        price = provider.fetch_price("USDT", self.utc_time, "EUR")
+
+        self.assertEqual(price, decimal.Decimal("0.92"))
+        mock_get.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

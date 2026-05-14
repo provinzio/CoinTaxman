@@ -13,6 +13,17 @@ log = log_config.getLogger(__name__)
 
 
 class PionexPriceProvider(PriceProvider):
+    STABLE_USD_ASSETS = {
+        "USDT",
+        "USDC",
+        "BUSD",
+        "FDUSD",
+        "TUSD",
+        "USDP",
+        "PYUSD",
+        "DAI",
+    }
+
     def fetch_price(
         self,
         base_asset: str,
@@ -22,6 +33,32 @@ class PionexPriceProvider(PriceProvider):
     ) -> decimal.Decimal:
         swapped_symbols = kwargs.get("swapped_symbols", False)
         fallback_mode = kwargs.get("fallback_mode", False)
+
+        # Pionex rarely has fiat pairs like USDT_EUR. Use USD as bridge for
+        # stable USD assets so EUR-denominated tax values don't collapse to 0.
+        if (
+            base_asset in self.STABLE_USD_ASSETS
+            and quote_asset in self.STABLE_USD_ASSETS
+        ):
+            return decimal.Decimal("1")
+        if base_asset in self.STABLE_USD_ASSETS and quote_asset == "USD":
+            return decimal.Decimal("1")
+        if quote_asset in self.STABLE_USD_ASSETS and base_asset == "USD":
+            return decimal.Decimal("1")
+        if base_asset in self.STABLE_USD_ASSETS and quote_asset != "USD":
+            try:
+                usd_quote = self.get_price("kraken", "USD", utc_time, quote_asset)
+            except Exception:
+                usd_quote = decimal.Decimal()
+            if usd_quote > 0:
+                return usd_quote
+        if quote_asset in self.STABLE_USD_ASSETS and base_asset != "USD":
+            try:
+                base_usd = self.get_price("kraken", base_asset, utc_time, "USD")
+            except Exception:
+                base_usd = decimal.Decimal()
+            if base_usd > 0:
+                return base_usd
 
         root_url = "https://api.pionex.com/api/v1/market/tickers"
         symbol = (

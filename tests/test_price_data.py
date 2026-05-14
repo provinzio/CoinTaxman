@@ -26,6 +26,19 @@ class FakePriceProvider(PriceProvider):
         return decimal.Decimal("0")
 
 
+class RefreshingPionexProvider(PriceProvider):
+    def fetch_price(
+        self,
+        base_asset: str,
+        utc_time: datetime.datetime,
+        quote_asset: str,
+        **kwargs,
+    ) -> decimal.Decimal:
+        if base_asset == "USDT" and quote_asset == "EUR":
+            return decimal.Decimal("0.91")
+        return decimal.Decimal("0")
+
+
 class PriceDataTests(unittest.TestCase):
     def setUp(self) -> None:
         self.utc_time = datetime.datetime(2025, 1, 1, tzinfo=datetime.timezone.utc)
@@ -86,6 +99,30 @@ class PriceDataTests(unittest.TestCase):
                 self.assertIs(first_provider, second_provider)
                 self.assertEqual(len(created_providers), 1)
                 self.assertTrue(first_provider.is_known_missing_symbol("EURATH"))
+
+    def test_refreshes_cached_zero_pionex_stablecoin_price(self) -> None:
+        with patch("price_data.get_price_db", return_value=decimal.Decimal("0")), patch(
+            "price_data.set_price_db"
+        ) as set_price_db_mock, patch(
+            "price_data.create_price_provider",
+            side_effect=lambda platform, get_price_func, missing_symbols=None: RefreshingPionexProvider(
+                get_price_func,
+                missing_symbols=missing_symbols,
+            ),
+        ):
+            price_data = PriceData()
+
+            price = price_data.get_price("pionex", "USDT", self.utc_time, "EUR")
+
+            self.assertEqual(price, decimal.Decimal("0.91"))
+            set_price_db_mock.assert_called_once_with(
+                "pionex",
+                "USDT",
+                "EUR",
+                self.utc_time,
+                decimal.Decimal("0.91"),
+                overwrite=True,
+            )
 
 
 if __name__ == "__main__":

@@ -31,6 +31,17 @@ log = log_config.getLogger(__name__)
 
 
 class PriceData:
+    _PIONEX_USD_STABLE_ASSETS = {
+        "USDT",
+        "USDC",
+        "BUSD",
+        "FDUSD",
+        "TUSD",
+        "USDP",
+        "PYUSD",
+        "DAI",
+    }
+
     def __init__(self) -> None:
         self._providers = {}
         self._missing_symbols_cache_path = Path(
@@ -127,7 +138,8 @@ class PriceData:
             return decimal.Decimal("1")
 
         # Check if price exists already in our database.
-        if (price := get_price_db(platform, coin, reference_coin, utc_time)) is None:
+        price = get_price_db(platform, coin, reference_coin, utc_time)
+        if price is None:
             # Price doesn't exists. Fetch price from platform.
             provider = self._get_provider(platform)
             if provider is None:
@@ -140,6 +152,32 @@ class PriceData:
                 self._persist_provider_missing_symbols(platform, provider)
             assert isinstance(price, decimal.Decimal)
             set_price_db(platform, coin, reference_coin, utc_time, price)
+        elif (
+            price <= 0
+            and platform == "pionex"
+            and coin in self._PIONEX_USD_STABLE_ASSETS
+            and reference_coin != "USD"
+        ):
+            # Recover from legacy cached zero prices for Pionex stablecoins
+            # (e.g. USDT/EUR) by re-running provider fallback logic.
+            provider = self._get_provider(platform)
+            if provider is not None:
+                get_price = provider.fetch_price
+                try:
+                    refreshed = get_price(coin, utc_time, reference_coin)
+                finally:
+                    self._persist_provider_missing_symbols(platform, provider)
+
+                if refreshed > 0:
+                    price = refreshed
+                    set_price_db(
+                        platform,
+                        coin,
+                        reference_coin,
+                        utc_time,
+                        price,
+                        overwrite=True,
+                    )
 
         if config.MEAN_MISSING_PRICES and price <= 0.0:
             # The price is missing. Check for prices before and after the
