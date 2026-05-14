@@ -32,7 +32,7 @@ class CoinbaseReader(ExchangeReader):
 
     def read_file(self, file_path: Path, book) -> None:
         """Read Coinbase CSV file."""
-        with open(file_path, encoding="utf8") as f:
+        with open(file_path, encoding="utf-8-sig") as f:
             reader = csv.reader(f)
 
             # Skip header.
@@ -53,9 +53,9 @@ class CoinbaseReader(ExchangeReader):
                 fields = next(reader)
                 num_columns = len(fields)
                 # Coinbase export format from 2023/2024 and ongoing
-                if num_columns == 11:
+                if num_columns >= 11:
                     assert self.version == 4
-                    assert fields == [
+                    expected_fields = [
                         "ID",
                         "Timestamp",
                         "Transaction Type",
@@ -68,6 +68,7 @@ class CoinbaseReader(ExchangeReader):
                         "Fees and/or Spread",
                         "Notes",
                     ]
+                    assert fields[: len(expected_fields)] == expected_fields
                 # Coinbase export format from late 2021 until 2023/2024
                 elif num_columns == 10:
                     assert fields == [
@@ -124,7 +125,7 @@ class CoinbaseReader(ExchangeReader):
             for columns in reader:
 
                 # Coinbase export format from 2023/2024 and ongoing
-                if num_columns == 11:
+                if num_columns >= 11:
                     (
                         _id,
                         _utc_time,
@@ -137,6 +138,7 @@ class CoinbaseReader(ExchangeReader):
                         _eur_total,
                         _eur_fee,
                         remark,
+                        *_,
                     ) = columns
                     _eur_spot = _eur_spot.replace("€", "")
                     _eur_subtotal = _eur_subtotal.replace("€", "")

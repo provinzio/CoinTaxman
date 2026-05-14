@@ -58,6 +58,31 @@ class ExchangeRegistryTests(unittest.TestCase):
         assert isinstance(reader, CoinbaseReader)
         self.assertEqual(reader.version, 4)
 
+    def test_detect_exchange_reader_detects_coinbase_v4_with_extra_columns(self) -> None:
+        header = [
+            "ID",
+            "Timestamp",
+            "Transaction Type",
+            "Asset",
+            "Quantity Transacted",
+            "Price Currency",
+            "Price at Transaction",
+            "Subtotal",
+            "Total (inclusive of fees and/or spread)",
+            "Fees and/or Spread",
+            "Notes",
+            "Sender Address",
+            "Recipient Address",
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "coinbase_v4_extra.csv"
+            self._write_csv(csv_path, [["x"], ["x"], ["x"], header])
+            reader = detect_exchange_reader(csv_path)
+
+        self.assertIsInstance(reader, CoinbaseReader)
+        assert isinstance(reader, CoinbaseReader)
+        self.assertEqual(reader.version, 4)
+
     def test_detect_exchange_reader_detects_pionex_by_filename(self) -> None:
         header = ["date(UTC+0)", "tx_type", "amount", "coin", "network", "txid", "fee"]
         with tempfile.TemporaryDirectory() as tmp:

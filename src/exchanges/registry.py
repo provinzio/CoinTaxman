@@ -683,7 +683,7 @@ def detect_exchange_reader(file_path: Path) -> Optional[ExchangeReader]:
                 if header in header_options:
                     return create_exchange_reader(exchange_type)
 
-    with open(file_path, encoding="utf8") as f:
+    with open(file_path, encoding="utf-8-sig") as f:
         reader = csv.reader(f)
         # Check all potential headers at their expected header row.
         for exchange, expected in expected_headers.items():
@@ -694,7 +694,13 @@ def detect_exchange_reader(file_path: Path) -> Optional[ExchangeReader]:
             # Iterate since header row may appear earlier.
             for _ in range(header_row_num):
                 header = next(reader, None)
-                if header == expected:
+                # Newer Coinbase exports can append trailing columns
+                # (e.g. sender/recipient addresses) while keeping the
+                # first columns unchanged.
+                if exchange == "coinbase_v4":
+                    if header and header[: len(expected)] == expected:
+                        return create_exchange_reader(exchange)
+                elif header == expected:
                     return create_exchange_reader(exchange)
             # Rewind the file after each header check.
             f.seek(0)
