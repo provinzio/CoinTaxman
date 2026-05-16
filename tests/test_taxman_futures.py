@@ -53,6 +53,13 @@ class _SwapFallbackPriceDataStub(_PriceDataStub):
         return super().get_partial_cost(op, percent)
 
 
+class _ZeroUnrealizedSellValuePriceDataStub(_PriceDataStub):
+    def get_partial_cost(self, op, percent: decimal.Decimal) -> decimal.Decimal:
+        if isinstance(op, tr.Sell):
+            return decimal.Decimal("0")
+        return super().get_partial_cost(op, percent)
+
+
 class TaxmanFuturesTests(unittest.TestCase):
     def _utc(self, month: int, day: int) -> datetime.datetime:
         return datetime.datetime(
@@ -274,6 +281,37 @@ class TaxmanFuturesTests(unittest.TestCase):
         self.assertEqual(len(taxman.tax_report_entries), 1)
         entry = taxman.tax_report_entries[0]
         self.assertIsInstance(entry, tr.SellReportEntry)
+        self.assertEqual(entry.gain_in_fiat, decimal.Decimal("0"))
+
+    def test_unrealized_sell_zero_value_falls_back_to_buy_cost(self) -> None:
+        buy = tr.Buy(
+            utc_time=self._utc(3, 1),
+            platform="bitget",
+            change=decimal.Decimal("2"),
+            coin="ETH",
+            line=[50],
+            file_path=Path("account_statements/bitget 2025/spot.csv"),
+        )
+        unrealized_sell = tr.Sell(
+            utc_time=self._utc(12, 31),
+            platform="bitget",
+            change=decimal.Decimal("2"),
+            coin="ETH",
+            line=[-1],
+            file_path=Path(),
+        )
+
+        taxman = Taxman(_BookStub([]), _ZeroUnrealizedSellValuePriceDataStub())
+        taxman._evaluate_sell(
+            unrealized_sell,
+            tr.SoldCoin(buy, decimal.Decimal("2")),
+            ReportType=tr.UnrealizedSellReportEntry,
+        )
+
+        self.assertTrue(taxman.unrealized_sells_faulty)
+        self.assertEqual(len(taxman.tax_report_entries), 1)
+        entry = taxman.tax_report_entries[0]
+        self.assertIsInstance(entry, tr.UnrealizedSellReportEntry)
         self.assertEqual(entry.gain_in_fiat, decimal.Decimal("0"))
 
 

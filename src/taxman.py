@@ -89,6 +89,7 @@ class Taxman:
         self._balances: dict[Any, balance_queue.BalanceQueue] = {}
         self._warned_unknown_source_deposits: set[tuple[Path, tuple[int, ...], str]] = set(
         )
+        self._warned_unrealized_zero_prices: set[tuple[str, str]] = set()
 
     ###########################################################################
     # Helper functions for balances
@@ -370,6 +371,23 @@ class Taxman:
                 self.unrealized_sells_faulty = True
             else:
                 raise e
+
+        if (
+            ReportType is tr.UnrealizedSellReportEntry
+            and sell_value_in_fiat <= 0
+        ):
+            warning_key = (op.platform, op.coin)
+            if warning_key not in self._warned_unrealized_zero_prices:
+                self._warned_unrealized_zero_prices.add(warning_key)
+                log.warning(
+                    "Unrealized sell value is 0 for %s on %s at deadline. "
+                    "Falling back to acquisition cost for this coin to avoid "
+                    "artificial unrealized losses.",
+                    op.coin,
+                    op.platform,
+                )
+            sell_value_in_fiat = buy_cost_in_fiat
+            self.unrealized_sells_faulty = True
 
         sell_report_entry = ReportType(
             sell_platform=op.platform,
