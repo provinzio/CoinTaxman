@@ -87,6 +87,8 @@ class Taxman:
             )
 
         self._balances: dict[Any, balance_queue.BalanceQueue] = {}
+        self._warned_unknown_source_deposits: set[tuple[Path, tuple[int, ...], str]] = set(
+        )
 
     ###########################################################################
     # Helper functions for balances
@@ -143,10 +145,10 @@ class Taxman:
     def remove_from_balance(self, op: tr.Operation) -> list[tr.SoldCoin]:
         balance = self.balance_op(op)
 
-        # Bitget API spot records may be incomplete (e.g. missing opening
-        # inventory for conversions). Add an unknown-source deposit so we keep
-        # a best-effort report instead of aborting.
-        if op.coin != config.FIAT and op.file_path.name == "bitget-api":
+        # Bitget exports can contain incomplete cross-account transfer history.
+        # Keep taxation running with an explicit synthetic deposit warning
+        # instead of aborting hard on insufficient balance.
+        if op.coin != config.FIAT and op.platform == "bitget":
             available = self._available_balance(balance)
             missing = op.change - available
             if missing > config.BALANCE_DUST_TOLERANCE:
@@ -312,10 +314,21 @@ class Taxman:
             NotImplementedError: When there are more than two different fee coins.
         """
         assert op.coin == sc.op.coin
-        assert op.change >= sc.sold
+
+        sold_amount = sc.sold
+        if sold_amount > op.change:
+            overflow = sold_amount - op.change
+            if overflow <= config.BALANCE_DUST_TOLERANCE:
+                sold_amount = op.change
+            else:
+                raise AssertionError(
+                    "Sold coin allocation exceeds sell amount by more than tolerance."
+                )
 
         # Share the fees and sell_value proportionally to the coins sold.
-        percent = sc.sold / op.change
+        percent = sold_amount / op.change
+        if sold_amount != sc.sold:
+            sc = tr.SoldCoin(sc.op, sold_amount)
 
         # Ignore fees for UnrealizedSellReportEntry.
         fee_params = self._get_fee_param_dict(op, percent)
@@ -324,13 +337,14 @@ class Taxman:
             assert not any(v for v in fee_params.values())
             # Do not give fee parameters to ReportEntry object.
             fee_params = {}
-        buy_cost_in_fiat = self.get_buy_cost(sc)
+        buy_cost_in_fiat = self.get_buy_cost(tr.SoldCoin(sc.op, sold_amount))
 
         # Taxable when sell is not more than one year after buy.
         is_taxable = sc.op.utc_time + relativedelta(years=1) >= op.utc_time
 
         try:
-            sell_value_in_fiat = self.get_sell_value(op, sc)
+            sell_value_in_fiat = self.get_sell_value(
+                op, tr.SoldCoin(sc.op, sold_amount))
         except Exception as e:
             if ReportType is tr.UnrealizedSellReportEntry:
                 log.warning(
@@ -428,17 +442,24 @@ class Taxman:
             else:
 
                 if isinstance(sc.op, tr.Deposit):
-                    # Raise a warning when a deposit link is missing.
-                    log.warning(
-                        f"You sold {sc.op.change} {sc.op.coin} which were deposited "
-                        f"from somewhere unknown onto {sc.op.platform} (see "
-                        f"{sc.op.file_path} {sc.op.line}). "
-                        "A correct tax evaluation might not be possible! "
-                        "For now, we assume that the coins were bought at "
-                        "the timestamp of the deposit. "
-                        "If these coins get sold one year after this "
-                        "the sell is not tax relevant and everything is fine."
+                    warning_key = (
+                        sc.op.file_path,
+                        tuple(sc.op.line),
+                        sc.op.coin,
                     )
+                    if warning_key not in self._warned_unknown_source_deposits:
+                        self._warned_unknown_source_deposits.add(warning_key)
+                        # Raise a warning when a deposit link is missing.
+                        log.warning(
+                            f"You sold {sc.op.change} {sc.op.coin} which were deposited "
+                            f"from somewhere unknown onto {sc.op.platform} (see "
+                            f"{sc.op.file_path} {sc.op.line}). "
+                            "A correct tax evaluation might not be possible! "
+                            "For now, we assume that the coins were bought at "
+                            "the timestamp of the deposit. "
+                            "If these coins get sold one year after this "
+                            "the sell is not tax relevant and everything is fine."
+                        )
 
                 self._evaluate_sell(op, sc)
 

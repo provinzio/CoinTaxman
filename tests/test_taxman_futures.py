@@ -210,6 +210,24 @@ class TaxmanFuturesTests(unittest.TestCase):
             decimal.Decimal("0"),
         )
 
+    def test_bitget_csv_withdrawal_adds_synthetic_deposit_on_missing_balance(self) -> None:
+        withdrawal = tr.Withdrawal(
+            utc_time=self._utc(9, 15),
+            platform="bitget",
+            change=decimal.Decimal("10000"),
+            coin="USDT",
+            line=[9747],
+            file_path=Path(
+                "account_statements/bitget 2025/Export spot transactions 5345536923-2026-04-07 01_11_50.458.csv"
+            ),
+        )
+
+        taxman = Taxman(_BookStub([withdrawal]), _PriceDataStub())
+        taxman.evaluate_taxation()
+
+        self.assertEqual(len(taxman.tax_report_entries), 1)
+        self.assertIsInstance(taxman.tax_report_entries[0], tr.WithdrawalReportEntry)
+
 
 if __name__ == "__main__":
     unittest.main()

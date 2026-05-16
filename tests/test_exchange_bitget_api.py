@@ -114,6 +114,43 @@ class BitgetApiReaderTests(unittest.TestCase):
         self.assertEqual(book.operations[1]["operation"], "FuturesLoss")
         self.assertEqual(book.operations[1]["change"], decimal.Decimal("42.25"))
 
+    def test_import_future_records_supports_future_tax_type_and_margin_coin_fields(self) -> None:
+        reader = BitgetApiReader()
+        book = _BookStub()
+        records = [
+            {
+                "marginCoin": "USDT",
+                "futureTaxType": "close_short",
+                "amount": "10.0",
+                "fee": "0",
+                "ts": "1758198095000",
+                "bizOrderId": "future-3",
+            },
+            {
+                "marginCoin": "USDT",
+                "futureTaxType": "open_long",
+                "amount": "-1.5",
+                "fee": "0",
+                "ts": "1758199095000",
+                "bizOrderId": "future-4",
+            },
+        ]
+
+        with patch.object(
+            reader,
+            "_fetch_all_range",
+            return_value=[(0, 0, records, {}, {})],
+        ):
+            reader.import_future_records(book, 0, 0)
+
+        self.assertEqual(len(book.operations), 2)
+        self.assertEqual(book.operations[0]["operation"], "FuturesProfit")
+        self.assertEqual(book.operations[0]["coin"], "USDT")
+        self.assertEqual(book.operations[0]["change"], decimal.Decimal("10.0"))
+        self.assertEqual(book.operations[1]["operation"], "FuturesLoss")
+        self.assertEqual(book.operations[1]["coin"], "USDT")
+        self.assertEqual(book.operations[1]["change"], decimal.Decimal("1.5"))
+
     def test_import_spot_records_maps_consumption_and_gains(self) -> None:
         reader = BitgetApiReader()
         book = _BookStub()
@@ -150,6 +187,18 @@ class BitgetApiReaderTests(unittest.TestCase):
         self.assertEqual(book.operations[1]["operation"], "Buy")
         self.assertEqual(book.operations[1]["coin"], "NEAR")
         self.assertEqual(book.operations[1]["change"], decimal.Decimal("1359.32"))
+
+    def test_map_spot_tax_type_supports_withdrawal_and_copy_refund_variants(self) -> None:
+        reader = BitgetApiReader()
+
+        self.assertEqual(
+            reader._map_spot_tax_type("Ordinary Withdrawal"),
+            "Withdrawal",
+        )
+        self.assertEqual(
+            reader._map_spot_tax_type("Copy trade - Profit share refunds"),
+            "Commission",
+        )
 
     def test_import_spot_copy_trade_records_maps_buy_sell_and_fees(self) -> None:
         reader = BitgetApiReader()

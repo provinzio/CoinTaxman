@@ -73,6 +73,8 @@ class BitgetProviderTests(unittest.TestCase):
         mock_get.return_value = response
 
         def fake_get_price(platform: str, *args, **kwargs):
+            if platform == "binance":
+                raise FallbackPriceNotFound
             if platform == "bitget" and kwargs.get("fallback_mode"):
                 raise FallbackPriceNotFound
             return decimal.Decimal("0")
@@ -86,6 +88,52 @@ class BitgetProviderTests(unittest.TestCase):
         self.assertEqual(second, decimal.Decimal("0"))
         self.assertEqual(mock_get.call_count, 1)
         self.assertEqual(mock_warning.call_count, 1)
+
+    @patch("price_providers.bitget.requests.get")
+    def test_uses_binance_fallback_when_bitget_has_no_data(self, mock_get: Mock) -> None:
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = []
+        mock_get.return_value = response
+
+        def fake_get_price(platform: str, *args, **kwargs):
+            if platform == "binance":
+                return decimal.Decimal("0.92")
+            raise FallbackPriceNotFound
+
+        provider = BitgetPriceProvider(fake_get_price)
+        price = provider.fetch_price("USDT", self.utc_time, "EUR")
+
+        self.assertEqual(price, decimal.Decimal("0.92"))
+
+    def test_known_missing_symbol_uses_binance_fallback(self) -> None:
+        def fake_get_price(platform: str, *args, **kwargs):
+            if platform == "binance":
+                return decimal.Decimal("0.91")
+            raise FallbackPriceNotFound
+
+        provider = BitgetPriceProvider(fake_get_price)
+        provider.mark_missing_symbol("USDTEUR")
+
+        price = provider.fetch_price("USDT", self.utc_time, "EUR")
+        self.assertEqual(price, decimal.Decimal("0.91"))
+
+    @patch("price_providers.bitget.requests.get")
+    def test_zero_candle_uses_binance_fallback(self, mock_get: Mock) -> None:
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = [["0", "0", "0", "0", "0", "0"]]
+        mock_get.return_value = response
+
+        def fake_get_price(platform: str, *args, **kwargs):
+            if platform == "binance":
+                return decimal.Decimal("0.93")
+            raise FallbackPriceNotFound
+
+        provider = BitgetPriceProvider(fake_get_price)
+        price = provider.fetch_price("USDT", self.utc_time, "EUR")
+
+        self.assertEqual(price, decimal.Decimal("0.93"))
 
 
 if __name__ == "__main__":

@@ -496,6 +496,7 @@ class BitgetApiReader(ExchangeReader):
         mapping = {
             "Deposit": "Deposit",
             "Withdrawal": "Withdrawal",
+            "Ordinary Withdrawal": "Withdrawal",
             "Buy": "Buy",
             "Sell": "Sell",
             "Gains": "Buy",
@@ -522,6 +523,7 @@ class BitgetApiReader(ExchangeReader):
             "fiat_balance_user_out": "Withdrawal",
             "Copy Trade expense": "Fee",
             "Refund Copy Trade commission": "Commission",
+            "Copy trade - Profit share refunds": "Commission",
         }
 
         if normalized in mapping:
@@ -980,7 +982,7 @@ class BitgetApiReader(ExchangeReader):
         log.info("Importing %s Bitget future records.", total_records)
         for chunk_start, chunk_end, records, resume_state, endpoint_state in chunks:
             for row_num, row in enumerate(records, start=1):
-                tax_type = row.get("taxType", "")
+                tax_type = row.get("taxType") or row.get("futureTaxType", "")
                 operation = self._map_future_tax_type(tax_type)
                 if operation is None:
                     log.warning(
@@ -989,7 +991,7 @@ class BitgetApiReader(ExchangeReader):
                     )
                     continue
 
-                coin = row.get("coin", "UNKNOWN")
+                coin = row.get("coin") or row.get("marginCoin") or "UNKNOWN"
                 signed_change = force_decimal(row.get("amount", "0"))
                 if operation == "FuturesPnlSigned":
                     if signed_change > 0:

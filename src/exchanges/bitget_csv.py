@@ -295,6 +295,10 @@ class BitgetCsvReader(ExchangeReader):
                 )
 
     def _read_spot_transactions(self, file_path: Path, book) -> None:
+        has_withdrawal_records = self._has_sibling_filename(
+            file_path, "withdrawal records"
+        )
+
         with open(file_path, encoding="utf-8-sig", newline="") as handle:
             reader = csv.DictReader(handle)
 
@@ -305,7 +309,27 @@ class BitgetCsvReader(ExchangeReader):
 
                 operation = self._api_mapper._map_spot_tax_type(tax_type)
 
-                if operation is None and tax_type in ("Fiat", "Financial"):
+                # Bitget often exports on-chain withdrawals in both
+                # "spot transactions" and "withdrawal records" CSVs.
+                # Prefer the dedicated withdrawal export to avoid duplicates.
+                if has_withdrawal_records and tax_type == "Ordinary Withdrawal":
+                    log.info(
+                        "%s row %s: Ignoring Bitget spot type '%s' because withdrawal records export is available.",
+                        file_path,
+                        row_num,
+                        tax_type,
+                    )
+                    continue
+
+                if operation is None and tax_type == "Fiat":
+                    # "Fiat" rows represent spot buy/sell legs (e.g. EUR -> USDT),
+                    # not external wallet transfers.
+                    if amount_raw > 0:
+                        operation = "Buy"
+                    elif amount_raw < 0:
+                        operation = "Sell"
+
+                if operation is None and tax_type == "Financial":
                     if amount_raw > 0:
                         operation = "Deposit"
                     elif amount_raw < 0:
@@ -639,6 +663,14 @@ class BitgetCsvReader(ExchangeReader):
                         event_type,
                     )
                     continue
+
+                if operation == "FuturesPnlSigned":
+                    if amount > 0:
+                        operation = "FuturesProfit"
+                    elif amount < 0:
+                        operation = "FuturesLoss"
+                    else:
+                        continue
 
                 coin = (row.get("Coin") or "").strip() or "UNKNOWN"
                 utc_time = self._parse_utc_time(row.get("Date", ""))

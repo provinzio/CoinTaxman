@@ -36,7 +36,16 @@ class BitgetPriceProvider(PriceProvider):
         if self.is_known_missing_symbol(symbol):
             if fallback_mode:
                 raise FallbackPriceNotFound
-            return decimal.Decimal()
+            try:
+                return self.get_price(
+                    "binance",
+                    base_asset,
+                    utc_time,
+                    quote_asset,
+                    minute_interval=minute_interval,
+                )
+            except Exception:
+                return decimal.Decimal()
 
         end = utc_time.astimezone(datetime.timezone.utc)
         start = end - datetime.timedelta(minutes=minute_interval)
@@ -143,6 +152,20 @@ class BitgetPriceProvider(PriceProvider):
                 )
                 return misc.reciprocal(price)
 
+            # Bitget sometimes has sparse historical data for conversion pairs
+            # (e.g. USDT/EUR); try a robust cross-exchange fallback before
+            # returning zero.
+            try:
+                return self.get_price(
+                    "binance",
+                    base_asset,
+                    utc_time,
+                    quote_asset,
+                    minute_interval=minute_interval,
+                )
+            except Exception:
+                pass
+
             fallback_assets = ["BTC", "USDT", "USDC", "ETH"]
             for fallback_asset in fallback_assets:
                 if base_asset != fallback_asset and quote_asset != fallback_asset:
@@ -189,7 +212,16 @@ class BitgetPriceProvider(PriceProvider):
             )
 
         if high == 0:
-            return decimal.Decimal()
+            try:
+                return self.get_price(
+                    "binance",
+                    base_asset,
+                    utc_time,
+                    quote_asset,
+                    minute_interval=minute_interval,
+                )
+            except Exception:
+                return decimal.Decimal()
 
         if (high - low) / high > 0.03:
             log.warning("Price spread is greater than 3%%! High: %s, Low: %s", high, low)

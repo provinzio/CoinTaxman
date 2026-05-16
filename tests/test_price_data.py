@@ -124,6 +124,30 @@ class PriceDataTests(unittest.TestCase):
                 overwrite=True,
             )
 
+    def test_refreshes_cached_zero_bitget_stablecoin_price(self) -> None:
+        with patch("price_data.get_price_db", return_value=decimal.Decimal("0")), patch(
+            "price_data.set_price_db"
+        ) as set_price_db_mock, patch(
+            "price_data.create_price_provider",
+            side_effect=lambda platform, get_price_func, missing_symbols=None: RefreshingPionexProvider(
+                get_price_func,
+                missing_symbols=missing_symbols,
+            ),
+        ):
+            price_data = PriceData()
+
+            price = price_data.get_price("bitget", "USDT", self.utc_time, "EUR")
+
+            self.assertEqual(price, decimal.Decimal("0.91"))
+            set_price_db_mock.assert_called_once_with(
+                "bitget",
+                "USDT",
+                "EUR",
+                self.utc_time,
+                decimal.Decimal("0.91"),
+                overwrite=True,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

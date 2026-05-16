@@ -41,6 +41,16 @@ class PriceData:
         "PYUSD",
         "DAI",
     }
+    _BITGET_USD_STABLE_ASSETS = {
+        "USDT",
+        "USDC",
+        "BUSD",
+        "FDUSD",
+        "TUSD",
+        "USDP",
+        "PYUSD",
+        "DAI",
+    }
 
     def __init__(self) -> None:
         self._providers = {}
@@ -154,11 +164,13 @@ class PriceData:
             set_price_db(platform, coin, reference_coin, utc_time, price)
         elif (
             price <= 0
-            and platform == "pionex"
-            and coin in self._PIONEX_USD_STABLE_ASSETS
             and reference_coin != "USD"
+            and (
+                (platform == "pionex" and coin in self._PIONEX_USD_STABLE_ASSETS)
+                or (platform == "bitget" and coin in self._BITGET_USD_STABLE_ASSETS)
+            )
         ):
-            # Recover from legacy cached zero prices for Pionex stablecoins
+            # Recover from legacy cached zero prices for stablecoins
             # (e.g. USDT/EUR) by re-running provider fallback logic.
             provider = self._get_provider(platform)
             if provider is not None:
