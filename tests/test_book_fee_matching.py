@@ -128,6 +128,34 @@ class BookFeeMatchingTests(unittest.TestCase):
             converted.remarks,
         )
 
+    def test_match_fees_converts_futures_fee_only_group_to_futures_loss(self) -> None:
+        book = Book(Mock())
+
+        fee = tr.Fee(
+            utc_time=self.utc_time,
+            platform="bitget",
+            change=decimal.Decimal("0.001382500201"),
+            coin="USDT",
+            line=[1619],
+            file_path=Path(
+                "account_statements/bitget 2025/Exported USDT-M Futures transactions.csv"),
+            remarks=["Bitget futures contract_main_settle_fee BTCUSDT 1299209590342819873"],
+        )
+
+        book.operations = [fee]
+        book.match_fees()
+
+        self.assertEqual(len(book.operations), 1)
+        converted = book.operations[0]
+        self.assertIsInstance(converted, tr.FuturesLoss)
+        assert isinstance(converted, tr.FuturesLoss)
+        self.assertEqual(converted.coin, "USDT")
+        self.assertEqual(converted.change, decimal.Decimal("0.001382500201"))
+        self.assertIn(
+            "Unmatched standalone fee treated as futures loss",
+            converted.remarks,
+        )
+
     def test_match_fees_attaches_fee_to_single_sell(self) -> None:
         book = Book(Mock())
 
@@ -175,6 +203,41 @@ class BookFeeMatchingTests(unittest.TestCase):
         self.assertIsInstance(converted, tr.Sell)
         assert isinstance(converted, tr.Sell)
         self.assertEqual(converted.change, decimal.Decimal("1.0"))
+
+    def test_match_fees_attaches_standalone_futures_fee_by_order_id(self) -> None:
+        book = Book(Mock())
+
+        futures_profit = tr.FuturesProfit(
+            utc_time=self.utc_time,
+            platform="bitget",
+            change=decimal.Decimal("100"),
+            coin="USDT",
+            line=[300],
+            file_path=Path(
+                "account_statements/bitget 2025/Exported USDT-M Futures transactions.csv"),
+            remarks=["Bitget futures close_long BTCUSDT 1299209590342819873"],
+        )
+        fee = tr.Fee(
+            utc_time=self.utc_time,
+            platform="bitget",
+            change=decimal.Decimal("0.001382500201"),
+            coin="USDT",
+            line=[301],
+            file_path=Path(
+                "account_statements/bitget 2025/Exported USDT-M Futures transactions.csv"),
+            remarks=["Bitget futures contract_main_settle_fee BTCUSDT 1299209590342819873"],
+        )
+
+        book.operations = [futures_profit, fee]
+        book.match_fees()
+
+        self.assertEqual(len(book.operations), 1)
+        self.assertIs(book.operations[0], futures_profit)
+        self.assertIsNotNone(futures_profit.fees)
+        assert futures_profit.fees is not None
+        self.assertEqual(len(futures_profit.fees), 1)
+        self.assertEqual(futures_profit.fees[0].change,
+                         decimal.Decimal("0.001382500201"))
 
 
 if __name__ == "__main__":

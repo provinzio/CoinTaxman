@@ -430,6 +430,15 @@ class Book:
         ((tx_idx, tx_op),) = matching_transactions.items()
         tx_lines = set(tx_op.line)
         has_line_overlap = any(tx_lines.intersection(fee.line) for fee in fees)
+
+        if not has_line_overlap and isinstance(tx_op, (tr.FuturesProfit, tr.FuturesLoss)):
+            tx_order_id = self._extract_order_id(tx_op.remarks)
+            fee_order_id = self._extract_order_id(fees[0].remarks)
+            if tx_order_id is not None and tx_order_id == fee_order_id:
+                assert self.operations[tx_idx].fees is None
+                self.operations[tx_idx].fees = fees
+                return True
+
         if not has_line_overlap:
             return False
 
@@ -449,8 +458,10 @@ class Book:
 
     def _convert_fees_to_sell_operations(self, fees: list[tr.Fee]) -> None:
         for fee in fees:
+            is_futures_fee = any("futures" in remark.lower() for remark in fee.remarks)
+            operation_type = "FuturesLoss" if is_futures_fee else "Sell"
             self.operations.append(
-                tr.Sell(
+                getattr(tr, operation_type)(
                     utc_time=fee.utc_time,
                     platform=fee.platform,
                     change=fee.change,
@@ -459,10 +470,47 @@ class Book:
                     file_path=fee.file_path,
                     remarks=[
                         *fee.remarks,
-                        "Unmatched standalone fee treated as sell",
+                        (
+                            "Unmatched standalone fee treated as futures loss"
+                            if is_futures_fee
+                            else "Unmatched standalone fee treated as sell"
+                        ),
                     ],
                 )
             )
+
+    def _extract_order_id(self, remarks: list[str]) -> Optional[str]:
+        for remark in remarks:
+            match = re.search(r"(\d+)\s*$", remark)
+            if match:
+                return match.group(1)
+        return None
+
+    def _attach_futures_fees_by_order_id(self, fees: list[tr.Fee]) -> bool:
+        if not fees:
+            return False
+
+        fee_order_id = self._extract_order_id(fees[0].remarks)
+        if fee_order_id is None:
+            return False
+
+        if not any("futures" in remark.lower() for fee in fees for remark in fee.remarks):
+            return False
+
+        matching_futures = [
+            op
+            for op in self.operations
+            if isinstance(op, (tr.FuturesProfit, tr.FuturesLoss))
+            and op.platform == fees[0].platform
+            and self._extract_order_id(op.remarks) == fee_order_id
+        ]
+        if len(matching_futures) != 1:
+            return False
+
+        futures_op = matching_futures[0]
+        assert futures_op.fees is None
+        futures_op.fees = fees
+        return True
 
     def match_fees(self) -> None:
         # Split operations in fees and other operations.
@@ -521,6 +569,8 @@ class Book:
                     self.operations[buy_idx].fees = fees
                 else:
                     if len(matching_transactions) == 0:
+                        if self._attach_futures_fees_by_order_id(fees):
+                            continue
                         self._convert_fees_to_sell_operations(fees)
                         continue
 
