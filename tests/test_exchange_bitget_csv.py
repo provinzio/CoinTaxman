@@ -154,6 +154,49 @@ class BitgetCsvReaderTests(unittest.TestCase):
         self.assertEqual(book.operations[1]["operation"], "FuturesLoss")
         self.assertEqual(book.operations[1]["change"], decimal.Decimal("3.25"))
 
+    def test_spot_transactions_ignores_financial_and_gains_as_internal_transfers(self) -> None:
+        reader = BitgetCsvReader()
+        book = _BookStub()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            spot_path = tmp / "Export spot transactions 456.csv"
+
+            with spot_path.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["order", "Date", "Coin", "Type", "Amount", "Fee"])
+                writer.writerow([
+                    "10",
+                    "2025-09-15 12:00:00",
+                    "NEAR",
+                    "Gains",
+                    "1359.32",
+                    "0",
+                ])
+                writer.writerow([
+                    "11",
+                    "2025-09-15 12:01:00",
+                    "SUI",
+                    "Financial",
+                    "-100.00",
+                    "0",
+                ])
+                writer.writerow([
+                    "12",
+                    "2025-09-15 12:02:00",
+                    "USDT",
+                    "Fiat",
+                    "123.45",
+                    "0",
+                ])
+
+            reader.read_file(spot_path, book)
+
+        self.assertEqual(len(book.operations), 1)
+        self.assertEqual(book.operations[0]["operation"], "Buy")
+        self.assertEqual(book.operations[0]["coin"], "USDT")
+        self.assertEqual(book.operations[0]["change"], decimal.Decimal("123.45"))
+
 
 if __name__ == "__main__":
     unittest.main()

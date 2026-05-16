@@ -499,7 +499,6 @@ class BitgetApiReader(ExchangeReader):
             "Ordinary Withdrawal": "Withdrawal",
             "Buy": "Buy",
             "Sell": "Sell",
-            "Gains": "Buy",
             "Consumption": "Sell",
             "Buy Crypto": "Buy",
             "Sell Crypto": "Sell",
@@ -544,6 +543,12 @@ class BitgetApiReader(ExchangeReader):
             return "Fee"
 
         return mapping.get(normalized)
+
+    def _is_internal_spot_transfer_tax_type(self, spot_tax_type: str) -> bool:
+        lower_name = spot_tax_type.strip().lower()
+        return lower_name in ("financial", "gains") or lower_name.startswith(
+            "financial_"
+        )
 
     def _map_future_tax_type(self, future_tax_type: str) -> Optional[str]:
         future_tax_type = future_tax_type.upper()
@@ -933,6 +938,13 @@ class BitgetApiReader(ExchangeReader):
                 if operation is None:
                     if not tax_type.strip():
                         empty_tax_type_rows.append(row_num)
+                        continue
+                    if self._is_internal_spot_transfer_tax_type(tax_type):
+                        log.info(
+                            "Ignoring Bitget spot tax type '%s' in row %s as internal transfer.",
+                            tax_type,
+                            row_num,
+                        )
                         continue
                     log.warning(
                         f"Unknown Bitget spot tax type '{tax_type}' in row {row_num}. "

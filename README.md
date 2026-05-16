@@ -50,6 +50,7 @@ If Bitget API credentials are configured, CoinTaxman imports Bitget API records 
 Default behavior (no extra configuration):
 - Default groups are imported: `spot`, `future`, `margin`, `p2p`.
 - Additional optional group: `copy` (Bitget Spot + Future Copy Trade history endpoints).
+- Spot tax types `Financial` and `Gains` are treated as internal account transfers and ignored in tax evaluation.
 
 Optional filtering via environment variable:
 - Environment variable: `BITGET_API_RECORD_TYPES`
@@ -102,6 +103,7 @@ If Bitget API credentials are configured, Bitget CSV files are skipped to avoid 
 Some Bitget CSV files are used as fallbacks only:
 - order/history files may be skipped when a more detailed transaction export from the same area is available
 - some history-style files are detected and intentionally ignored when no safe tax mapping is available
+- spot transaction rows with type `Financial` or `Gains` are treated as internal transfers and ignored
 
 If not all your exchanges are supported, you can not (directly) calculate your taxes with this tool.
 You can use the custom import format [here](https://github.com/provinzio/CoinTaxman/wiki/Custom-import-format) to make it happen.

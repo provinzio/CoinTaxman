@@ -151,7 +151,7 @@ class BitgetApiReaderTests(unittest.TestCase):
         self.assertEqual(book.operations[1]["coin"], "USDT")
         self.assertEqual(book.operations[1]["change"], decimal.Decimal("1.5"))
 
-    def test_import_spot_records_maps_consumption_and_gains(self) -> None:
+    def test_import_spot_records_maps_consumption_and_ignores_gains(self) -> None:
         reader = BitgetApiReader()
         book = _BookStub()
         records = [
@@ -180,13 +180,10 @@ class BitgetApiReaderTests(unittest.TestCase):
         ):
             reader.import_spot_records(book, 0, 0)
 
-        self.assertEqual(len(book.operations), 2)
+        self.assertEqual(len(book.operations), 1)
         self.assertEqual(book.operations[0]["operation"], "Sell")
         self.assertEqual(book.operations[0]["coin"], "USDT")
         self.assertEqual(book.operations[0]["change"], decimal.Decimal("3876.8169"))
-        self.assertEqual(book.operations[1]["operation"], "Buy")
-        self.assertEqual(book.operations[1]["coin"], "NEAR")
-        self.assertEqual(book.operations[1]["change"], decimal.Decimal("1359.32"))
 
     def test_map_spot_tax_type_supports_withdrawal_and_copy_refund_variants(self) -> None:
         reader = BitgetApiReader()

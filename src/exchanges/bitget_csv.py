@@ -329,11 +329,14 @@ class BitgetCsvReader(ExchangeReader):
                     elif amount_raw < 0:
                         operation = "Sell"
 
-                if operation is None and tax_type == "Financial":
-                    if amount_raw > 0:
-                        operation = "Deposit"
-                    elif amount_raw < 0:
-                        operation = "Withdrawal"
+                if operation is None and self._api_mapper._is_internal_spot_transfer_tax_type(tax_type):
+                    log.info(
+                        "%s row %s: Ignoring Bitget spot type '%s' as internal transfer.",
+                        file_path,
+                        row_num,
+                        tax_type,
+                    )
+                    continue
 
                 if operation is None and tax_type in (
                     "Opening of trading bot position",
