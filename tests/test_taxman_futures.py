@@ -45,6 +45,14 @@ class _PriceDataStub:
         return op.change * percent
 
 
+class _SwapFallbackPriceDataStub(_PriceDataStub):
+    def get_partial_cost(self, op, percent: decimal.Decimal) -> decimal.Decimal:
+        # Simulate missing fiat valuation for the bought asset in a linked swap.
+        if isinstance(op, tr.Buy) and op.coin == "ARB":
+            return decimal.Decimal("0")
+        return super().get_partial_cost(op, percent)
+
+
 class TaxmanFuturesTests(unittest.TestCase):
     def _utc(self, month: int, day: int) -> datetime.datetime:
         return datetime.datetime(
@@ -227,6 +235,46 @@ class TaxmanFuturesTests(unittest.TestCase):
 
         self.assertEqual(len(taxman.tax_report_entries), 1)
         self.assertIsInstance(taxman.tax_report_entries[0], tr.WithdrawalReportEntry)
+
+    def test_linked_usdt_sell_uses_disposed_asset_value_when_buy_value_is_zero(self) -> None:
+        buy_usdt = tr.Buy(
+            utc_time=self._utc(4, 20),
+            platform="bitget",
+            change=decimal.Decimal("100"),
+            coin="USDT",
+            line=[1],
+            file_path=Path("account_statements/bitget 2025/spot.csv"),
+        )
+        buy_arb = tr.Buy(
+            utc_time=self._utc(4, 21),
+            platform="bitget",
+            change=decimal.Decimal("50"),
+            coin="ARB",
+            line=[2],
+            file_path=buy_usdt.file_path,
+        )
+        sell_usdt = tr.Sell(
+            utc_time=self._utc(4, 21),
+            platform="bitget",
+            change=decimal.Decimal("100"),
+            coin="USDT",
+            line=[2],
+            file_path=buy_usdt.file_path,
+        )
+
+        buy_arb.link = sell_usdt
+        sell_usdt.link = buy_arb
+
+        taxman = Taxman(_BookStub([]), _SwapFallbackPriceDataStub())
+        taxman.evaluate_sell(
+            sell_usdt,
+            [tr.SoldCoin(buy_usdt, decimal.Decimal("100"))],
+        )
+
+        self.assertEqual(len(taxman.tax_report_entries), 1)
+        entry = taxman.tax_report_entries[0]
+        self.assertIsInstance(entry, tr.SellReportEntry)
+        self.assertEqual(entry.gain_in_fiat, decimal.Decimal("0"))
 
 
 if __name__ == "__main__":

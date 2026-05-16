@@ -253,6 +253,12 @@ class Taxman:
             sell_value = op.selling_value * percent
         elif op.link:
             sell_value = self.price_data.get_partial_cost(op.link, percent)
+            # For trade pairs, linked-asset fiat prices can be missing/zero
+            # while the disposed asset has a valid fiat valuation (e.g. USDT).
+            # Prefer the disposed-asset valuation in that case to avoid
+            # artificial full-loss sells.
+            if sell_value <= 0:
+                sell_value = self.price_data.get_partial_cost(op, percent)
         else:
             sell_value = self.price_data.get_partial_cost(op, percent)
 
