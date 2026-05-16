@@ -756,6 +756,78 @@ class Taxman:
         if config.CALCULATE_UNREALIZED_GAINS:
             self._evaluate_unrealized_sells()
 
+        # Re-resolve futures EUR values once the full price cache has been
+        # populated. Some provider lookups only become resolvable after later
+        # prices in the same time window have been cached.
+        self._refresh_futures_report_entries()
+
+    def _refresh_futures_report_entries(self) -> None:
+        for report_entry in self.tax_report_entries:
+            if isinstance(report_entry, tr.FuturesProfitReportEntry):
+                if report_entry.first_value_in_fiat == 0 and report_entry.amount:
+                    refreshed_value = self.price_data.get_cost(
+                        tr.FuturesProfit(
+                            utc_time=report_entry.first_utc_time,
+                            platform=report_entry.first_platform,
+                            change=report_entry.amount,
+                            coin=report_entry.coin,
+                            line=[],
+                            file_path=Path(),
+                        )
+                    )
+                    if refreshed_value == 0:
+                        refreshed_value = self._infer_futures_value_from_peers(
+                            report_entry,
+                            value_attr="first_value_in_fiat",
+                        )
+                    report_entry.first_value_in_fiat = refreshed_value
+            elif isinstance(report_entry, tr.FuturesLossReportEntry):
+                if report_entry.second_value_in_fiat == 0 and report_entry.amount:
+                    refreshed_value = self.price_data.get_cost(
+                        tr.FuturesLoss(
+                            utc_time=report_entry.first_utc_time,
+                            platform=report_entry.first_platform,
+                            change=report_entry.amount,
+                            coin=report_entry.coin,
+                            line=[],
+                            file_path=Path(),
+                        )
+                    )
+                    if refreshed_value == 0:
+                        refreshed_value = self._infer_futures_value_from_peers(
+                            report_entry,
+                            value_attr="second_value_in_fiat",
+                        )
+                    report_entry.second_value_in_fiat = refreshed_value
+
+    def _infer_futures_value_from_peers(
+        self,
+        report_entry: tr.TaxReportEntry,
+        value_attr: str,
+    ) -> decimal.Decimal:
+        for peer in self.tax_report_entries:
+            if peer is report_entry:
+                continue
+            if peer.first_platform != report_entry.first_platform:
+                continue
+            if peer.coin != report_entry.coin:
+                continue
+            if peer.first_utc_time != report_entry.first_utc_time:
+                continue
+            if not isinstance(
+                peer, (tr.FuturesProfitReportEntry, tr.FuturesLossReportEntry)
+            ):
+                continue
+
+            peer_value = getattr(peer, value_attr, decimal.Decimal(0))
+            if peer_value == 0 or peer.amount == 0:
+                continue
+
+            inferred_price = peer_value / peer.amount
+            return inferred_price * report_entry.amount
+
+        return decimal.Decimal(0)
+
     def _apply_taxable_gain_adjustments(
         self,
         taxation_type: str,

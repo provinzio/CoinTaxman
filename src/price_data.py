@@ -161,6 +161,17 @@ class PriceData:
             finally:
                 self._persist_provider_missing_symbols(platform, provider)
             assert isinstance(price, decimal.Decimal)
+
+            if price <= 0:
+                fallback_price = mean_price_db(
+                    platform,
+                    coin,
+                    reference_coin,
+                    utc_time,
+                )
+                if fallback_price > 0:
+                    price = fallback_price
+
             set_price_db(platform, coin, reference_coin, utc_time, price)
         elif (
             price <= 0
