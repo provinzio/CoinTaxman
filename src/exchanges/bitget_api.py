@@ -25,7 +25,7 @@ class BitgetApiReader(ExchangeReader):
     """Reader for Bitget API data."""
 
     SUPPORTED_RECORD_TYPES = ("spot", "future", "margin", "p2p", "copy")
-    DEFAULT_RECORD_TYPES = ("spot", "future", "margin", "p2p")
+    DEFAULT_RECORD_TYPES = ("spot", "future", "margin", "p2p", "copy")
     KNOWN_QUOTE_COINS = (
         "USDT",
         "USDC",
@@ -43,6 +43,8 @@ class BitgetApiReader(ExchangeReader):
         "JPY",
     )
     FUTURE_COPY_PRODUCT_TYPES = ("USDT-FUTURES", "COIN-FUTURES", "USDC-FUTURES")
+    SPOT_COPY_PAGE_LIMIT = 20
+    FUTURE_COPY_PAGE_LIMIT = 100
 
     def __init__(self):
         super().__init__("bitget")
@@ -178,7 +180,7 @@ class BitgetApiReader(ExchangeReader):
             params: dict[str, Any] = {
                 "startTime": start_time_ms,
                 "endTime": end_time_ms,
-                "limit": 50,
+                "limit": self.SPOT_COPY_PAGE_LIMIT,
             }
             if id_less_than:
                 params["idLessThan"] = id_less_than
@@ -219,7 +221,7 @@ class BitgetApiReader(ExchangeReader):
                 "productType": product_type,
                 "startTime": start_time_ms,
                 "endTime": end_time_ms,
-                "limit": 100,
+                "limit": self.FUTURE_COPY_PAGE_LIMIT,
             }
             if id_less_than:
                 params["idLessThan"] = id_less_than
@@ -555,6 +557,7 @@ class BitgetApiReader(ExchangeReader):
         mapping = {
             "TRANSFER_IN": "Deposit",
             "TRANSFER_OUT": "Withdrawal",
+            "TRANSFER_FROM_FUTURE_COPYTRADE": "FuturesPnlSigned",
             "ORDER_DEALT_IN": "FuturesPnlSigned",
             "ORDER_DEALT_FROZEN_OUT": "Fee",
             "ORDER_PLF_FEE_OUT": "Fee",

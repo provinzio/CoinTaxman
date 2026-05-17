@@ -48,21 +48,20 @@ Quick and easy installation can be done with `pip`.
 If Bitget API credentials are configured, CoinTaxman imports Bitget API records automatically for the configured `TAX_YEAR`.
 
 Default behavior (no extra configuration):
-- Default groups are imported: `spot`, `future`, `margin`, `p2p`.
-- Additional optional group: `copy` (Bitget Spot + Future Copy Trade history endpoints).
+- Default groups are imported: `spot`, `future`, `margin`, `p2p`, `copy`.
 - Spot tax types `Financial` and `Gains` are treated as internal account transfers and ignored in tax evaluation.
 
 Optional filtering via environment variable:
 - Environment variable: `BITGET_API_RECORD_TYPES`
 - Format: comma-separated list
-- Optional additional group: `copy` (Bitget Spot + Future Copy Trade history endpoints)
+- Supported groups: `spot`, `future`, `margin`, `p2p`, `copy` (Bitget Spot + Future Copy Trade history endpoints)
 - Example (only spot + future):
 	- Linux/macOS: `BITGET_API_RECORD_TYPES=spot,future python src/main.py`
 	- Windows PowerShell: `$env:BITGET_API_RECORD_TYPES='spot,future'; python src/main.py`
 - Example (include copy trades):
 	- Linux/macOS: `BITGET_API_RECORD_TYPES=spot,future,margin,p2p,copy python src/main.py`
 	- Windows PowerShell: `$env:BITGET_API_RECORD_TYPES='spot,future,margin,p2p,copy'; python src/main.py`
-- If `BITGET_API_RECORD_TYPES` is missing or empty, default groups are imported (`spot,future,margin,p2p`).
+- If `BITGET_API_RECORD_TYPES` is missing or empty, default groups are imported (`spot,future,margin,p2p,copy`).
 - Unknown values are ignored and logged as warnings.
 
 Optional opening-inventory lookback:
