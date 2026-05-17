@@ -15,16 +15,20 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import configparser
-import locale
 import datetime
+import decimal
+import locale
 import zoneinfo
 from os import environ
 from pathlib import Path
 
 # Make sure, that module `tzdata` is installed.
 import tzdata  # noqa: F401
+from dotenv import load_dotenv
 
 import core
+
+load_dotenv()
 
 # Dir and file paths
 BASE_PATH = Path(__file__).parent.parent.absolute()
@@ -53,6 +57,51 @@ MULTI_DEPOT = config["BASE"].getboolean("MULTI_DEPOT")
 LOG_LEVEL = config["BASE"].get("LOG_LEVEL", "INFO")
 ALL_AIRDROPS_ARE_GIFTS = config["BASE"].getboolean("ALL_AIRDROPS_ARE_GIFTS")
 EXPORT_WISO_CSV = config["BASE"].getboolean("EXPORT_WISO_CSV", fallback=False)
+
+
+def _optional_decimal_from_config(key: str) -> decimal.Decimal | None:
+    value = environ.get(key)
+    if value is None:
+        value = config["BASE"].get(key, fallback="")
+    value = value.strip()
+    if not value:
+        return None
+    try:
+        return decimal.Decimal(value)
+    except decimal.InvalidOperation as e:
+        raise ValueError(f"Unable to parse decimal config value for {key}") from e
+
+
+TERMINGESCHAEFTE_VERLUSTVERRECHNUNG_LIMIT_EUR = _optional_decimal_from_config(
+    "TERMINGESCHAEFTE_VERLUSTVERRECHNUNG_LIMIT_EUR"
+)
+
+BALANCE_DUST_TOLERANCE = _optional_decimal_from_config(
+    "BALANCE_DUST_TOLERANCE"
+) or decimal.Decimal("0.000001")
+
+BITGET_API_KEY = environ.get(
+    "BITGET_API_KEY",
+    config["BASE"].get("BITGET_API_KEY"),
+)
+BITGET_API_SECRET = environ.get(
+    "BITGET_API_SECRET",
+    config["BASE"].get("BITGET_API_SECRET"),
+)
+BITGET_API_PASSPHRASE = environ.get(
+    "BITGET_API_PASSPHRASE",
+    config["BASE"].get("BITGET_API_PASSPHRASE"),
+)
+BITGET_API_BASE_URL = environ.get(
+    "BITGET_API_BASE_URL",
+    config["BASE"].get("BITGET_API_BASE_URL", "https://api.bitget.com"),
+)
+BITGET_API_START_YEAR = int(
+    environ.get(
+        "BITGET_API_START_YEAR",
+        config["BASE"].get("BITGET_API_START_YEAR", str(TAX_YEAR - 1)),
+    )
+)
 
 # Read in environmental variables.
 if _env_country := environ.get("COUNTRY"):

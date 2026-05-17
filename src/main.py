@@ -16,6 +16,7 @@
 
 import os
 
+import config
 import log_config
 from book import Book
 from config import EXPORT_WISO_CSV, TMP_LOG_FILEPATH
@@ -31,6 +32,7 @@ def main() -> None:
 
     price_data = PriceData()
     book = Book(price_data)
+    book.import_api_records()
     taxman = Taxman(book, price_data)
 
     status = book.read_files()

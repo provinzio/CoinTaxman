@@ -50,6 +50,8 @@ def in_tax_year(op: tr.Operation) -> bool:
 
 
 class Taxman:
+    TERMINGESCHAEFTE_TAXATION_TYPE = "Einkünfte aus Termingeschäften"
+
     def __init__(self, book: Book, price_data: PriceData) -> None:
         self.book = book
         self.price_data = price_data
@@ -85,6 +87,9 @@ class Taxman:
             )
 
         self._balances: dict[Any, balance_queue.BalanceQueue] = {}
+        self._warned_unknown_source_deposits: set[tuple[Path, tuple[int, ...], str]] = set(
+        )
+        self._warned_unrealized_zero_prices: set[tuple[str, str]] = set()
 
     ###########################################################################
     # Helper functions for balances
@@ -105,8 +110,52 @@ class Taxman:
     def add_to_balance(self, op: tr.Operation) -> None:
         self.balance_op(op).add(op)
 
+    def _available_balance(self, balance: balance_queue.BalanceQueue) -> decimal.Decimal:
+        return misc.dsum(bop.not_sold for bop in balance.queue)
+
+    def _add_unknown_source_deposit(
+        self,
+        op: tr.Operation,
+        missing: decimal.Decimal,
+    ) -> None:
+        synthetic_deposit = tr.Deposit(
+            utc_time=op.utc_time,
+            platform=op.platform,
+            change=missing,
+            coin=op.coin,
+            line=list(op.line),
+            file_path=op.file_path,
+            remarks=[
+                "Synthetic deposit added because imported history "
+                f"is missing {missing} {op.coin} for "
+                f"{op.type_name} ({op.file_path} lines {op.line})."
+            ],
+        )
+        self.add_to_balance(synthetic_deposit)
+        log.warning(
+            "Missing %s %s before %s on %s (%s %s). "
+            "Added synthetic unknown-source deposit so taxation can continue.",
+            missing,
+            op.coin,
+            op.utc_time,
+            op.platform,
+            op.file_path,
+            op.line,
+        )
+
     def remove_from_balance(self, op: tr.Operation) -> list[tr.SoldCoin]:
-        return self.balance_op(op).remove(op)
+        balance = self.balance_op(op)
+
+        # Bitget exports can contain incomplete cross-account transfer history.
+        # Keep taxation running with an explicit synthetic deposit warning
+        # instead of aborting hard on insufficient balance.
+        if op.coin != config.FIAT and op.platform == "bitget":
+            available = self._available_balance(balance)
+            missing = op.change - available
+            if missing > config.BALANCE_DUST_TOLERANCE:
+                self._add_unknown_source_deposit(op, missing)
+
+        return balance.remove(op)
 
     def remove_fees_from_balance(self, fees: Optional[list[tr.Fee]]) -> None:
         if fees is not None:
@@ -205,6 +254,12 @@ class Taxman:
             sell_value = op.selling_value * percent
         elif op.link:
             sell_value = self.price_data.get_partial_cost(op.link, percent)
+            # For trade pairs, linked-asset fiat prices can be missing/zero
+            # while the disposed asset has a valid fiat valuation (e.g. USDT).
+            # Prefer the disposed-asset valuation in that case to avoid
+            # artificial full-loss sells.
+            if sell_value <= 0:
+                sell_value = self.price_data.get_partial_cost(op, percent)
         else:
             sell_value = self.price_data.get_partial_cost(op, percent)
 
@@ -221,11 +276,14 @@ class Taxman:
         second_fee_in_fiat = decimal.Decimal(0)
         if op.fees is None or len(op.fees) == 0:
             pass
-        elif len(op.fees) >= 1:
+        elif len(op.fees) == 1:
             first_fee_amount, first_fee_coin, first_fee_in_fiat = self._evaluate_fee(
                 op.fees[0], percent
             )
-        elif len(op.fees) >= 2:
+        elif len(op.fees) == 2:
+            first_fee_amount, first_fee_coin, first_fee_in_fiat = self._evaluate_fee(
+                op.fees[0], percent
+            )
             second_fee_amount, second_fee_coin, second_fee_in_fiat = self._evaluate_fee(
                 op.fees[1], percent
             )
@@ -263,10 +321,21 @@ class Taxman:
             NotImplementedError: When there are more than two different fee coins.
         """
         assert op.coin == sc.op.coin
-        assert op.change >= sc.sold
+
+        sold_amount = sc.sold
+        if sold_amount > op.change:
+            overflow = sold_amount - op.change
+            if overflow <= config.BALANCE_DUST_TOLERANCE:
+                sold_amount = op.change
+            else:
+                raise AssertionError(
+                    "Sold coin allocation exceeds sell amount by more than tolerance."
+                )
 
         # Share the fees and sell_value proportionally to the coins sold.
-        percent = sc.sold / op.change
+        percent = sold_amount / op.change
+        if sold_amount != sc.sold:
+            sc = tr.SoldCoin(sc.op, sold_amount)
 
         # Ignore fees for UnrealizedSellReportEntry.
         fee_params = self._get_fee_param_dict(op, percent)
@@ -275,13 +344,14 @@ class Taxman:
             assert not any(v for v in fee_params.values())
             # Do not give fee parameters to ReportEntry object.
             fee_params = {}
-        buy_cost_in_fiat = self.get_buy_cost(sc)
+        buy_cost_in_fiat = self.get_buy_cost(tr.SoldCoin(sc.op, sold_amount))
 
         # Taxable when sell is not more than one year after buy.
         is_taxable = sc.op.utc_time + relativedelta(years=1) >= op.utc_time
 
         try:
-            sell_value_in_fiat = self.get_sell_value(op, sc)
+            sell_value_in_fiat = self.get_sell_value(
+                op, tr.SoldCoin(sc.op, sold_amount))
         except Exception as e:
             if ReportType is tr.UnrealizedSellReportEntry:
                 log.warning(
@@ -301,6 +371,23 @@ class Taxman:
                 self.unrealized_sells_faulty = True
             else:
                 raise e
+
+        if (
+            ReportType is tr.UnrealizedSellReportEntry
+            and sell_value_in_fiat <= 0
+        ):
+            warning_key = (op.platform, op.coin)
+            if warning_key not in self._warned_unrealized_zero_prices:
+                self._warned_unrealized_zero_prices.add(warning_key)
+                log.warning(
+                    "Unrealized sell value is 0 for %s on %s at deadline. "
+                    "Falling back to acquisition cost for this coin to avoid "
+                    "artificial unrealized losses.",
+                    op.coin,
+                    op.platform,
+                )
+            sell_value_in_fiat = buy_cost_in_fiat
+            self.unrealized_sells_faulty = True
 
         sell_report_entry = ReportType(
             sell_platform=op.platform,
@@ -334,6 +421,18 @@ class Taxman:
                 assert (
                     sc.op.link.change >= sc.op.change
                 ), "Withdrawal must be equal or greater than the deposited amount."
+
+                if not sc.op.link.withdrawn_coins:
+                    log.warning(
+                        "Linked withdrawal coins are missing for deposited coins. "
+                        "Falling back to direct sell evaluation for %s %s on %s.",
+                        sc.sold,
+                        sc.op.coin,
+                        sc.op.platform,
+                    )
+                    self._evaluate_sell(op, sc)
+                    continue
+
                 deposit_fee = sc.op.link.change - sc.op.change
                 sold_percent = sc.sold / sc.op.change
                 sold_deposit_fee = deposit_fee * sold_percent
@@ -367,17 +466,24 @@ class Taxman:
             else:
 
                 if isinstance(sc.op, tr.Deposit):
-                    # Raise a warning when a deposit link is missing.
-                    log.warning(
-                        f"You sold {sc.op.change} {sc.op.coin} which were deposited "
-                        f"from somewhere unknown onto {sc.op.platform} (see "
-                        f"{sc.op.file_path} {sc.op.line}). "
-                        "A correct tax evaluation might not be possible! "
-                        "For now, we assume that the coins were bought at "
-                        "the timestamp of the deposit. "
-                        "If these coins get sold one year after this "
-                        "the sell is not tax relevant and everything is fine."
+                    warning_key = (
+                        sc.op.file_path,
+                        tuple(sc.op.line),
+                        sc.op.coin,
                     )
+                    if warning_key not in self._warned_unknown_source_deposits:
+                        self._warned_unknown_source_deposits.add(warning_key)
+                        # Raise a warning when a deposit link is missing.
+                        log.warning(
+                            f"You sold {sc.op.change} {sc.op.coin} which were deposited "
+                            f"from somewhere unknown onto {sc.op.platform} (see "
+                            f"{sc.op.file_path} {sc.op.line}). "
+                            "A correct tax evaluation might not be possible! "
+                            "For now, we assume that the coins were bought at "
+                            "the timestamp of the deposit. "
+                            "If these coins get sold one year after this "
+                            "the sell is not tax relevant and everything is fine."
+                        )
 
                 self._evaluate_sell(op, sc)
 
@@ -516,6 +622,40 @@ class Taxman:
                 )
                 self.tax_report_entries.append(report_entry)
 
+        elif isinstance(op, tr.FuturesProfit):
+            # Futures PnL is tax relevant but must not flow through the
+            # spot inventory queue.
+            if in_tax_year(op):
+                fee_params = self._get_fee_param_dict(op, decimal.Decimal(1))
+                report_entry = tr.FuturesProfitReportEntry(
+                    platform=op.platform,
+                    amount=op.change,
+                    coin=op.coin,
+                    utc_time=op.utc_time,
+                    **fee_params,
+                    realized_pnl_in_fiat=self.price_data.get_cost(op),
+                    taxation_type="Einkünfte aus Termingeschäften",
+                    remark=op.remark,
+                )
+                self.tax_report_entries.append(report_entry)
+
+        elif isinstance(op, tr.FuturesLoss):
+            # Keep futures losses separate from spot sells to avoid inventory
+            # side effects.
+            if in_tax_year(op):
+                fee_params = self._get_fee_param_dict(op, decimal.Decimal(1))
+                report_entry = tr.FuturesLossReportEntry(
+                    platform=op.platform,
+                    amount=op.change,
+                    coin=op.coin,
+                    utc_time=op.utc_time,
+                    **fee_params,
+                    realized_loss_in_fiat=self.price_data.get_cost(op),
+                    taxation_type="Einkünfte aus Termingeschäften",
+                    remark=op.remark,
+                )
+                self.tax_report_entries.append(report_entry)
+
         elif isinstance(op, tr.Deposit):
             # Coins get deposited onto this platform/balance.
             self.add_to_balance(op)
@@ -640,6 +780,94 @@ class Taxman:
         if config.CALCULATE_UNREALIZED_GAINS:
             self._evaluate_unrealized_sells()
 
+        # Re-resolve futures EUR values once the full price cache has been
+        # populated. Some provider lookups only become resolvable after later
+        # prices in the same time window have been cached.
+        self._refresh_futures_report_entries()
+
+    def _refresh_futures_report_entries(self) -> None:
+        for report_entry in self.tax_report_entries:
+            if isinstance(report_entry, tr.FuturesProfitReportEntry):
+                if report_entry.first_value_in_fiat == 0 and report_entry.amount:
+                    refreshed_value = self.price_data.get_cost(
+                        tr.FuturesProfit(
+                            utc_time=report_entry.first_utc_time,
+                            platform=report_entry.first_platform,
+                            change=report_entry.amount,
+                            coin=report_entry.coin,
+                            line=[],
+                            file_path=Path(),
+                        )
+                    )
+                    if refreshed_value == 0:
+                        refreshed_value = self._infer_futures_value_from_peers(
+                            report_entry,
+                            value_attr="first_value_in_fiat",
+                        )
+                    report_entry.first_value_in_fiat = refreshed_value
+            elif isinstance(report_entry, tr.FuturesLossReportEntry):
+                if report_entry.second_value_in_fiat == 0 and report_entry.amount:
+                    refreshed_value = self.price_data.get_cost(
+                        tr.FuturesLoss(
+                            utc_time=report_entry.first_utc_time,
+                            platform=report_entry.first_platform,
+                            change=report_entry.amount,
+                            coin=report_entry.coin,
+                            line=[],
+                            file_path=Path(),
+                        )
+                    )
+                    if refreshed_value == 0:
+                        refreshed_value = self._infer_futures_value_from_peers(
+                            report_entry,
+                            value_attr="second_value_in_fiat",
+                        )
+                    report_entry.second_value_in_fiat = refreshed_value
+
+    def _infer_futures_value_from_peers(
+        self,
+        report_entry: tr.TaxReportEntry,
+        value_attr: str,
+    ) -> decimal.Decimal:
+        for peer in self.tax_report_entries:
+            if peer is report_entry:
+                continue
+            if peer.first_platform != report_entry.first_platform:
+                continue
+            if peer.coin != report_entry.coin:
+                continue
+            if peer.first_utc_time != report_entry.first_utc_time:
+                continue
+            if not isinstance(
+                peer, (tr.FuturesProfitReportEntry, tr.FuturesLossReportEntry)
+            ):
+                continue
+
+            peer_value = getattr(peer, value_attr, decimal.Decimal(0))
+            if peer_value == 0 or peer.amount == 0:
+                continue
+
+            inferred_price = peer_value / peer.amount
+            return inferred_price * report_entry.amount
+
+        return decimal.Decimal(0)
+
+    def _apply_taxable_gain_adjustments(
+        self,
+        taxation_type: str,
+        taxable_gain: decimal.Decimal,
+    ) -> decimal.Decimal:
+        if taxation_type != self.TERMINGESCHAEFTE_TAXATION_TYPE:
+            return taxable_gain
+
+        loss_limit = config.TERMINGESCHAEFTE_VERLUSTVERRECHNUNG_LIMIT_EUR
+        if loss_limit is None:
+            return taxable_gain
+
+        if taxable_gain < -loss_limit:
+            return -loss_limit
+        return taxable_gain
+
     ###########################################################################
     # Export / Summary
     ###########################################################################
@@ -660,7 +888,18 @@ class Taxman:
                 for tre in tax_report_entries
                 if not isinstance(tre, tr.UnrealizedSellReportEntry)
             )
+            taxable_gain = self._apply_taxable_gain_adjustments(
+                taxation_type, taxable_gain
+            )
             eval_str += f"{taxation_type}: {taxable_gain:.2f} {config.FIAT}\n"
+
+        loss_limit = config.TERMINGESCHAEFTE_VERLUSTVERRECHNUNG_LIMIT_EUR
+        if loss_limit is not None:
+            eval_str += (
+                "Hinweis Termingeschäfte: "
+                "angewendete Verlustverrechnungsgrenze "
+                f"{loss_limit:.2f} {config.FIAT}\n"
+            )
 
         unrealized_report_entries = [
             tre
@@ -774,6 +1013,20 @@ class Taxman:
             row, 0, ["Alle Zeiten in Zeitzone", config.LOCAL_TIMEZONE_KEY]
         )
         row += 1
+        ws_general.write_row(
+            row,
+            0,
+            [
+                "Verlustverrechnungsgrenze Termingeschäfte",
+                (
+                    f"{config.TERMINGESCHAEFTE_VERLUSTVERRECHNUNG_LIMIT_EUR:.2f} {config.FIAT}"
+                    if config.TERMINGESCHAEFTE_VERLUSTVERRECHNUNG_LIMIT_EUR
+                    is not None
+                    else "Keine"
+                ),
+            ],
+        )
+        row += 1
         row += 1
         ws_general.write_row(
             row,
@@ -806,7 +1059,8 @@ class Taxman:
                 "steuerbarer Veräußerungserlös in EUR",
                 "steuerbare Anschaffungskosten in EUR",
                 "steuerbare Werbungskosten in EUR",
-                "steuerbarer Gewinn/Verlust in EUR",
+                "steuerbarer Gewinn/Verlust in EUR (roh)",
+                "steuerbarer Gewinn/Verlust in EUR (nach Grenzen)",
             ],
             header_format,
         )
@@ -842,10 +1096,13 @@ class Taxman:
                         and tre.taxable_gain_in_fiat
                     )
                 )
-            taxable_gain = misc.dsum(
+            taxable_gain_raw = misc.dsum(
                 tre.taxable_gain_in_fiat
                 for tre in tax_report_entries
                 if not isinstance(tre, tr.UnrealizedSellReportEntry)
+            )
+            taxable_gain_adjusted = self._apply_taxable_gain_adjustments(
+                taxation_type, taxable_gain_raw
             )
             ws_summary.write_row(
                 row,
@@ -855,7 +1112,8 @@ class Taxman:
                     first_value_in_fiat,
                     second_value_in_fiat,
                     total_fee_in_fiat,
-                    taxable_gain,
+                    taxable_gain_raw,
+                    taxable_gain_adjusted,
                 ],
             )
             row += 1
@@ -921,7 +1179,7 @@ class Taxman:
         # Set column format and freeze first row.
         ws_summary.set_column(0, 0, 43)
         ws_summary.set_column(1, 2, 18.29, fiat_format)
-        ws_summary.set_column(3, 4, 15.57, fiat_format)
+        ws_summary.set_column(3, 5, 20.0, fiat_format)
         ws_summary.freeze_panes(1, 0)
 
         #

@@ -20,8 +20,11 @@ Pull Requests und Anfragen über Issues sind gerne gesehen (siehe `Key notes for
 ### Currently supported exchanges
 - [Binance](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-Binance)
 - [Bitpanda Pro](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-Bitpanda-Pro)
+- Bitget (API import and CSV export)
+- Bitunix
 - [coinbase (pro)](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-coinbase)
 - [Kraken](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-Kraken)
+- Pionex
 
 It is also possible to import a custom transaction history file.
 See [here](https://github.com/provinzio/CoinTaxman/wiki/Custom-import-format) for more informations.
@@ -39,6 +42,68 @@ Quick and easy installation can be done with `pip`.
 1. Adjust `\config.ini` to your liking
 2. Add all your account statements in `account_statements/`
 2. Run `python "src/main.py"`
+
+### Bitget API import (optional)
+
+If Bitget API credentials are configured, CoinTaxman imports Bitget API records automatically for the configured `TAX_YEAR`.
+
+Default behavior (no extra configuration):
+- Default groups are imported: `spot`, `future`, `margin`, `p2p`.
+- Additional optional group: `copy` (Bitget Spot + Future Copy Trade history endpoints).
+- Spot tax types `Financial` and `Gains` are treated as internal account transfers and ignored in tax evaluation.
+
+Optional filtering via environment variable:
+- Environment variable: `BITGET_API_RECORD_TYPES`
+- Format: comma-separated list
+- Optional additional group: `copy` (Bitget Spot + Future Copy Trade history endpoints)
+- Example (only spot + future):
+	- Linux/macOS: `BITGET_API_RECORD_TYPES=spot,future python src/main.py`
+	- Windows PowerShell: `$env:BITGET_API_RECORD_TYPES='spot,future'; python src/main.py`
+- Example (include copy trades):
+	- Linux/macOS: `BITGET_API_RECORD_TYPES=spot,future,margin,p2p,copy python src/main.py`
+	- Windows PowerShell: `$env:BITGET_API_RECORD_TYPES='spot,future,margin,p2p,copy'; python src/main.py`
+- If `BITGET_API_RECORD_TYPES` is missing or empty, default groups are imported (`spot,future,margin,p2p`).
+- Unknown values are ignored and logged as warnings.
+
+Optional opening-inventory lookback:
+- Environment variable: `BITGET_API_START_YEAR`
+- Default: `TAX_YEAR - 1`
+- Purpose: include older Bitget API records to seed starting balances and avoid
+  "Not enough ... in queue" errors when sells happen in `TAX_YEAR` but buys were older.
+- Example:
+	- Linux/macOS: `BITGET_API_START_YEAR=2024 python src/main.py`
+	- Windows PowerShell: `$env:BITGET_API_START_YEAR='2024'; python src/main.py`
+
+### Bitget CSV export import (alternative)
+
+Bitget CSV exports are supported as an alternative when API credentials are not configured.
+
+Currently supported Bitget CSV export files:
+- `...withdrawal records....csv`
+- `...spot transactions....csv`
+- `...spot order details....csv`
+- `...spot order history....csv`
+- `...futures transactions....csv`
+- `...futures order details....csv`
+- `...futures order history....csv`
+- `...futures position history....csv`
+- `...margin transactions....csv`
+- `...margin order history....csv`
+- `...Onchain transactions....csv`
+- `...Onchain history....csv`
+- `...transactions of unified trading account....csv`
+- `...order history of unified trading account....csv`
+- `...position history of unified trading account....csv`
+- `...convert history of unified trading account....csv`
+- `...small balance conversion history....csv`
+- `...Earn....csv` for Simple Earn, On-chain Earn, Dual Investment and Shark Fin exports
+
+If Bitget API credentials are configured, Bitget CSV files are skipped to avoid duplicate imports.
+
+Some Bitget CSV files are used as fallbacks only:
+- order/history files may be skipped when a more detailed transaction export from the same area is available
+- some history-style files are detected and intentionally ignored when no safe tax mapping is available
+- spot transaction rows with type `Financial` or `Gains` are treated as internal transfers and ignored
 
 If not all your exchanges are supported, you can not (directly) calculate your taxes with this tool.
 You can use the custom import format [here](https://github.com/provinzio/CoinTaxman/wiki/Custom-import-format) to make it happen.
@@ -122,9 +187,12 @@ Hit the thumbs up button of that issue or participate in the process.
 
 #### Adding a new exchange
 
-- Add a read-in function like `Book._read_binance` in `src/book.py`
-- Add a way to retrieve price data from this exchange in `src/price_data.py` like `PriceData._get_price_binance`
-- Setup a wiki entry on how to retrieve the account statement and other useful information, which I can copy paste in our [Wiki](https://github.com/provinzio/CoinTaxman/wiki)
+- Add a dedicated reader in `src/exchanges/` (CSV/API parsing + operation mapping).
+- Register CSV detection and reader creation in `src/exchanges/registry.py`.
+- For API-based exchanges, add an API reader (similar to `BitgetApiReader`) and wire the call in `Book.import_api_records` in `src/book.py`.
+- Add price lookup support in `src/price_data.py` for assets traded on that exchange.
+- Add/update tests for detection and reader behavior.
+- Setup a wiki entry on how to retrieve the account statement and other useful information, which I can copy paste in our [Wiki](https://github.com/provinzio/CoinTaxman/wiki).
 
 #### Managing python module dependencies
 

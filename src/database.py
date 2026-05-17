@@ -242,6 +242,27 @@ def __delete_price_db(
         conn.commit()
 
 
+def __update_price_db(
+    db_path: Path,
+    tablename: str,
+    utc_time: datetime.datetime,
+    price: decimal.Decimal,
+) -> int:
+    """Update an existing price row.
+
+    Returns:
+        int: Number of updated rows.
+    """
+    with sqlite3.connect(db_path) as conn:
+        cur = conn.cursor()
+        query = f"UPDATE `{tablename}` SET price=? WHERE utc_time=?;"
+        cur.execute(query, (str(price), utc_time))
+        rowcount = cur.rowcount
+        conn.commit()
+        cur.close()
+        return rowcount
+
+
 def __set_price_db(
     db_path: Path,
     tablename: str,
@@ -350,8 +371,25 @@ def set_price_db(
                         f"overwriting database price: {price_db}",
                         rel_error * 100,
                     )
-                    __delete_price_db(db_path, tablename, utc_time)
-                    __set_price_db(db_path, tablename, utc_time, price)
+                    updated_rows = __update_price_db(
+                        db_path,
+                        tablename,
+                        utc_time,
+                        price,
+                    )
+                    if updated_rows == 0:
+                        # Row disappeared in between. Fall back to regular insert.
+                        try:
+                            __set_price_db(db_path, tablename, utc_time, price)
+                        except sqlite3.IntegrityError as e_inner:
+                            # Another writer inserted concurrently.
+                            if (
+                                f"UNIQUE constraint failed: {tablename}.utc_time"
+                                in str(e_inner)
+                            ):
+                                __update_price_db(db_path, tablename, utc_time, price)
+                            else:
+                                raise e_inner
                 else:
                     log.warning(
                         f"Relative error: %.6f %%, discarding new price: {price}, "

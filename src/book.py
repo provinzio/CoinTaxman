@@ -14,14 +14,22 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import base64
 import collections
-import csv
 import datetime
 import decimal
+import hashlib
+import hmac
+import json
+import os
 import re
+import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Optional, NamedTuple
+from typing import Any, NamedTuple, Optional
+from urllib.parse import urlencode
+
+import requests
 
 import config
 import log_config
@@ -29,6 +37,9 @@ import misc
 import transaction as tr
 from core import kraken_asset_map
 from database import set_price_db
+from exchanges.base import ExchangeReader
+from exchanges.bitget_api import BitgetApiReader
+from exchanges.registry import detect_exchange_reader
 from price_data import PriceData
 
 log = log_config.getLogger(__name__)
@@ -128,1460 +139,37 @@ class Book:
             if op is not None:
                 self._append_operation(op)
 
-    def _read_binance(self, file_path: Path, version: int = 1) -> None:
-        platform = "binance"
-        operation_mapping = {
-            "Distribution": "Airdrop",
-            "Cash Voucher distribution": "Airdrop",
-            "Cashback Voucher": "Airdrop",
-            "Rewards Distribution": "Airdrop",
-            "Simple Earn Flexible Airdrop": "Airdrop",
-            "Airdrop Assets": "Airdrop",
-            "Crypto Box": "Airdrop",
-            "Launchpool Airdrop": "Airdrop",
-            "Megadrop Rewards": "Airdrop",
-            "HODLer Airdrops Distribution": "Airdrop",
-            "Token Swap - Distribution": "Airdrop",
-            "Launchpool Airdrop - System Distribution": "Airdrop",
-            #
-            "Savings Interest": "CoinLendInterest",
-            "Savings purchase": "CoinLend",
-            "Savings Principal redemption": "CoinLendEnd",
-            "Savings distribution": "CoinLendInterest",
-            "Simple Earn Flexible Subscription": "CoinLend",
-            "Simple Earn Flexible Redemption": "CoinLendEnd",
-            "Simple Earn Flexible Interest": "CoinLendInterest",
-            "Simple Earn Locked Subscription": "CoinLend",
-            "Simple Earn Locked Redemption": "CoinLendEnd",
-            "Simple Earn Locked Rewards": "CoinLendInterest",
-            "Savings Distribution": "CoinLendInterest",
-            #
-            "BNB Vault Rewards": "CoinLendInterest",
-            "Launchpool Earnings Withdrawal": "CoinLendInterest",
-            #
-            "Commission History": "Commission",
-            "Commission Fee Shared With You": "Commission",
-            "Referrer rebates": "Commission",
-            "Referral Kickback": "Commission",
-            "Commission Rebate": "Commission",
-            # DeFi yield farming
-            "Liquid Swap add": "CoinLend",
-            "Liquid Swap remove": "CoinLendEnd",
-            "Liquid Swap rewards": "CoinLendInterest",
-            "Launchpool Interest": "CoinLendInterest",
-            #
-            "Super BNB Mining": "StakingInterest",
-            "POS savings interest": "StakingInterest",
-            "POS savings purchase": "Staking",
-            "POS savings redemption": "StakingEnd",
-            "ETH 2.0 Staking Rewards": "StakingInterest",
-            "Staking Purchase": "Staking",
-            "Staking Rewards": "StakingInterest",
-            "Staking Redemption": "StakingEnd",
-            #
-            "Fiat Deposit": "Deposit",
-            "Fiat Withdraw": "Withdrawal",
-            "Withdraw": "Withdrawal",
-            #
-            "Transaction Buy": "Buy",
-            "Transaction Spend": "Sell",
-            "Transaction Revenue": "Buy",
-            "Transaction Sold": "Sell",
-            "Transaction Fee": "Fee",
-            "Asset Recovery": "Sell",
-        }
+    def _get_bitget_record_types_from_env(self) -> Optional[list[str]]:
+        """Parse selected Bitget API record groups from environment.
 
-        with open(file_path, encoding="utf8") as f:
-            reader = csv.reader(f)
+        The env var `BITGET_API_RECORD_TYPES` accepts a comma separated list,
+        for example: `spot,future,margin,p2p,copy`.
+        """
+        configured = os.environ.get("BITGET_API_RECORD_TYPES", "").strip()
+        if not configured:
+            return None
+        return [value.strip() for value in configured.split(",") if value.strip()]
 
-            # Skip header.
-            next(reader)
+    def import_api_records(self) -> None:
+        """Import records from configured exchange APIs."""
+        if not (
+            config.BITGET_API_KEY
+            and config.BITGET_API_SECRET
+            and config.BITGET_API_PASSPHRASE
+        ):
+            return
 
-            for rowlist in reader:
-                if version == 1:
-                    _utc_time, account, operation, coin, _change, remark = rowlist
-                elif version in (2, 3):
-                    (
-                        _,
-                        _utc_time,
-                        account,
-                        operation,
-                        coin,
-                        _change,
-                        remark,
-                    ) = rowlist
-                else:
-                    log.error("File version not Supported " + str(file_path))
-                    raise NotImplementedError
-
-                row = reader.line_num
-
-                # Parse data.
-                if version in (1, 2):
-                    utc_time = datetime.datetime.strptime(
-                        _utc_time, "%Y-%m-%d %H:%M:%S"
-                    )
-                elif version == 3:
-                    utc_time = datetime.datetime.strptime(
-                        _utc_time, "%y-%m-%d %H:%M:%S"
-                    )
-                else:
-                    log.error("File version not Supported " + str(file_path))
-                    raise NotImplementedError
-
-                utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
-                change = misc.force_decimal(_change)
-                operation = operation_mapping.get(operation, operation)
-                if operation in (
-                    "The Easiest Way to Trade",
-                    "Small assets exchange BNB",
-                    "Small Assets Exchange BNB",
-                    "Transaction Related",
-                    "Large OTC trading",
-                    "Sell",
-                    "Buy",
-                    "Binance Convert",
-                ):
-                    operation = "Sell" if change < 0 else "Buy"
-
-                if operation == "Liquid Swap add/sell":
-                    operation = "CoinLendEnd" if change < 0 else "CoinLend"
-
-                if operation == "Commission" and account != "Spot":
-                    # All comissions will be handled the same way.
-                    # As of now, only Spot Binance Operations are supported,
-                    # so we have to change the account type to Spot.
-                    account = "Spot"
-
-                if (
-                    account in ("Spot", "P2P")
-                    and operation
-                    in (
-                        "transfer_in",
-                        "transfer_out",
-                    )
-                    or (
-                        account in ("Spot", "Funding")
-                        and operation == "Transfer Between Main and Funding Wallet"
-                    )
-                ):
-                    # Ignore transfers
-                    continue
-
-                change = abs(change)
-
-                # Validate data.
-                supported_account_types = ("Spot", "Savings", "Earn", "Funding")
-                assert account in supported_account_types, (
-                    f"Other types than {supported_account_types} are currently "
-                    f"not supported.  Given account type is `{account}`. "
-                    "Please create an Issue or PR."
-                )
-                assert operation
-                assert coin
-                assert change
-
-                if remark:
-                    # Ignore default remarks
-                    if remark in (
-                        "Withdraw fee is included",
-                        "Binance Earn",
-                        "Binance Pay",
-                        "Binance Launchpool",
-                    ) or remark.endswith(" to BNB"):
-                        remark = ""
-
-                    # Do not warn for specific remarks
-                    elif remark.startswith("Korrekturbuchung."):
-                        pass
-
-                    # Warn on other binance remarks, becuase all remarks should be some
-                    # unnecessary default text which we'd like to ignore
-                    else:
-                        log.warning(
-                            "I may have missed a remark in %s:%i: `%s`.",
-                            file_path,
-                            row,
-                            remark,
-                        )
-
-                self.append_operation(
-                    operation, utc_time, platform, change, coin, row, file_path, remark
-                )
-
-    def _read_binance_v2(self, file_path: Path) -> None:
-        self._read_binance(file_path=file_path, version=2)
-
-    def _read_binance_v3(self, file_path: Path) -> None:
-        self._read_binance(file_path=file_path, version=3)
-
-    def _read_coinbase(self, file_path: Path, version: int = 1) -> None:
-        platform = "coinbase"
-        operation_mapping = {
-            "Receive": "Deposit",
-            "Send": "Withdrawal",
-            "Coinbase Earn": "Buy",
-            "Learning Reward": "Buy",
-            "Rewards Income": "Staking",
-        }
-
-        with open(file_path, encoding="utf8") as f:
-            reader = csv.reader(f)
-
-            # Skip header.
-            try:
-                if version == 4:
-                    assert next(reader) == []
-                    assert next(reader) == ["Transactions"]
-                    assert next(reader)  # user row
-                else:
-                    assert next(reader)  # header line
-                    assert next(reader) == []
-                    assert next(reader) == []
-                    assert next(reader) == []
-                    assert next(reader) == ["Transactions"]
-                    assert next(reader)  # user row
-                    assert next(reader) == []
-
-                fields = next(reader)
-                num_columns = len(fields)
-                # Coinbase export format from 2023/2024 and ongoing
-                if num_columns == 11:
-                    assert version == 4
-                    assert fields == [
-                        "ID",
-                        "Timestamp",
-                        "Transaction Type",
-                        "Asset",
-                        "Quantity Transacted",
-                        "Price Currency",
-                        "Price at Transaction",
-                        "Subtotal",
-                        "Total (inclusive of fees and/or spread)",
-                        "Fees and/or Spread",
-                        "Notes",
-                    ]
-                # Coinbase export format from late 2021 until 2023/2024
-                elif num_columns == 10:
-                    assert fields == [
-                        "Timestamp",
-                        "Transaction Type",
-                        "Asset",
-                        "Quantity Transacted",
-                        "Spot Price Currency",
-                        "Spot Price at Transaction",
-                        "Subtotal",
-                        "Total (inclusive of fees)",
-                        "Fees",
-                        "Notes",
-                    ] or fields == [
-                        "Timestamp",
-                        "Transaction Type",
-                        "Asset",
-                        "Quantity Transacted",
-                        "Spot Price Currency",
-                        "Spot Price at Transaction",
-                        "Subtotal",
-                        "Total (inclusive of fees and/or spread)",
-                        "Fees and/or Spread",
-                        "Notes",
-                    ]
-                # Coinbase export format from mid 2021 and before
-                elif num_columns == 9:
-                    assert fields == [
-                        "Timestamp",
-                        "Transaction Type",
-                        "Asset",
-                        "Quantity Transacted",
-                        "EUR Spot Price at Transaction",
-                        "EUR Subtotal",
-                        "EUR Total (inclusive of fees)",
-                        "EUR Fees",
-                        "Notes",
-                    ]
-                else:
-                    raise RuntimeError(
-                        "Unknown Coinbase format: "
-                        "Number of rows do not match known versions: "
-                        f"{file_path}."
-                    )
-            except AssertionError as e:
-                msg = (
-                    "Unable to read coinbase file: Malformed header. "
-                    f"Skipping {file_path}."
-                )
-                e.args += (msg,)
-                log.exception(e)
-                return
-
-            for columns in reader:
-
-                # Coinbase export format from 2023/2024 and ongoing
-                if num_columns == 11:
-                    (
-                        _id,
-                        _utc_time,
-                        operation,
-                        coin,
-                        _change,
-                        _currency_spot,
-                        _eur_spot,
-                        _eur_subtotal,
-                        _eur_total,
-                        _eur_fee,
-                        remark,
-                    ) = columns
-                    _eur_spot = _eur_spot.replace("€", "")
-                    _eur_subtotal = _eur_subtotal.replace("€", "")
-                    _eur_total = _eur_total.replace("€", "")
-                    _eur_fee = _eur_fee.replace("€", "")
-
-                # Coinbase export format from late 2021 until 2023/2024
-                elif num_columns == 10:
-                    (
-                        _utc_time,
-                        operation,
-                        coin,
-                        _change,
-                        _currency_spot,
-                        _eur_spot,
-                        _eur_subtotal,
-                        _eur_total,
-                        _eur_fee,
-                        remark,
-                    ) = columns
-
-                # Coinbase export format from mid 2021 and before
-                elif num_columns == 9:
-                    (
-                        _utc_time,
-                        operation,
-                        coin,
-                        _change,
-                        _eur_spot,  # Rounded price from CSV, unused
-                        _eur_subtotal,  # Cost without fees
-                        _eur_total,
-                        _eur_fee,
-                        remark,
-                    ) = columns
-                    _currency_spot = "EUR"
-
-                row = reader.line_num
-
-                # Parse data.
-                if version == 4:
-                    utc_time = datetime.datetime.strptime(
-                        _utc_time, "%Y-%m-%d %H:%M:%S UTC"
-                    )
-                else:
-                    utc_time = datetime.datetime.strptime(
-                        _utc_time, "%Y-%m-%dT%H:%M:%SZ"
-                    )
-                utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
-                operation = operation_mapping.get(operation, operation)
-                change = misc.force_decimal(_change)
-                # `eur_subtotal` and `eur_fee` are None for withdrawals.
-                eur_subtotal = misc.xdecimal(_eur_subtotal)
-                if version == 4:
-                    change = abs(change)
-                    eur_subtotal = abs(eur_subtotal) if eur_subtotal else None
-                if eur_subtotal is None:
-                    # Cost without fees from CSV is missing. This can happen for
-                    # old transactions (<2018), event though something was bought.
-                    # Calculate the `eur_subtotal` from `eur_spot`.
-                    if eur_spot := misc.xdecimal(_eur_spot):
-                        eur_subtotal = eur_spot * change
-                eur_fee = misc.xdecimal(_eur_fee)
-
-                # Validate data.
-                assert operation
-                assert coin
-                assert change
-                assert _currency_spot == "EUR"
-
-                # Calculated price
-                if eur_subtotal:
-                    assert isinstance(eur_subtotal, decimal.Decimal)
-                    price_calc = eur_subtotal / change
-                    # Save price in our local database for later.
-                    set_price_db(platform, coin, "EUR", utc_time, price_calc)
-
-                if operation == "Convert":
-                    # Parse change + coin from remark, which is
-                    # in format "Converted 0,123 ETH to 0,456 BTC".
-                    match = re.match(
-                        r"^Converted [0-9,\.]+ [A-Z]+ to "
-                        r"(?P<change>[0-9,\.]+) (?P<coin>[A-Z]+)$",
-                        remark,
-                    )
-                    assert match
-
-                    _convert_change = match.group("change").replace(",", ".")
-                    convert_change = misc.force_decimal(_convert_change)
-                    convert_coin = match.group("coin")
-
-                    eur_total = misc.force_decimal(_eur_total)
-                    if version == 4:
-                        eur_total = abs(eur_total)
-                    convert_eur_spot = eur_total / convert_change
-
-                    self.append_operation(
-                        "Sell", utc_time, platform, change, coin, row, file_path
-                    )
-                    self.append_operation(
-                        "Buy",
-                        utc_time,
-                        platform,
-                        convert_change,
-                        convert_coin,
-                        row,
-                        file_path,
-                    )
-
-                    # Save convert price in local database, too.
-                    set_price_db(
-                        platform, convert_coin, "EUR", utc_time, convert_eur_spot
-                    )
-                else:
-                    # Add operation normally to the list.
-                    self.append_operation(
-                        operation, utc_time, platform, change, coin, row, file_path
-                    )
-
-                    # If it's a sell, add the corresponding buy to complement
-                    # the trading pair.
-                    if operation == "Sell":
-                        assert isinstance(eur_subtotal, decimal.Decimal)
-                        self.append_operation(
-                            "Buy",
-                            utc_time,
-                            platform,
-                            eur_subtotal,
-                            "EUR",
-                            row,
-                            file_path,
-                        )
-                    # If it's a buy, add the corresponding sell to complement
-                    # the trading pair.
-                    elif operation == "Buy":
-                        assert isinstance(eur_subtotal, decimal.Decimal)
-                        self.append_operation(
-                            "Sell",
-                            utc_time,
-                            platform,
-                            eur_subtotal,
-                            "EUR",
-                            row,
-                            file_path,
-                        )
-
-                # Add paid fees to the list.
-                if eur_fee:
-                    assert isinstance(eur_fee, decimal.Decimal)
-                    self.append_operation(
-                        "Fee", utc_time, platform, eur_fee, "EUR", row, file_path
-                    )
-
-    def _read_coinbase_v2(self, file_path: Path) -> None:
-        self._read_coinbase(file_path=file_path, version=2)
-
-    def _read_coinbase_v3(self, file_path: Path) -> None:
-        self._read_coinbase(file_path=file_path, version=3)
-
-    def _read_coinbase_v4(self, file_path: Path) -> None:
-        self._read_coinbase(file_path=file_path, version=4)
-
-    def _read_coinbase_pro(self, file_path: Path) -> None:
-        platform = "coinbase_pro"
-        operation_mapping = {
-            "BUY": "Buy",
-            "SELL": "Sell",
-        }
-
-        with open(file_path, encoding="utf8") as f:
-            reader = csv.reader(f)
-
-            # Skip header.
-            next(reader)
-
-            for (
-                portfolio,
-                trade_id,
-                product,
-                operation,
-                _utc_time,
-                _size,
-                size_unit,
-                _price,
-                _fee,
-                total,
-                price_fee_total_unit,
-            ) in reader:
-                row = reader.line_num
-
-                # Parse data.
-                utc_time = datetime.datetime.strptime(
-                    _utc_time, "%Y-%m-%dT%H:%M:%S.%fZ"
-                )
-                utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
-                operation = operation_mapping.get(operation, operation)
-                size = misc.force_decimal(_size)
-                price = misc.force_decimal(_price)
-                fee = misc.xdecimal(_fee)
-                total_price = size * price
-
-                # Unused variables.
-                del portfolio
-                del trade_id
-                del product
-                del total
-
-                # Validate data.
-                assert operation
-                assert size
-                assert size_unit
-                assert price_fee_total_unit
-
-                self.append_operation(
-                    operation, utc_time, platform, size, size_unit, row, file_path
-                )
-
-                if operation == "Sell":
-                    self.append_operation(
-                        "Buy",
-                        utc_time,
-                        platform,
-                        total_price,
-                        price_fee_total_unit,
-                        row,
-                        file_path,
-                    )
-                elif operation == "Buy":
-                    self.append_operation(
-                        "Sell",
-                        utc_time,
-                        platform,
-                        total_price,
-                        price_fee_total_unit,
-                        row,
-                        file_path,
-                    )
-                if fee:
-                    self.append_operation(
-                        "Fee",
-                        utc_time,
-                        platform,
-                        fee,
-                        price_fee_total_unit,
-                        row,
-                        file_path,
-                    )
-
-    def _read_kraken_trades(self, file_path: Path) -> None:
-        log.error(
-            f"{file_path.name}: "
-            "Looks like this is a Kraken 'Trades' history, "
-            "but we need the 'Ledgers' history. "
-            "(See: Wiki - Exchange Kraken)"
+        record_types = self._get_bitget_record_types_from_env()
+        bitget_reader = BitgetApiReader()
+        log.info("Importing Bitget records from API for tax year %s.", config.TAX_YEAR)
+        bitget_reader.import_tax_year_records(
+            self,
+            config.TAX_YEAR,
+            record_types=record_types,
         )
 
-    def _read_kraken_ledgers(self, file_path: Path) -> None:
-        fee_sign_of_file: Optional[bool] = None
-
-        platform = "kraken"
-        operation_mapping = {
-            "spend": "Sell",  # Sell ordered via 'Buy Crypto' button
-            "receive": "Buy",  # Buy ordered via 'Buy Crypto' button
-            "reward": "StakingInterest",
-            "staking": "StakingInterest",
-            "deposit": "Deposit",
-            "withdrawal": "Withdrawal",
-        }
-
-        with open(file_path, encoding="utf8") as f:
-            reader = csv.reader(f)
-
-            # Skip header.
-            next(reader)
-
-            for columns in reader:
-
-                num_columns = len(columns)
-                # Kraken ledgers export format from October 2020 and ongoing
-                if num_columns == 10:
-                    (
-                        txid,
-                        refid,
-                        _utc_time,
-                        _type,
-                        subtype,
-                        aclass,
-                        _asset,
-                        _amount,
-                        _fee,
-                        balance,
-                    ) = columns
-
-                # Kraken ledgers export format from September 2020 and before
-                elif num_columns == 9:
-                    (
-                        txid,
-                        refid,
-                        _utc_time,
-                        _type,
-                        aclass,
-                        _asset,
-                        _amount,
-                        _fee,
-                        balance,
-                    ) = columns
-                else:
-                    log.error(
-                        f"{file_path}: Unknown Kraken ledgers format: "
-                        "Number of rows do not match known versions."
-                    )
-                    raise RuntimeError
-
-                row = reader.line_num
-
-                # Parse data.
-                utc_time = datetime.datetime.strptime(_utc_time, "%Y-%m-%d %H:%M:%S")
-                utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
-                change = misc.force_decimal(_amount)
-                # remove the appended .S for staked assets
-                _asset = _asset.removesuffix(".S")
-                coin = kraken_asset_map.get(_asset, _asset)
-                fee = misc.force_decimal(_fee)
-                # An older implementation expected always positive fees
-                # It seems that newer ledger files can have negative fee
-                # values instead.
-                if fee != 0:
-                    # As soon as the first fee!=0 appears, check whether the
-                    # fees are positive or negative. All fees in the file
-                    # should have the same sign.
-                    if fee_sign_of_file is None:
-                        fee_sign_of_file = fee < 0
-                    # Adjust the fee sign so that fees are always positive.
-                    if fee_sign_of_file is True:
-                        fee *= -1
-                    if fee < 0:
-                        log.error(
-                            f"{file_path} row {row}: Unexpected fee sign. "
-                            "All fees should have the same sign. "
-                            "Please create an Issue or PR."
-                        )
-                        raise RuntimeError
-
-                operation = operation_mapping.get(_type)
-                if operation is None:
-                    if _type == "trade":
-                        operation = "Sell" if change < 0 else "Buy"
-                    elif _type in ["margin trade", "rollover", "settled", "margin"]:
-                        log.error(
-                            f"{file_path} row {row}: Margin trading is currently not "
-                            "supported. Please create an Issue or PR."
-                        )
-                        raise RuntimeError
-                    elif _type == "transfer":
-                        if num_columns == 9:
-                            # for backwards compatibility assume Airdrop for staking
-                            log.warning(
-                                f"{file_path} row {row}: Staking is not supported for"
-                                "old Kraken ledger formats. "
-                                "Please create an Issue or PR."
-                            )
-                            operation = "Airdrop"
-                        elif subtype == "stakingfromspot":
-                            operation = "Staking"
-                        elif subtype == "stakingtospot":
-                            operation = "StakingEnd"
-                        elif subtype in ["spottostaking", "spotfromstaking"]:
-                            # duplicate entries for staking actions
-                            continue
-                        else:
-                            log.error(
-                                f"{file_path} row {row}: Order subtype '{subtype}' is "
-                                "currently not supported. Please create an Issue or PR."
-                            )
-                            raise RuntimeError
-                    else:
-                        log.error(
-                            f"{file_path} row {row}: Other order type '{_type}' is "
-                            "currently not supported. Please create an Issue or PR."
-                        )
-                        raise RuntimeError
-                change = abs(change)
-
-                # Validate data.
-                assert operation
-                assert coin
-                assert change
-
-                # Skip duplicate entries for deposits / withdrawals and additional
-                # deposit / withdrawal lines for staking / unstaking / staking reward
-                # actions.
-                # The second deposit and the first withdrawal need to be considered,
-                # since these are the points in time where the user actually has the
-                # assets at their disposal. The first deposit and second withdrawal are
-                # in the public trade history and are skipped.
-                # For staking / unstaking / staking reward actions, deposits /
-                # withdrawals only occur once and will be ignored.
-                # The "appended" flag stores if an operation for a given refid has
-                # already been appended to the operations list:
-                # == None: Initial value (first occurrence)
-                # == False: No operation has been appended (second occurrence)
-                # == True: Operation has already been appended, this should not happen
-                if operation in ["Deposit", "Withdrawal"]:
-                    # First, create the operations
-                    op = self._create_operation(
-                        operation, utc_time, platform, change, coin, row, file_path
-                    )
-                    op_fee = None
-                    if fee != 0:
-                        op_fee = self._create_operation(
-                            "Fee", utc_time, platform, fee, coin, row, file_path
-                        )
-                    if (op is None) or (fee != 0 and op_fee is None):
-                        # Ignore on this run - operation could not be created
-                        # This might lead to unexpected errors while parsing the
-                        # rest of the file...
-                        # It'll be fixed, when the _missing_operation_mappings
-                        # aren't missing.
-                        pass
-                    # If this is the first occurrence, set the "appended" flag to false
-                    # and don't append the operation to the list. Instead, store the
-                    # data for verifying or appending it later.
-                    elif self.kraken_held_ops[refid]["appended"] is None:
-                        self.kraken_held_ops[refid]["appended"] = False
-                        self.kraken_held_ops[refid]["operation"] = op
-                        self.kraken_held_ops[refid]["operation_fee"] = op_fee
-                    # If this is the second occurrence, append a new operation, set the
-                    # "appended" flag to True and assert that the data of this operation
-                    # agrees with the data of the first occurrence.
-                    elif self.kraken_held_ops[refid]["appended"] is False:
-                        self.kraken_held_ops[refid]["appended"] = True
-                        try:
-                            # Make sure, that the found operations with the
-                            # same refid  have the same operation type, amount
-                            # of change and same coin.
-                            assert isinstance(
-                                op, type(self.kraken_held_ops[refid]["operation"])
-                            ), (
-                                "operation "
-                                f"({op.type_name} != "
-                                f'{self.kraken_held_ops[refid]["operation"].type_name})'
-                            )
-                            assert (
-                                op.change
-                                == self.kraken_held_ops[refid]["operation"].change
-                            ), (
-                                "change "
-                                f"({op.change} != "
-                                f'{self.kraken_held_ops[refid]["operation"].change})'
-                            )
-                            assert (
-                                op.coin == self.kraken_held_ops[refid]["operation"].coin
-                            ), (
-                                "coin "
-                                f"({op.coin} != "
-                                f'{self.kraken_held_ops[refid]["operation"].coin})'
-                            )
-                        except AssertionError as e:
-                            # Row is internally saved as list[int].
-                            first_row = self.kraken_held_ops[refid]["operation"].line[0]
-                            log.error(
-                                "Two internal kraken operations matched by the "
-                                f"same {refid=} don't have the same {e}.\n"
-                                "CoinTaxman expects, that these two operations "
-                                "have the same type of operation, amount of "
-                                "change and the same coin.\n"
-                                f"See {file_path} in row {first_row} and "
-                                f"{row}.\n"
-                                "Please create an Issue or PR."
-                            )
-                            raise RuntimeError
-                        # For deposits, this is all we need to do before appending the
-                        # operation. For withdrawals, we need to append the first
-                        # withdrawal as soon as the second withdrawal occurs. Therefore,
-                        # overwrite the operation with the stored first withdrawal.
-                        if operation == "Withdrawal":
-                            op = self.kraken_held_ops[refid]["operation"]
-                            op_fee = self.kraken_held_ops[refid]["operation_fee"]
-                        # Finally, append the operations and delete the stored
-                        # operations to reduce memory consumption
-                        self._append_operation(op)
-                        if op_fee:
-                            self._append_operation(op_fee)
-                        del self.kraken_held_ops[refid]["operation"]
-                        del self.kraken_held_ops[refid]["operation_fee"]
-                    # If an operation with the same refid has been already appended,
-                    # this is the third occurrence. Throw an error if this happens.
-                    elif self.kraken_held_ops[refid]["appended"] is True:
-                        log.error(
-                            f"{file_path} row {row}: More than two entries with refid "
-                            f"{refid} should not exist ({operation}). "
-                            "Please create an Issue or PR."
-                        )
-                        raise RuntimeError
-                    # This should never happen
-                    else:
-                        log.error(
-                            f"{file_path} row {row}: Unknown value for appended "
-                            f"operation flag {self.kraken_held_ops[refid]['appended']}."
-                            "Please create an Issue or PR."
-                        )
-                        raise TypeError
-
-                # for all other operation types
-                else:
-                    self.append_operation(
-                        operation, utc_time, platform, change, coin, row, file_path
-                    )
-                    if fee != 0:
-                        self.append_operation(
-                            "Fee", utc_time, platform, fee, coin, row, file_path
-                        )
-                    if operation == "StakingInterest":
-                        # For Kraken, the rewarded coins are added to the staked
-                        # portfolio. TODO (for MULTI_DEPOT only): Directly add the
-                        # rewarded coins to the staking depot (not like here with the
-                        # detour of adding it to spot and then staking the same amount)
-                        self.append_operation(
-                            "Staking", utc_time, platform, change, coin, row, file_path
-                        )
-
-    def _read_kraken_ledgers_old(self, file_path: Path) -> None:
-        self._read_kraken_ledgers(file_path)
-
-    def _read_bitpanda_pro_trades(self, file_path: Path) -> None:
-        """Reads a trade statement from Bitpanda Pro.
-
-        Args:
-            file_path (Path): Path to Bitpanda trade history.
-        """
-
-        platform = "bitpanda_pro"
-        with open(file_path, encoding="utf8") as f:
-            reader = csv.reader(f)
-
-            # skip header
-            next(reader)
-            line = next(reader)
-
-            transaction_file_warn = (
-                f"{file_path} looks like a Bitpanda transaction file."
-                " Skipping. Please download the trade history instead."
-            )
-
-            # for transactions, it's currently written "id" (small)
-            if line[0].startswith("Account id :"):
-                log.warning(transaction_file_warn)
-                return
-
-            assert line[0].startswith("Account ID:")
-            line = next(reader)
-            # empty line - still keep this check in case Bitpanda changes the
-            # transaction file to match the trade header (casing)
-            if not line:
-                log.warning(transaction_file_warn)
-                return
-
-            elif line[0] != "Bitpanda Pro trade history":
-                log.warning(
-                    f"{file_path} doesn't look like a Bitpanda trade file. Skipping."
-                )
-                return
-
-            line = next(reader)
-            assert line in [
-                [
-                    "Order ID",
-                    "Trade ID",
-                    "Type",
-                    "Market",
-                    "Amount",
-                    "Amount Currency",
-                    "Price",
-                    "Price Currency",
-                    "Fee",
-                    "Fee Currency",
-                    "Time (UTC)",
-                ],
-                [
-                    "Order ID",
-                    "Trade ID",
-                    "Type",
-                    "Market",
-                    "Amount",
-                    "Amount Currency",
-                    "Price",
-                    "Price Currency",
-                    "Fee",
-                    "Fee Currency",
-                    "Time (UTC)",
-                    "BEST_EUR Rate",
-                ],
-            ]
-
-            for current_line in reader:
-                if len(current_line) == 11:
-                    (
-                        _order_id,
-                        _trace_id,
-                        operation,
-                        trade_pair,
-                        amount,
-                        amount_currency,
-                        _price,
-                        price_currency,
-                        fee,
-                        fee_currency,
-                        _utc_time,
-                    ) = current_line
-                    best_price = None
-                elif len(current_line) == 12:
-                    (
-                        _order_id,
-                        _trace_id,
-                        operation,
-                        trade_pair,
-                        amount,
-                        amount_currency,
-                        _price,
-                        price_currency,
-                        fee,
-                        fee_currency,
-                        _utc_time,
-                        best_price,
-                    ) = current_line
-                else:
-                    raise NotImplementedError
-
-                row = reader.line_num
-
-                # trade pair is of form e.g. BTC_EUR
-                assert [amount_currency, price_currency] == trade_pair.split("_")
-
-                # At the time of writing (2021-05-02),
-                # there were only these two operations
-                assert operation in ["BUY", "SELL"], "Unsupported operation"
-
-                change = misc.force_decimal(amount)
-                assert change > 0, "Unexpected value for 'Amount' column"
-
-                # see _get_price_bitpanda_pro in price_data.py
-                assert price_currency == "EUR", (
-                    "Only Euro is supported as 'price' currency, "
-                    "since price fetching is not fully implemented yet."
-                )
-
-                # sanity checks
-                assert (
-                    fee_currency == "BEST"
-                    or (operation == "SELL" and fee_currency == price_currency)
-                    or (operation == "BUY" and fee_currency == amount_currency)
-                ), "Invalid fee currency"
-
-                utc_time = misc.parse_iso_timestamp(_utc_time)
-
-                coin = amount_currency
-
-                self.append_operation(
-                    operation.title(), utc_time, platform, change, coin, row, file_path
-                )
-
-                # Save price in our local database for later.
-                price = misc.force_decimal(_price)
-                set_price_db(platform, coin, price_currency, utc_time, price)
-                if best_price:
-                    set_price_db(
-                        platform,
-                        "BEST",
-                        "EUR",
-                        utc_time,
-                        misc.force_decimal(best_price),
-                    )
-
-                self.append_operation(
-                    "Fee",
-                    utc_time,
-                    platform,
-                    misc.force_decimal(fee),
-                    fee_currency,
-                    row,
-                    file_path,
-                )
-
-    def _read_bitpanda(self, file_path: Path) -> None:
-        """Reads a trade statement from Bitpanda.
-
-        Args:
-            file_path (Path): Path to Bitpanda trade history.
-        """
-
-        platform = "bitpanda"
-
-        operation_mapping = {
-            "deposit": "Deposit",
-            "withdrawal": "Withdrawal",
-            "buy": "Buy",
-            "sell": "Sell",
-        }
-
-        with open(file_path, encoding="utf8") as f:
-            reader = csv.reader(f)
-            line = next(reader)
-
-            # skip header, there are multiple lines
-            while line != [
-                "Transaction ID",
-                "Timestamp",
-                "Transaction Type",
-                "In/Out",
-                "Amount Fiat",
-                "Fiat",
-                "Amount Asset",
-                "Asset",
-                "Asset market price",
-                "Asset market price currency",
-                "Asset class",
-                "Product ID",
-                "Fee",
-                "Fee asset",
-                "Spread",
-                "Spread Currency",
-            ]:
-                try:
-                    line = next(reader)
-                except StopIteration:
-                    log.error(f"Expected header not found in file {file_path}")
-                    raise RuntimeError
-
-            for (
-                _tx_id,
-                csv_utc_time,
-                operation,
-                _inout,
-                amount_fiat,
-                fiat,
-                amount_asset,
-                asset,
-                _asset_price,
-                asset_price_currency,
-                asset_class,
-                _product_id,
-                fee,
-                fee_currency,
-                _spread,
-                _spread_currency,
-            ) in reader:
-                row = reader.line_num
-
-                # make RFC3339 timestamp ISO 8601 parseable
-                if csv_utc_time[-1] == "Z":
-                    csv_utc_time = csv_utc_time[:-1] + "+00:00"
-
-                # timezone information is already taken care of with this
-                utc_time = datetime.datetime.fromisoformat(csv_utc_time)
-
-                # transfer ops seem to be akin to airdrops. In my case I got a
-                # CocaCola transfer, which I don't want to track. Would need to
-                # be implemented if need be.
-                if operation == "transfer":
-                    log.warning(
-                        f"'Transfer' operations are not "
-                        f"implemented, skipping row {row} of file {file_path}"
-                    )
-                    continue
-
-                # fail for unknown ops
-                try:
-                    operation = operation_mapping[operation]
-                except KeyError:
-                    log.error(
-                        f"Unsupported operation '{operation}' "
-                        f"in row {row} of file {file_path}"
-                    )
-                    raise RuntimeError
-
-                if operation in ["Deposit", "Withdrawal"]:
-                    if asset_class == "Fiat":
-                        change = misc.force_decimal(amount_fiat)
-                        if fiat != asset:
-                            log.error(
-                                f"Asset {asset} should be {fiat} in "
-                                f"row {row} of file {file_path}"
-                            )
-                            raise RuntimeError
-                    elif asset_class == "Cryptocurrency":
-                        change = misc.force_decimal(amount_asset)
-                    else:
-                        log.error(
-                            f"Unknown asset class {asset_class}: Should be 'Fiat' or "
-                            f"'Cryptocurrency' in row {row} of file {file_path}"
-                        )
-                        raise RuntimeError
-                elif operation in ["Buy", "Sell"]:
-                    if asset_price_currency != config.FIAT:
-                        log.error(
-                            f"Only {config.FIAT} is supported as "
-                            "'Asset market price currency', since price fetching for "
-                            "fiat currencies is not fully implemented yet."
-                        )
-                        raise RuntimeError
-                    change = misc.force_decimal(amount_asset)
-                    change_fiat = misc.force_decimal(amount_fiat)
-                    # Save price in our local database for later.
-                    # Rounded price in CSV
-                    # price = misc.force_decimal(asset_price)
-                    # Calculated price
-                    price_calc = change_fiat / change
-                    set_price_db(platform, asset, config.FIAT, utc_time, price_calc)
-
-                if change < 0:
-                    log.error(
-                        f"Unexpected value for the amount '{change}' of this "
-                        f"{operation} in row {row} of file {file_path}"
-                    )
-                    raise RuntimeError
-
-                self.append_operation(
-                    operation, utc_time, platform, change, asset, row, file_path
-                )
-
-                # add buy / sell operation for fiat currency
-                if operation == "Buy":
-                    self.append_operation(
-                        "Sell",
-                        utc_time,
-                        platform,
-                        change_fiat,
-                        config.FIAT,
-                        row,
-                        file_path,
-                    )
-                elif operation == "Sell":
-                    self.append_operation(
-                        "Buy",
-                        utc_time,
-                        platform,
-                        change_fiat,
-                        config.FIAT,
-                        row,
-                        file_path,
-                    )
-
-                if fee != "-":
-                    self.append_operation(
-                        "Fee",
-                        utc_time,
-                        platform,
-                        misc.force_decimal(fee),
-                        fee_currency,
-                        row,
-                        file_path,
-                    )
-
-    def _read_custom_eur(self, file_path: Path) -> None:
-        fiat = "EUR"
-
-        with open(file_path, encoding="utf8") as f:
-            reader = csv.reader(f)
-
-            # Skip header.
-            next(reader)
-
-            for line in reader:
-                row = reader.line_num
-
-                # Skip empty lines.
-                if not line:
-                    continue
-
-                (
-                    operation_type,
-                    _buy_quantity,
-                    buy_asset,
-                    _buy_value_in_fiat,
-                    _sell_quantity,
-                    sell_asset,
-                    _sell_value_in_fiat,
-                    _fee_quantity,
-                    fee_asset,
-                    _fee_value_in_fiat,
-                    platform,
-                    _timestamp,
-                    remark,
-                ) = line
-
-                # Parse data.
-                try:
-                    utc_time = datetime.datetime.strptime(
-                        _timestamp, "%m/%d/%Y %H:%M:%S"
-                    )
-                except ValueError:
-                    utc_time = datetime.datetime.strptime(
-                        _timestamp, "%m/%d/%Y %H:%M:%S.%f"
-                    )
-                utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
-                buy_quantity = misc.xdecimal(_buy_quantity)
-                buy_value_in_fiat = misc.xdecimal(_buy_value_in_fiat)
-                sell_quantity = misc.xdecimal(_sell_quantity)
-                sell_value_in_fiat = misc.xdecimal(_sell_value_in_fiat)
-                fee_quantity = misc.xdecimal(_fee_quantity)
-                fee_value_in_fiat = misc.xdecimal(_fee_value_in_fiat)
-
-                # ... and define which operation to add.
-                add_operations: list[
-                    tuple[str, decimal.Decimal, str, Optional[decimal.Decimal]]
-                ] = []
-                if operation_type != "Withdrawal":
-                    assert buy_quantity
-                    assert buy_asset
-
-                    op = "Buy" if operation_type == "Trade" else operation_type
-                    add_operations.append(
-                        (op, buy_quantity, buy_asset, buy_value_in_fiat)
-                    )
-
-                if operation_type not in ("Deposit", "Airdrop"):
-                    assert sell_quantity
-                    assert sell_asset
-
-                    op = "Sell" if operation_type == "Trade" else operation_type
-                    add_operations.append(
-                        (op, sell_quantity, sell_asset, sell_value_in_fiat)
-                    )
-
-                if fee_asset:
-                    assert fee_quantity
-                    assert fee_value_in_fiat
-
-                    add_operations.append(
-                        ("Fee", fee_quantity, fee_asset, fee_value_in_fiat)
-                    )
-
-                for operation, change, coin, change_in_fiat in add_operations:
-                    # Add operation to book.
-                    self.append_operation(
-                        operation,
-                        utc_time,
-                        platform,
-                        change,
-                        coin,
-                        row,
-                        file_path,
-                        remark=remark,
-                    )
-                    # Add price from csv.
-                    if change_in_fiat and coin != fiat:
-                        price = change_in_fiat / change
-                        log.debug(
-                            f"Adding {fiat}/{coin} price from custom CSV: "
-                            f"{price} for {platform} at {utc_time}"
-                        )
-                        set_price_db(
-                            platform,
-                            coin,
-                            fiat,
-                            utc_time,
-                            price,
-                            overwrite=True,
-                        )
-
-    def detect_exchange(self, file_path: Path) -> Optional[str]:
-        if file_path.suffix == ".csv":
-
-            expected_header_row = {
-                "binance": 1,
-                "binance_v2": 1,
-                "binance_v3": 1,
-                "coinbase": 1,
-                "coinbase_v2": 1,
-                "coinbase_v3": 1,
-                "coinbase_v4": 4,
-                "coinbase_pro": 1,
-                "kraken_ledgers_old": 1,
-                "kraken_ledgers": 1,
-                "kraken_trades": 1,
-                "bitpanda_pro_trades": 4,
-                "bitpanda": 7,
-                "custom_eur": 1,
-            }
-
-            expected_headers = {
-                "binance": [
-                    "UTC_Time",
-                    "Account",
-                    "Operation",
-                    "Coin",
-                    "Change",
-                    "Remark",
-                ],
-                "binance_v2": [
-                    "User_ID",
-                    "UTC_Time",
-                    "Account",
-                    "Operation",
-                    "Coin",
-                    "Change",
-                    "Remark",
-                ],
-                "binance_v3": [
-                    "\ufeffUser ID",
-                    "Time",
-                    "Account",
-                    "Operation",
-                    "Coin",
-                    "Change",
-                    "Remark",
-                ],
-                "coinbase": [
-                    "You can use this transaction report to inform your "
-                    "likely tax obligations. For US customers, Sells, "
-                    "Converts, and Rewards Income, and Coinbase Earn "
-                    "transactions are taxable events. For final tax "
-                    "obligations, please consult your tax advisor."
-                ],
-                "coinbase_v2": [
-                    "You can use this transaction report to inform your "
-                    "likely tax obligations. For US customers, Sells, "
-                    "Converts, Rewards Income, Coinbase Earn "
-                    "transactions, and Donations are taxable events. "
-                    "For final tax obligations, please consult your tax advisor."
-                ],
-                "coinbase_v3": [
-                    "You can use this transaction report to inform your "
-                    "likely tax obligations. For US customers, Sells, "
-                    "Converts, Rewards Income, Learning Rewards, "
-                    "and Donations are taxable events. "
-                    "For final tax obligations, please consult your tax advisor."
-                ],
-                "coinbase_v4": [
-                    "ID",
-                    "Timestamp",
-                    "Transaction Type",
-                    "Asset",
-                    "Quantity Transacted",
-                    "Price Currency",
-                    "Price at Transaction",
-                    "Subtotal",
-                    "Total (inclusive of fees and/or spread)",
-                    "Fees and/or Spread",
-                    "Notes",
-                ],
-                "coinbase_pro": [
-                    "portfolio",
-                    "trade id",
-                    "product",
-                    "side",
-                    "created at",
-                    "size",
-                    "size unit",
-                    "price",
-                    "fee",
-                    "total",
-                    "price/fee/total unit",
-                ],
-                "kraken_ledgers_old": [
-                    "txid",
-                    "refid",
-                    "time",
-                    "type",
-                    "aclass",
-                    "asset",
-                    "amount",
-                    "fee",
-                    "balance",
-                ],
-                "kraken_ledgers": [
-                    "txid",
-                    "refid",
-                    "time",
-                    "type",
-                    "subtype",
-                    "aclass",
-                    "asset",
-                    "amount",
-                    "fee",
-                    "balance",
-                ],
-                "kraken_trades": [
-                    "txid",
-                    "ordertxid",
-                    "pair",
-                    "time",
-                    "type",
-                    "ordertype",
-                    "price",
-                    "cost",
-                    "fee",
-                    "vol",
-                    "margin",
-                    "misc",
-                    "ledgers",
-                ],
-                "bitpanda_pro_trades": [
-                    "Order ID",
-                    "Trade ID",
-                    "Type",
-                    "Market",
-                    "Amount",
-                    "Amount Currency",
-                    "Price",
-                    "Price Currency",
-                    "Fee",
-                    "Fee Currency",
-                    "Time (UTC)",
-                ],
-                "bitpanda": [
-                    "Transaction ID",
-                    "Timestamp",
-                    "Transaction Type",
-                    "In/Out",
-                    "Amount Fiat",
-                    "Fiat",
-                    "Amount Asset",
-                    "Asset",
-                    "Asset market price",
-                    "Asset market price currency",
-                    "Asset class",
-                    "Product ID",
-                    "Fee",
-                    "Fee asset",
-                    "Spread",
-                    "Spread Currency",
-                ],
-                "custom_eur": [
-                    "Type",
-                    "Buy Quantity",
-                    "Buy Asset",
-                    "Buy Value in EUR",
-                    "Sell Quantity",
-                    "Sell Asset",
-                    "Sell Value in EUR",
-                    "Fee Quantity",
-                    "Fee Asset",
-                    "Fee Value in EUR",
-                    "Wallet",
-                    "Timestamp UTC",
-                    "Note",
-                ],
-            }
-            with open(file_path, encoding="utf8") as f:
-                reader = csv.reader(f)
-                # check all potential headers at their expected header row
-                for exchange, expected in expected_headers.items():
-                    header_row_num = expected_header_row[exchange]
-                    # iterate since header row may appear earlier
-                    for _ in range(header_row_num):
-                        header = next(reader, None)
-                        if header == expected:
-                            return exchange
-                    # rewind the file after each header check
-                    f.seek(0)
-
-        return None
+    def detect_exchange(self, file_path: Path) -> Optional[ExchangeReader]:
+        return detect_exchange_reader(file_path)
 
     def resolve_deposits(self) -> None:
         """Match withdrawals to deposits.
@@ -1600,10 +188,18 @@ class Book:
             key=lambda op: (isinstance(op, tr.Deposit), op.utc_time),
         )
 
+        tolerance = decimal.Decimal("0.99")
+
         def is_match(withdrawal: tr.Withdrawal, deposit: tr.Deposit) -> bool:
+            # A deposit is considered a match for a withdrawal when the
+            # coins are identical and the deposit amount is close to the
+            # withdrawal amount.
+            #
+            # The tolerance accounts for small differences caused by fees,
+            # rounding, or statement rounding conventions.
             return (
                 withdrawal.coin == deposit.coin
-                and withdrawal.change * decimal.Decimal(0.99)
+                and withdrawal.change * tolerance
                 <= deposit.change
                 <= withdrawal.change
             )
@@ -1626,6 +222,16 @@ class Book:
                     # If multiple are found, take the first (regarding utc_time).
                     match = next(w for w in withdrawal_queue if is_match(w, op))
                 except StopIteration:
+                    log.debug(
+                        "No withdrawal matched deposit %s %s at %s on %s. "
+                        "Queue length=%s coins=%s",
+                        op.change,
+                        op.coin,
+                        op.utc_time,
+                        op.platform,
+                        len(withdrawal_queue),
+                        sorted({w.coin for w in withdrawal_queue}),
+                    )
                     unmatched_deposits.append(op)
                 else:
                     # Match the found withdrawal and remove it from queue.
@@ -1735,6 +341,177 @@ class Book:
         grouped_ops = misc.group_by(self.operations, tr.Operation.identical_columns)
         self.operations = [tr.Operation.merge(*ops) for ops in grouped_ops.values()]
 
+    @staticmethod
+    def _split_fee_by_line(fee: tr.Fee) -> list[tr.Fee]:
+        # Merged fees can span multiple source rows. Split them into
+        # per-line shares so they can be matched to per-line trade pairs.
+        if len(fee.line) <= 1:
+            return [fee]
+
+        line_count = decimal.Decimal(len(fee.line))
+        fee_share = fee.change / line_count
+        return [
+            tr.Fee(
+                utc_time=fee.utc_time,
+                platform=fee.platform,
+                change=fee_share,
+                coin=fee.coin,
+                line=[line],
+                file_path=fee.file_path,
+                remarks=list(fee.remarks),
+            )
+            for line in fee.line
+        ]
+
+    def _match_fees_by_line(
+        self,
+        matching_transactions: dict[int, tr.Transaction],
+        fees: list[tr.Fee],
+    ) -> bool:
+        line_to_transaction_indices: dict[int,
+                                          list[int]] = collections.defaultdict(list)
+        for idx, op in matching_transactions.items():
+            for line in op.line:
+                line_to_transaction_indices[line].append(idx)
+
+        # Expand merged fees into per-line shares first.
+        split_fees: list[tr.Fee] = []
+        for fee in fees:
+            split_fees.extend(self._split_fee_by_line(fee))
+
+        line_to_fees: dict[int, list[tr.Fee]] = collections.defaultdict(list)
+        for fee in split_fees:
+            assert len(fee.line) == 1
+            line_to_fees[fee.line[0]].append(fee)
+
+        assigned_fees: dict[int, list[tr.Fee]] = collections.defaultdict(list)
+        assigned_line_count = 0
+
+        for line, tx_indices in line_to_transaction_indices.items():
+            line_buys = [idx for idx in tx_indices if isinstance(
+                matching_transactions[idx], tr.Buy)]
+            line_sells = [idx for idx in tx_indices if isinstance(
+                matching_transactions[idx], tr.Sell)]
+
+            if len(line_buys) != 1 or len(line_sells) != 1:
+                # Keep fallback strict: only assign fees for clear buy/sell pairs.
+                continue
+
+            line_fees = line_to_fees.get(line)
+            if not line_fees:
+                # No fee for this source line.
+                continue
+
+            assigned_line_count += 1
+            (buy_idx,) = line_buys
+            (sell_idx,) = line_sells
+            assigned_fees[buy_idx].extend(line_fees)
+            assigned_fees[sell_idx].extend(line_fees)
+
+        if assigned_line_count == 0:
+            return False
+
+        for idx, fee_list in assigned_fees.items():
+            op = self.operations[idx]
+            assert isinstance(op, tr.Transaction)
+            assert op.fees is None
+            op.fees = fee_list
+
+        return True
+
+    def _match_single_transaction_fees(
+        self,
+        matching_transactions: dict[int, tr.Transaction],
+        fees: list[tr.Fee],
+    ) -> bool:
+        if len(matching_transactions) != 1:
+            return False
+
+        ((tx_idx, tx_op),) = matching_transactions.items()
+        tx_lines = set(tx_op.line)
+        has_line_overlap = any(tx_lines.intersection(fee.line) for fee in fees)
+
+        if not has_line_overlap and isinstance(tx_op, (tr.FuturesProfit, tr.FuturesLoss)):
+            tx_order_id = self._extract_order_id(tx_op.remarks)
+            fee_order_id = self._extract_order_id(fees[0].remarks)
+            if tx_order_id is not None and tx_order_id == fee_order_id:
+                assert self.operations[tx_idx].fees is None
+                self.operations[tx_idx].fees = fees
+                return True
+
+        if not has_line_overlap:
+            return False
+
+        if isinstance(tx_op, (tr.Buy, tr.Sell)):
+            assert self.operations[tx_idx].fees is None
+            self.operations[tx_idx].fees = fees
+            return True
+
+        if isinstance(tx_op, (tr.FuturesProfit, tr.FuturesLoss)):
+            assert self.operations[tx_idx].fees is None
+            self.operations[tx_idx].fees = fees
+            return True
+
+        # Keep fee effects in evaluation for non-buy/sell transactions.
+        self._convert_fees_to_sell_operations(fees)
+        return True
+
+    def _convert_fees_to_sell_operations(self, fees: list[tr.Fee]) -> None:
+        for fee in fees:
+            is_futures_fee = any("futures" in remark.lower() for remark in fee.remarks)
+            operation_type = "FuturesLoss" if is_futures_fee else "Sell"
+            self.operations.append(
+                getattr(tr, operation_type)(
+                    utc_time=fee.utc_time,
+                    platform=fee.platform,
+                    change=fee.change,
+                    coin=fee.coin,
+                    line=list(fee.line),
+                    file_path=fee.file_path,
+                    remarks=[
+                        *fee.remarks,
+                        (
+                            "Unmatched standalone fee treated as futures loss"
+                            if is_futures_fee
+                            else "Unmatched standalone fee treated as sell"
+                        ),
+                    ],
+                )
+            )
+
+    def _extract_order_id(self, remarks: list[str]) -> Optional[str]:
+        for remark in remarks:
+            match = re.search(r"(\d+)\s*$", remark)
+            if match:
+                return match.group(1)
+        return None
+
+    def _attach_futures_fees_by_order_id(self, fees: list[tr.Fee]) -> bool:
+        if not fees:
+            return False
+
+        fee_order_id = self._extract_order_id(fees[0].remarks)
+        if fee_order_id is None:
+            return False
+
+        if not any("futures" in remark.lower() for fee in fees for remark in fee.remarks):
+            return False
+
+        matching_futures = [
+            op
+            for op in self.operations
+            if isinstance(op, (tr.FuturesProfit, tr.FuturesLoss))
+            and op.platform == fees[0].platform
+            and self._extract_order_id(op.remarks) == fee_order_id
+        ]
+        if len(matching_futures) != 1:
+            return False
+
+        futures_op = matching_futures[0]
+        assert futures_op.fees is None
+        futures_op.fees = fees
+        return True
+
     def match_fees(self) -> None:
         # Split operations in fees and other operations.
         operations = []
@@ -1791,6 +568,40 @@ class Book:
                     self.operations[sell_idx].fees = fees
                     self.operations[buy_idx].fees = fees
                 else:
+                    if len(matching_transactions) == 0:
+                        if self._attach_futures_fees_by_order_id(fees):
+                            continue
+                        self._convert_fees_to_sell_operations(fees)
+                        continue
+
+                    if self._match_single_transaction_fees(
+                        matching_transactions, fees
+                    ):
+                        continue
+
+                    if self._match_fees_by_line(matching_transactions, fees):
+                        continue
+
+                    log.debug(
+                        "Unsupported fee matching group for platform=%s utc_time=%s: "
+                        "%s fees, %s transactions",
+                        platform,
+                        utc_time,
+                        len(fees),
+                        len(matching_transactions),
+                    )
+                    log.debug(
+                        "Matching transactions: %s",
+                        [
+                            {
+                                "type": op.type_name,
+                                "coin": op.coin,
+                                "change": str(op.change),
+                                "remarks": op.remarks,
+                            }
+                            for op in matching_transactions.values()
+                        ],
+                    )
                     log.warning(
                         "Fee matching is not implemented for this case. "
                         "Your fees will be discarded and are not evaluated in "
@@ -1889,23 +700,36 @@ class Book:
         """
         assert file_path.is_file()
 
-        if exchange := self.detect_exchange(file_path):
+        bitget_api_configured = all(
+            (
+                config.BITGET_API_KEY,
+                config.BITGET_API_SECRET,
+                config.BITGET_API_PASSPHRASE,
+            )
+        )
 
-            try:
-                read_file = getattr(self, f"_read_{exchange}")
-            except AttributeError:
-                log.warning(
-                    f"Unable to read files from the exchange `{exchange}`. "
-                    f"Skipping `{file_path}`."
+        if reader := self.detect_exchange(file_path):
+            if bitget_api_configured and reader.platform == "bitget":
+                log.info(
+                    "Skipping Bitget CSV file %s because Bitget API import is enabled.",
+                    file_path,
                 )
                 return
 
-            log.info("Reading file from exchange %s at %s", exchange, file_path)
-            read_file(file_path)
+            log.info("Reading file from exchange %s at %s", reader.platform, file_path)
+            reader.read_file(file_path, self)
         elif file_path.suffix not in (
             ".zip",
             ".rar",
         ):
+            lower_file_path = str(file_path).lower()
+            if bitget_api_configured and "bitget" in lower_file_path:
+                log.info(
+                    "Skipping undetected Bitget CSV file %s because Bitget API import is enabled.",
+                    file_path,
+                )
+                return
+
             log.warning(
                 f"Unable to detect the exchange of file `{file_path}`. "
                 "Skipping file."
@@ -1924,13 +748,14 @@ class Book:
         file_paths: list[Path] = []
 
         if statements_dir.is_dir():
-            for file_path in statements_dir.iterdir():
-                # Ignore .gitkeep and temporary excel files.
-                filename = file_path.stem
-                if filename == ".gitkeep" or filename.startswith("~$"):
-                    continue
+            for file_path in statements_dir.rglob("*"):
+                if file_path.is_file():
+                    # Ignore .gitkeep and temporary excel files.
+                    filename = file_path.stem
+                    if filename == ".gitkeep" or filename.startswith("~$"):
+                        continue
 
-                file_paths.append(file_path)
+                    file_paths.append(file_path)
         return file_paths
 
     def read_files(self) -> bool:
@@ -1942,11 +767,13 @@ class Book:
         paths = self.get_account_statement_paths(config.ACCOUNT_STATMENTS_PATH)
 
         if not paths:
-            log.warning(
-                "No account statement files located in %s.",
-                config.ACCOUNT_STATMENTS_PATH,
-            )
-            return False
+            if not bool(self):
+                log.warning(
+                    "No account statement files located in %s.",
+                    config.ACCOUNT_STATMENTS_PATH,
+                )
+                return False
+            return True
 
         for file_path in paths:
             self.read_file(file_path)
