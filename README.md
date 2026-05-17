@@ -73,6 +73,23 @@ Optional opening-inventory lookback:
 	- Linux/macOS: `BITGET_API_START_YEAR=2024 python src/main.py`
 	- Windows PowerShell: `$env:BITGET_API_START_YEAR='2024'; python src/main.py`
 
+### CoinTracking CSV export for WISO / SteuerSparErklaerung
+
+CoinTaxman can export sell events as CoinTracking-compatible capital-gains CSV.
+This format can be imported into WISO Steuer and SteuerSparErklaerung (Steuertipps).
+
+Configuration in `config.ini`:
+- `EXPORT_WISO_CSV = True` exports `..._wiso.csv`
+- `EXPORT_STEUERTIPPS_CSV = True` exports `..._steuertipps.csv`
+
+Both files use the same CSV layout:
+- Metadata line with `Identifier`, `Method`, `Tax_Year`, `Base_Currency`
+- Required columns: `Amount`, `Currency`, `Date Sold`, `Date Acquired`,
+  `Short/Long`, `Buy/Input at`, `Sell/Output at`, `Proceeds`, `Cost Basis`, `Gain/Loss`
+- Date format `TT.MM.JJJJ`
+- Decimal separator `.`
+- Base currency must be `EUR`
+
 ### Bitget CSV export import (alternative)
 
 Bitget CSV exports are supported as an alternative when API credentials are not configured.

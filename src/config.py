@@ -57,6 +57,10 @@ MULTI_DEPOT = config["BASE"].getboolean("MULTI_DEPOT")
 LOG_LEVEL = config["BASE"].get("LOG_LEVEL", "INFO")
 ALL_AIRDROPS_ARE_GIFTS = config["BASE"].getboolean("ALL_AIRDROPS_ARE_GIFTS")
 EXPORT_WISO_CSV = config["BASE"].getboolean("EXPORT_WISO_CSV", fallback=False)
+EXPORT_STEUERTIPPS_CSV = config["BASE"].getboolean(
+    "EXPORT_STEUERTIPPS_CSV",
+    fallback=EXPORT_WISO_CSV,
+)
 
 
 def _optional_decimal_from_config(key: str) -> decimal.Decimal | None:

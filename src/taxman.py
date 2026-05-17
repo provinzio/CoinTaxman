@@ -1227,8 +1227,12 @@ class Taxman:
         log.info("Saved evaluation in %s.", file_path)
         return file_path
 
-    def export_evaluation_as_wiso_csv(self, excel_path: Path) -> Path:
-        """Export sell events as CSV in CoinTracking format for WISO Steuer.
+    def _export_evaluation_as_cointracking_capital_gains_csv(
+        self,
+        excel_path: Path,
+        suffix: str,
+    ) -> Path:
+        """Export sell events as CoinTracking capital-gains CSV.
 
         Format documented at:
         https://www.steuer-web.de/hilfe-2023/est/import_trading_csv.html
@@ -1237,11 +1241,12 @@ class Taxman:
 
         Args:
             excel_path: Path to the Excel export (used to derive CSV filename).
+            suffix: File suffix appended to the export filename.
 
         Returns:
             Path: Path to the exported CSV file.
         """
-        csv_path = excel_path.with_name(excel_path.stem + "_wiso.csv")
+        csv_path = excel_path.with_name(excel_path.stem + suffix)
         date_fmt = "%d.%m.%Y"
 
         sell_report_entries = [
@@ -1311,5 +1316,33 @@ class Taxman:
                     ]
                 )
 
-        log.info("Saved WISO CSV in %s.", csv_path)
+        log.info("Saved CoinTracking capital-gains CSV in %s.", csv_path)
         return csv_path
+
+    def export_evaluation_as_wiso_csv(self, excel_path: Path) -> Path:
+        """Export sell events as CSV in CoinTracking format for WISO Steuer.
+
+        Args:
+            excel_path: Path to the Excel export (used to derive CSV filename).
+
+        Returns:
+            Path: Path to the exported CSV file.
+        """
+        return self._export_evaluation_as_cointracking_capital_gains_csv(
+            excel_path,
+            suffix="_wiso.csv",
+        )
+
+    def export_evaluation_as_steuertipps_csv(self, excel_path: Path) -> Path:
+        """Export sell events as CSV in CoinTracking format for SteuerSparErklaerung.
+
+        Args:
+            excel_path: Path to the Excel export (used to derive CSV filename).
+
+        Returns:
+            Path: Path to the exported CSV file.
+        """
+        return self._export_evaluation_as_cointracking_capital_gains_csv(
+            excel_path,
+            suffix="_steuertipps.csv",
+        )

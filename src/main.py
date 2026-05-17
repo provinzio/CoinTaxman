@@ -19,7 +19,7 @@ import os
 import config
 import log_config
 from book import Book
-from config import EXPORT_WISO_CSV, TMP_LOG_FILEPATH
+from config import EXPORT_STEUERTIPPS_CSV, EXPORT_WISO_CSV, TMP_LOG_FILEPATH
 from patch_database import patch_databases
 from price_data import PriceData
 from taxman import Taxman
@@ -58,6 +58,12 @@ def main() -> None:
 
     taxman.evaluate_taxation()
     evaluation_file_path = taxman.export_evaluation_as_excel()
+    steuertipps_csv_path = None
+    wiso_csv_path = None
+    if EXPORT_STEUERTIPPS_CSV:
+        steuertipps_csv_path = taxman.export_evaluation_as_steuertipps_csv(
+            evaluation_file_path
+        )
     if EXPORT_WISO_CSV:
         wiso_csv_path = taxman.export_evaluation_as_wiso_csv(evaluation_file_path)
     taxman.print_evaluation()
@@ -67,6 +73,8 @@ def main() -> None:
     log_config.shutdown()
     os.rename(TMP_LOG_FILEPATH, log_file_path)
     print(f"Detailed export saved at {evaluation_file_path} and {log_file_path}")
+    if steuertipps_csv_path:
+        print(f"SteuerSparErklaerung CSV saved at {steuertipps_csv_path}")
     if EXPORT_WISO_CSV:
         print(f"WISO CSV saved at {wiso_csv_path}")
     print("If you want to archive the evaluation, run `make archive`.")

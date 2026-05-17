@@ -93,6 +93,17 @@ if wiso_csv_path.is_file():
         [f"CoinTaxman - WISO Import - {TAX_YEAR}.csv"],
     )
 
+# SteuerSparErklaerung CSV (optional, only if it exists)
+steuertipps_csv = evaluation.removesuffix(".xlsx") + "_steuertipps.csv"
+steuertipps_csv_path = Path(EXPORT_PATH, steuertipps_csv)
+if steuertipps_csv_path.is_file():
+    log.debug("Found SteuerSparErklaerung CSV: %s", steuertipps_csv)
+    append_files(
+        EXPORT_PATH,
+        [steuertipps_csv],
+        [f"CoinTaxman - SteuerSparErklaerung Import - {TAX_YEAR}.csv"],
+    )
+
 # Config file
 log.debug("Archive config file")
 if CONFIG_FILE.is_file():
