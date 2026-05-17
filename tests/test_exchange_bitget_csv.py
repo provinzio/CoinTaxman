@@ -91,7 +91,7 @@ class BitgetCsvReaderTests(unittest.TestCase):
             reader.read_file(spot_path, book)
 
         self.assertEqual(len(book.operations), 1)
-        self.assertEqual(book.operations[0]["operation"], "Buy")
+        self.assertEqual(book.operations[0]["operation"], "Deposit")
         self.assertEqual(book.operations[0]["coin"], "USDT")
         self.assertEqual(book.operations[0]["change"], decimal.Decimal("10466.5676"))
         self.assertEqual(
@@ -193,9 +193,36 @@ class BitgetCsvReaderTests(unittest.TestCase):
             reader.read_file(spot_path, book)
 
         self.assertEqual(len(book.operations), 1)
-        self.assertEqual(book.operations[0]["operation"], "Buy")
+        self.assertEqual(book.operations[0]["operation"], "Deposit")
         self.assertEqual(book.operations[0]["coin"], "USDT")
         self.assertEqual(book.operations[0]["change"], decimal.Decimal("123.45"))
+
+    def test_spot_transactions_maps_negative_fiat_to_withdrawal(self) -> None:
+        reader = BitgetCsvReader()
+        book = _BookStub()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            spot_path = tmp / "Export spot transactions 789.csv"
+
+            with spot_path.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["order", "Date", "Coin", "Type", "Amount", "Fee"])
+                writer.writerow([
+                    "13",
+                    "2025-09-15 16:41:21",
+                    "EUR",
+                    "Fiat",
+                    "-9000",
+                    "0",
+                ])
+
+            reader.read_file(spot_path, book)
+
+        self.assertEqual(len(book.operations), 1)
+        self.assertEqual(book.operations[0]["operation"], "Withdrawal")
+        self.assertEqual(book.operations[0]["coin"], "EUR")
+        self.assertEqual(book.operations[0]["change"], decimal.Decimal("9000"))
 
 
 if __name__ == "__main__":

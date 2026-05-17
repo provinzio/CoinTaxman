@@ -322,12 +322,13 @@ class BitgetCsvReader(ExchangeReader):
                     continue
 
                 if operation is None and tax_type == "Fiat":
-                    # "Fiat" rows represent spot buy/sell legs (e.g. EUR -> USDT),
-                    # not external wallet transfers.
+                    # "Fiat" rows are account funding legs (fiat on/off-ramp),
+                    # not crypto-to-crypto trades. Modeling them as
+                    # Deposit/Withdrawal avoids unresolved synthetic buy links.
                     if amount_raw > 0:
-                        operation = "Buy"
+                        operation = "Deposit"
                     elif amount_raw < 0:
-                        operation = "Sell"
+                        operation = "Withdrawal"
 
                 if operation is None and self._api_mapper._is_internal_spot_transfer_tax_type(tax_type):
                     log.info(
