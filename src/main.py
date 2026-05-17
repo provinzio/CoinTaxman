@@ -74,9 +74,11 @@ def main() -> None:
     os.rename(TMP_LOG_FILEPATH, log_file_path)
     print(f"Detailed export saved at {evaluation_file_path} and {log_file_path}")
     if steuertipps_csv_path:
-        print(f"SteuerSparErklaerung CSV saved at {steuertipps_csv_path}")
+        print(
+            f"CoinTracking CSV for SteuerSparErklaerung saved at {steuertipps_csv_path}"
+        )
     if EXPORT_WISO_CSV:
-        print(f"WISO CSV saved at {wiso_csv_path}")
+        print(f"CoinTracking CSV for WISO saved at {wiso_csv_path}")
     print("If you want to archive the evaluation, run `make archive`.")
 
     if log_config.counter_handler.warning_count > 0:

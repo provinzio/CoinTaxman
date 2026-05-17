@@ -90,7 +90,7 @@ if wiso_csv_path.is_file():
     append_files(
         EXPORT_PATH,
         [wiso_csv],
-        [f"CoinTaxman - WISO Import - {TAX_YEAR}.csv"],
+        [f"CoinTaxman - CoinTracking Import (WISO) - {TAX_YEAR}.csv"],
     )
 
 # SteuerSparErklaerung CSV (optional, only if it exists)
@@ -101,7 +101,9 @@ if steuertipps_csv_path.is_file():
     append_files(
         EXPORT_PATH,
         [steuertipps_csv],
-        [f"CoinTaxman - SteuerSparErklaerung Import - {TAX_YEAR}.csv"],
+        [
+            f"CoinTaxman - CoinTracking Import (SteuerSparErklaerung) - {TAX_YEAR}.csv"
+        ],
     )
 
 # Config file
