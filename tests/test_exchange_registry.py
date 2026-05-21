@@ -10,6 +10,7 @@ from exchanges.bitget_csv import BitgetCsvReader
 from exchanges.coinbase import CoinbaseReader
 from exchanges.pionex import PionexReader
 from exchanges.registry import create_exchange_reader, detect_exchange_reader
+from exchanges.trade_republic import TradeRepublicReader
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -217,6 +218,39 @@ class ExchangeRegistryTests(unittest.TestCase):
             reader = detect_exchange_reader(csv_path)
 
         self.assertIsInstance(reader, BitgetCsvReader)
+
+    def test_detect_exchange_reader_detects_traderepublic(self) -> None:
+        rows = [
+            [
+                "Asset",
+                "transaktion",
+                "nominale",
+                "preis_pro_stück",
+                "gebühren",
+                "gebucht",
+                "gewinn",
+                "gewinn_<1_jahr",
+            ],
+            [
+                "BTC",
+                "13.04.2025 KAUF",
+                "0,009905",
+                "75.702,20",
+                "1,00",
+                "-750,83",
+                "0,00",
+                "0,00",
+            ],
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "traderepublic 2025.csv"
+            csv_path.write_text(
+                "\n".join(";".join(row) for row in rows) + "\n",
+                encoding="utf8",
+            )
+            reader = detect_exchange_reader(csv_path)
+
+        self.assertIsInstance(reader, TradeRepublicReader)
 
 
 if __name__ == "__main__":

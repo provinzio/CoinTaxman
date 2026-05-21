@@ -14,6 +14,7 @@ from exchanges.coinbase_pro import CoinbaseProReader
 from exchanges.custom_eur import CustomEurReader
 from exchanges.kraken import KrakenReader
 from exchanges.pionex import PionexReader
+from exchanges.trade_republic import TradeRepublicReader
 
 
 def create_exchange_reader(exchange_name: str) -> Optional[ExchangeReader]:
@@ -59,6 +60,7 @@ def create_exchange_reader(exchange_name: str) -> Optional[ExchangeReader]:
         "pionex_position_futures": PionexReader,
         "pionex_staking": PionexReader,
         "pionex_others": PionexReader,
+        "traderepublic": TradeRepublicReader,
         "custom_eur": CustomEurReader,
     }
 
@@ -115,6 +117,7 @@ def detect_exchange_reader(file_path: Path) -> Optional[ExchangeReader]:
         "pionex_staking": 1,
         "pionex_others": 1,
         "custom_eur": 1,
+        "traderepublic": 1,
     }
 
     expected_headers = {
@@ -579,6 +582,16 @@ def detect_exchange_reader(file_path: Path) -> Optional[ExchangeReader]:
             "Timestamp UTC",
             "Note",
         ],
+        "traderepublic": [
+            "Asset",
+            "transaktion",
+            "nominale",
+            "preis_pro_stück",
+            "gebühren",
+            "gebucht",
+            "gewinn",
+            "gewinn_<1_jahr",
+        ],
     }
 
     # Special handling for Pionex which has multiple file types
@@ -684,11 +697,21 @@ def detect_exchange_reader(file_path: Path) -> Optional[ExchangeReader]:
                     return create_exchange_reader(exchange_type)
 
     with open(file_path, encoding="utf-8-sig") as f:
+        reader = csv.reader(f, delimiter=";")
+        header = next(reader, None)
+        if header == expected_headers["traderepublic"]:
+            return create_exchange_reader("traderepublic")
+
+    with open(file_path, encoding="utf-8-sig") as f:
         reader = csv.reader(f)
         # Check all potential headers at their expected header row.
         for exchange, expected in expected_headers.items():
             # Skip Pionex entries as they're handled above.
-            if exchange.startswith("pionex_") or exchange.startswith("bitget_"):
+            if (
+                exchange.startswith("pionex_")
+                or exchange.startswith("bitget_")
+                or exchange == "traderepublic"
+            ):
                 continue
             header_row_num = expected_header_row[exchange]
             # Iterate since header row may appear earlier.

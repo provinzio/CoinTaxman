@@ -25,6 +25,7 @@ Pull Requests und Anfragen über Issues sind gerne gesehen (siehe `Key notes for
 - [coinbase (pro)](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-coinbase)
 - [Kraken](https://github.com/provinzio/CoinTaxman/wiki/Exchange:-Kraken)
 - Pionex
+- Trade Republic
 
 It is also possible to import a custom transaction history file.
 See [here](https://github.com/provinzio/CoinTaxman/wiki/Custom-import-format) for more informations.
