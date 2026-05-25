@@ -45,6 +45,7 @@ class BitgetApiReader(ExchangeReader):
     FUTURE_COPY_PRODUCT_TYPES = ("USDT-FUTURES", "COIN-FUTURES", "USDC-FUTURES")
     SPOT_COPY_PAGE_LIMIT = 20
     FUTURE_COPY_PAGE_LIMIT = 100
+    ROUND_RESULT_WARNING_COUNTS = (100, 500)
 
     def __init__(self):
         super().__init__("bitget")
@@ -158,7 +159,18 @@ class BitgetApiReader(ExchangeReader):
         while True:
             data = self._get(path, params)
             if "data" in data:
-                records.extend(data["data"])
+                page_records = data["data"]
+                if not isinstance(page_records, list):
+                    break
+
+                next_cursor = data.get("cursor")
+                self._warn_if_round_result_count(
+                    path,
+                    len(page_records),
+                    params,
+                    has_pagination_token=bool(next_cursor),
+                )
+                records.extend(page_records)
             else:
                 break
             if "cursor" in data and data["cursor"]:
@@ -166,6 +178,29 @@ class BitgetApiReader(ExchangeReader):
             else:
                 break
         return records
+
+    def _warn_if_round_result_count(
+        self,
+        path: str,
+        result_count: int,
+        params: dict[str, Any],
+        *,
+        has_pagination_token: bool,
+    ) -> None:
+        if result_count not in self.ROUND_RESULT_WARNING_COUNTS:
+            return
+        if has_pagination_token:
+            return
+
+        log.warning(
+            "Bitget API returned exactly %s results for %s "
+            "(limit=%s, params=%s) without a pagination token. "
+            "This can indicate missing entries.",
+            result_count,
+            path,
+            params.get("limit"),
+            params,
+        )
 
     def _fetch_copy_trade_history(
         self,
@@ -194,8 +229,14 @@ class BitgetApiReader(ExchangeReader):
             if not isinstance(page_records, list) or not page_records:
                 break
 
-            records.extend(page_records)
             end_id = payload.get("endId")
+            self._warn_if_round_result_count(
+                path,
+                len(page_records),
+                params,
+                has_pagination_token=bool(end_id),
+            )
+            records.extend(page_records)
             if not end_id:
                 break
 
@@ -235,8 +276,14 @@ class BitgetApiReader(ExchangeReader):
             if not isinstance(page_records, list) or not page_records:
                 break
 
-            records.extend(page_records)
             end_id = payload.get("endId")
+            self._warn_if_round_result_count(
+                path,
+                len(page_records),
+                params,
+                has_pagination_token=bool(end_id),
+            )
+            records.extend(page_records)
             if not end_id:
                 break
 
@@ -281,7 +328,7 @@ class BitgetApiReader(ExchangeReader):
         extra_params: Optional[dict[str, Any]] = None,
     ) -> list[tuple[int, int, list[dict[str, Any]], dict[str, Any], dict[str, Any]]]:
         cursor_start = start_time_ms
-        chunk_size = 10 * 24 * 60 * 60 * 1000
+        chunk_size = 1 * 24 * 60 * 60 * 1000
         endpoint_key = path.strip("/").replace("/", "_")
 
         resume_state = self._load_resume_state()
@@ -353,7 +400,7 @@ class BitgetApiReader(ExchangeReader):
         end_time_ms: int,
     ) -> list[tuple[int, int, list[dict[str, Any]], dict[str, Any], dict[str, Any]]]:
         cursor_start = start_time_ms
-        chunk_size = 10 * 24 * 60 * 60 * 1000
+        chunk_size = 1 * 24 * 60 * 60 * 1000
         endpoint_key = "api_v2_copy_spot-follower_query-history-orders"
 
         resume_state = self._load_resume_state()
@@ -417,7 +464,7 @@ class BitgetApiReader(ExchangeReader):
         product_type: str,
     ) -> list[tuple[int, int, list[dict[str, Any]], dict[str, Any], dict[str, Any]]]:
         cursor_start = start_time_ms
-        chunk_size = 10 * 24 * 60 * 60 * 1000
+        chunk_size = 1 * 24 * 60 * 60 * 1000
         endpoint_key = (
             "api_v2_copy_mix-follower_query-history-orders_"
             f"{product_type.lower()}"

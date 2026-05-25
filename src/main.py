@@ -15,6 +15,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
+import shutil
+import time
 
 import config
 import log_config
@@ -25,6 +27,23 @@ from price_data import PriceData
 from taxman import Taxman
 
 log = log_config.getLogger(__name__)
+
+
+def _move_log_file(src_path: str, dst_path: str) -> None:
+    # On Windows, AV/indexers may briefly lock the log right after shutdown.
+    for _ in range(5):
+        try:
+            os.replace(src_path, dst_path)
+            return
+        except PermissionError:
+            time.sleep(0.2)
+
+    # Fall back to copy when rename keeps failing due to file locking.
+    shutil.copy2(src_path, dst_path)
+    try:
+        os.remove(src_path)
+    except OSError:
+        pass
 
 
 def main() -> None:
@@ -71,7 +90,7 @@ def main() -> None:
     # Save log
     log_file_path = evaluation_file_path.with_suffix(".log")
     log_config.shutdown()
-    os.rename(TMP_LOG_FILEPATH, log_file_path)
+    _move_log_file(str(TMP_LOG_FILEPATH), str(log_file_path))
     print(f"Detailed export saved at {evaluation_file_path} and {log_file_path}")
     if steuertipps_csv_path:
         print(

@@ -30,7 +30,7 @@ class MainExportTargetsTests(unittest.TestCase):
     @patch.object(main, "EXPORT_WISO_CSV", True)
     @patch("main.patch_databases")
     @patch("main.log_config.shutdown")
-    @patch("main.os.rename")
+    @patch("main._move_log_file")
     @patch("builtins.print")
     @patch("main.Taxman")
     @patch("main.Book")
@@ -41,7 +41,7 @@ class MainExportTargetsTests(unittest.TestCase):
         book_cls: MagicMock,
         taxman_cls: MagicMock,
         print_mock: MagicMock,
-        _rename_mock: MagicMock,
+        _move_log_file_mock: MagicMock,
         _shutdown_mock: MagicMock,
         _patch_databases_mock: MagicMock,
     ) -> None:

@@ -205,6 +205,52 @@ class TaxmanFuturesTests(unittest.TestCase):
         self.assertEqual(len(taxman.tax_report_entries), 1)
         self.assertIsInstance(taxman.tax_report_entries[0], tr.SellReportEntry)
 
+    def test_evaluate_sell_linked_withdrawal_fee_does_not_overallocate(self) -> None:
+        buy = tr.Buy(
+            utc_time=self._utc(1, 1),
+            platform="bitget",
+            change=decimal.Decimal("1"),
+            coin="BTC",
+            line=[20],
+            file_path=Path("account_statements/bitget 2025/debug.csv"),
+        )
+        withdrawal = tr.Withdrawal(
+            utc_time=self._utc(1, 2),
+            platform="bitget",
+            change=decimal.Decimal("1"),
+            coin="BTC",
+            line=[21],
+            file_path=buy.file_path,
+        )
+        withdrawal.withdrawn_coins = [tr.SoldCoin(buy, decimal.Decimal("1"))]
+
+        deposit = tr.Deposit(
+            utc_time=self._utc(1, 3),
+            platform="bitget",
+            change=decimal.Decimal("0.99"),
+            coin="BTC",
+            line=[22],
+            file_path=buy.file_path,
+        )
+        deposit.link = withdrawal
+
+        sell = tr.Sell(
+            utc_time=self._utc(1, 4),
+            platform="bitget",
+            change=decimal.Decimal("0.99"),
+            coin="BTC",
+            line=[23],
+            file_path=buy.file_path,
+        )
+
+        taxman = Taxman(_BookStub([]), _PriceDataStub())
+        taxman.evaluate_sell(sell, [tr.SoldCoin(deposit, decimal.Decimal("0.99"))])
+
+        self.assertEqual(len(taxman.tax_report_entries), 1)
+        entry = taxman.tax_report_entries[0]
+        self.assertIsInstance(entry, tr.SellReportEntry)
+        self.assertEqual(entry.amount, decimal.Decimal("0.99"))
+
     def test_bitget_api_sell_adds_synthetic_deposit_on_missing_balance(self) -> None:
         sell = tr.Sell(
             utc_time=self._utc(5, 26),

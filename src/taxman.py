@@ -437,7 +437,13 @@ class Taxman:
                 sold_percent = sc.sold / sc.op.change
                 sold_deposit_fee = deposit_fee * sold_percent
 
-                for wsc in sc.op.link.partial_withdrawn_coins(sold_percent):
+                # Map sold deposited coins back to the original withdrawn coins
+                # by withdrawal volume, not by deposit volume. Otherwise, when
+                # withdrawal fees exist (withdrawal > deposit), the allocated
+                # source amount can exceed the actual sold amount.
+                withdrawal_sold_percent = sc.sold / sc.op.link.change
+
+                for wsc in sc.op.link.partial_withdrawn_coins(withdrawal_sold_percent):
                     wsc_percent = wsc.sold / sc.op.link.change
                     wsc_deposit_fee = sold_deposit_fee * wsc_percent
 

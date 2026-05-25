@@ -51,6 +51,48 @@ class BitgetApiReaderTests(unittest.TestCase):
             {"startTime": 0, "endTime": 1, "limit": 20},
         )
 
+    def test_fetch_all_warns_on_round_page_size_without_cursor(self) -> None:
+        reader = BitgetApiReader()
+
+        with patch.object(reader, "_get", return_value={"data": [{}] * 100}), patch(
+            "exchanges.bitget_api.log.warning"
+        ) as warn_mock:
+            reader._fetch_all("/api/v2/tax/future-record", {"limit": 100})
+
+        warn_mock.assert_called_once()
+
+    def test_fetch_all_does_not_warn_when_cursor_present(self) -> None:
+        reader = BitgetApiReader()
+
+        responses = [
+            {"data": [{}] * 100, "cursor": "next-cursor"},
+            {"data": [], "cursor": None},
+        ]
+        with patch.object(reader, "_get", side_effect=responses), patch(
+            "exchanges.bitget_api.log.warning"
+        ) as warn_mock:
+            reader._fetch_all("/api/v2/tax/future-record", {"limit": 100})
+
+        warn_mock.assert_not_called()
+
+    def test_fetch_future_copy_trade_history_warns_on_round_page_size_without_end_id(
+        self,
+    ) -> None:
+        reader = BitgetApiReader()
+
+        payload = {
+            "data": {
+                "trackingList": [{}] * 100,
+                "endId": None,
+            }
+        }
+        with patch.object(reader, "_get", return_value=payload), patch(
+            "exchanges.bitget_api.log.warning"
+        ) as warn_mock:
+            reader._fetch_future_copy_trade_history(0, 1, "USDT-FUTURES")
+
+        warn_mock.assert_called_once()
+
     def test_import_api_records_imports_copy_group_by_default(self) -> None:
         reader = BitgetApiReader()
         book = _BookStub()
