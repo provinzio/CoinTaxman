@@ -210,7 +210,13 @@ class Taxman:
                 buy_value = sc.op.buying_cost * percent
             elif sc.op.link:
                 prev_sell_value = self.price_data.get_partial_cost(sc.op.link, percent)
-                buy_value = prev_sell_value
+                if prev_sell_value > 0:
+                    buy_value = prev_sell_value
+                else:
+                    # If the linked asset cannot be valued in fiat (0),
+                    # fall back to valuing the disposed coin directly.
+                    # This avoids reducing acquisition cost to only fees.
+                    buy_value = self.price_data.get_cost(sc)
             else:
                 log.warning(
                     "Unable to correctly determine buy cost of bought coins "

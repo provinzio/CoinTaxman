@@ -60,6 +60,25 @@ class _ZeroUnrealizedSellValuePriceDataStub(_PriceDataStub):
         return super().get_partial_cost(op, percent)
 
 
+class _LinkedBuyFallbackPriceDataStub(_PriceDataStub):
+    _USDT_EUR = decimal.Decimal("0.88")
+
+    def get_cost(self, op) -> decimal.Decimal:
+        if isinstance(op, tr.SoldCoin) and op.op.coin == "USDT":
+            return op.sold * self._USDT_EUR
+        if isinstance(op, tr.Operation) and op.coin == "USDT":
+            return op.change * self._USDT_EUR
+        return super().get_cost(op)
+
+    def get_partial_cost(self, op, percent: decimal.Decimal) -> decimal.Decimal:
+        if isinstance(op, tr.Sell) and op.coin == "SHELL":
+            # Simulate missing fiat valuation for the linked disposed asset.
+            return decimal.Decimal("0")
+        if isinstance(op, tr.Fee) and op.coin == "USDT":
+            return op.change * percent * self._USDT_EUR
+        return super().get_partial_cost(op, percent)
+
+
 class TaxmanFuturesTests(unittest.TestCase):
     def _utc(self, month: int, day: int) -> datetime.datetime:
         return datetime.datetime(
@@ -359,6 +378,48 @@ class TaxmanFuturesTests(unittest.TestCase):
         entry = taxman.tax_report_entries[0]
         self.assertIsInstance(entry, tr.UnrealizedSellReportEntry)
         self.assertEqual(entry.gain_in_fiat, decimal.Decimal("0"))
+
+    def test_get_buy_cost_falls_back_to_direct_buy_value_when_link_is_zero(self) -> None:
+        buy_usdt = tr.Buy(
+            utc_time=self._utc(4, 28),
+            platform="bitget",
+            change=decimal.Decimal("322.370442"),
+            coin="USDT",
+            line=[1],
+            file_path=Path("account_statements/bitget 2025/spot.csv"),
+        )
+        linked_sell_shell = tr.Sell(
+            utc_time=self._utc(4, 28),
+            platform="bitget",
+            change=decimal.Decimal("1697.58"),
+            coin="SHELL",
+            line=[1],
+            file_path=buy_usdt.file_path,
+        )
+        buy_usdt.link = linked_sell_shell
+
+        buy_fee = tr.Fee(
+            utc_time=self._utc(4, 28),
+            platform="bitget",
+            change=decimal.Decimal("0.322370442"),
+            coin="USDT",
+            line=[1],
+            file_path=buy_usdt.file_path,
+        )
+        buy_usdt.fees = [buy_fee]
+
+        sold = decimal.Decimal("185.37785711396")
+        sold_coin = tr.SoldCoin(buy_usdt, sold)
+
+        taxman = Taxman(_BookStub([]), _LinkedBuyFallbackPriceDataStub())
+        buy_cost = taxman.get_buy_cost(sold_coin)
+
+        percent = sold / buy_usdt.change
+        expected = (sold * decimal.Decimal("0.88")) + (
+            buy_fee.change * percent * decimal.Decimal("0.88")
+        )
+        self.assertEqual(buy_cost, expected)
+        self.assertGreater(buy_cost, decimal.Decimal("100"))
 
 
 if __name__ == "__main__":
