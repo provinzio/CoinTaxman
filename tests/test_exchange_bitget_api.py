@@ -2,9 +2,10 @@ from exchanges.bitget_api import BitgetApiReader
 import datetime
 import decimal
 import os
+import requests
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -39,6 +40,35 @@ class _BookStub:
 
 
 class BitgetApiReaderTests(unittest.TestCase):
+    def test_get_retries_on_timestamp_expired_after_resync(self) -> None:
+        reader = BitgetApiReader()
+
+        expired_response = Mock()
+        expired_response.status_code = 400
+        expired_response.headers = {}
+        expired_response.text = (
+            '{"code":"40008","msg":"Request timestamp expired",'
+            '"requestTime":1781202251285,"data":null}'
+        )
+        expired_response.raise_for_status.side_effect = requests.HTTPError("400")
+
+        ok_response = Mock()
+        ok_response.status_code = 200
+        ok_response.headers = {}
+        ok_response.text = '{"code":"00000","data":[]}'
+        ok_response.raise_for_status.return_value = None
+        ok_response.json.return_value = {"code": "00000", "data": []}
+
+        with patch("requests.get", side_effect=[expired_response, ok_response]), patch.object(
+            reader,
+            "_maybe_sync_server_time",
+        ) as sync_mock, patch("exchanges.bitget_api.time.sleep"):
+            result = reader._get("/api/v2/tax/spot-record", {"limit": 100})
+
+        self.assertEqual(result, {"code": "00000", "data": []})
+        self.assertEqual(sync_mock.call_count, 3)
+        self.assertEqual(sync_mock.call_args_list[1].kwargs, {"force": True})
+
     def test_fetch_copy_trade_history_uses_supported_limit(self) -> None:
         reader = BitgetApiReader()
 

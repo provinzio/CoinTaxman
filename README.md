@@ -87,9 +87,12 @@ Both files use the same CSV layout:
 - Metadata line with `Identifier`, `Method`, `Tax_Year`, `Base_Currency`
 - Required columns: `Amount`, `Currency`, `Date Sold`, `Date Acquired`,
   `Short/Long`, `Buy/Input at`, `Sell/Output at`, `Proceeds`, `Cost Basis`, `Gain/Loss`
+- Field delimiter `,` (comma)
 - Date format `TT.MM.JJJJ`
 - Decimal separator `.`
 - Base currency must be `EUR`
+- Rows with `Proceeds=0.00`, `Cost Basis=0.00` and `Gain/Loss=0.00` are omitted
+	from CoinTracking CSV export to keep imports lean.
 
 ### Bitget CSV export import (alternative)
 

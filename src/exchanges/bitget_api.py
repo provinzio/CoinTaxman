@@ -46,9 +46,17 @@ class BitgetApiReader(ExchangeReader):
     SPOT_COPY_PAGE_LIMIT = 20
     FUTURE_COPY_PAGE_LIMIT = 100
     ROUND_RESULT_WARNING_COUNTS = (100, 500)
+    TIME_SYNC_REFRESH_INTERVAL_MS = 15 * 60 * 1000
+    TIMESTAMP_EXPIRED_ERROR_CODE = "40008"
+    SERVER_TIME_ENDPOINTS = (
+        "/api/v2/public/time",
+        "/api/spot/v1/public/time",
+    )
 
     def __init__(self):
         super().__init__("bitget")
+        self._timestamp_offset_ms = 0
+        self._last_time_sync_local_ms: Optional[int] = None
 
     def read_file(self, file_path: Path, book) -> None:
         """Bitget uses API, not CSV files. This should not be called."""
@@ -68,7 +76,7 @@ class BitgetApiReader(ExchangeReader):
         path.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
     def _headers(self, method: str, path: str, body: str = "") -> dict[str, str]:
-        timestamp = str(int(time.time() * 1000))
+        timestamp = str(self._current_timestamp_ms())
         message = timestamp + method.upper() + path + body
         signature = base64.b64encode(
             hmac.new(
@@ -86,6 +94,90 @@ class BitgetApiReader(ExchangeReader):
             "ACCESS-PASSPHRASE": config.BITGET_API_PASSPHRASE,
         }
 
+    def _current_timestamp_ms(self) -> int:
+        return int(time.time() * 1000) + self._timestamp_offset_ms
+
+    def _extract_server_time_ms(self, payload: dict[str, Any]) -> Optional[int]:
+        if not isinstance(payload, dict):
+            return None
+
+        candidates: list[Any] = []
+        candidates.append(payload.get("requestTime"))
+        data = payload.get("data")
+        candidates.append(data)
+        if isinstance(data, dict):
+            candidates.append(data.get("serverTime"))
+            candidates.append(data.get("server_time"))
+            candidates.append(data.get("time"))
+            candidates.append(data.get("ts"))
+
+        for value in candidates:
+            if value is None:
+                continue
+            try:
+                return int(str(value))
+            except (TypeError, ValueError):
+                continue
+
+        return None
+
+    def _sync_server_time(self) -> bool:
+        import requests
+
+        for endpoint in self.SERVER_TIME_ENDPOINTS:
+            url = f"{config.BITGET_API_BASE_URL}{endpoint}"
+            try:
+                response = requests.get(url, timeout=10)
+                response.raise_for_status()
+                payload = response.json()
+            except (requests.RequestException, ValueError):
+                continue
+
+            server_time_ms = self._extract_server_time_ms(payload)
+            if server_time_ms is None:
+                continue
+
+            local_now_ms = int(time.time() * 1000)
+            self._timestamp_offset_ms = server_time_ms - local_now_ms
+            self._last_time_sync_local_ms = local_now_ms
+            log.info(
+                "Synchronized Bitget API timestamp offset: %+d ms",
+                self._timestamp_offset_ms,
+            )
+            return True
+
+        log.warning("Unable to synchronize Bitget server time.")
+        return False
+
+    def _maybe_sync_server_time(self, force: bool = False) -> None:
+        if force:
+            self._sync_server_time()
+            return
+
+        now_ms = int(time.time() * 1000)
+        if self._last_time_sync_local_ms is None:
+            self._sync_server_time()
+            return
+
+        if now_ms - self._last_time_sync_local_ms >= self.TIME_SYNC_REFRESH_INTERVAL_MS:
+            self._sync_server_time()
+
+    def _is_timestamp_expired_error(self, payload: str, status_code: int) -> bool:
+        if status_code != 400:
+            return False
+
+        try:
+            parsed = json.loads(payload)
+        except ValueError:
+            parsed = {}
+
+        code = str(parsed.get("code", "")).strip()
+        if code == self.TIMESTAMP_EXPIRED_ERROR_CODE:
+            return True
+
+        message = str(parsed.get("msg", "")).lower()
+        return "timestamp" in message and "expired" in message
+
     def _get(self, path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         import requests
         query_string = urlencode(params or {}, doseq=True)
@@ -94,6 +186,7 @@ class BitgetApiReader(ExchangeReader):
         max_attempts = 6
         backoff_seconds = 1.0
         for attempt in range(1, max_attempts + 1):
+            self._maybe_sync_server_time()
             headers = self._headers("GET", signed_path)
             try:
                 response = requests.get(url, headers=headers)
@@ -140,6 +233,23 @@ class BitgetApiReader(ExchangeReader):
                 response.raise_for_status()
             except requests.HTTPError:
                 payload = response.text.strip()
+                if (
+                    payload
+                    and self._is_timestamp_expired_error(payload, response.status_code)
+                    and attempt < max_attempts
+                ):
+                    log.warning(
+                        "Bitget API rejected request due to expired timestamp on %s "
+                        "(attempt %s/%s). Resyncing time and retrying.",
+                        signed_path,
+                        attempt,
+                        max_attempts,
+                    )
+                    self._maybe_sync_server_time(force=True)
+                    time.sleep(backoff_seconds)
+                    backoff_seconds = min(backoff_seconds * 2, 10.0)
+                    continue
+
                 if payload:
                     log.error(
                         "Bitget API request failed: %s %s params=%s status=%s response=%s",
@@ -1067,7 +1177,10 @@ class BitgetApiReader(ExchangeReader):
                 utc_time = datetime.datetime.fromtimestamp(
                     int(row.get("ts", 0)) / 1000.0, datetime.timezone.utc
                 )
-                remark = f"Bitget future record {row.get('bizOrderId', '')}"
+                remark = (
+                    f"Bitget future record {row.get('bizOrderId', '')} "
+                    f"(taxType: {tax_type})"
+                )
 
                 self.append_operation(
                     book, operation, utc_time, change, coin, row_num, Path(

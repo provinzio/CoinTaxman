@@ -1261,8 +1261,11 @@ class Taxman:
             if isinstance(tax_report_entry, tr.SellReportEntry)
         ]
 
-        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
+            # CoinTracking/WISO/SteuerSpar import expects comma-separated CSV.
             writer = csv.writer(f)
+
+            skipped_zero_rows = 0
 
             # WISO header line: metadata
             writer.writerow(
@@ -1307,6 +1310,11 @@ class Taxman:
                 buy_platform = entry.second_platform or ""
                 sell_platform = entry.first_platform or ""
 
+                # Zero/zero/zero rows add noise and can overload downstream importers.
+                if proceeds == 0 and cost_basis == 0 and gain_loss == 0:
+                    skipped_zero_rows += 1
+                    continue
+
                 writer.writerow(
                     [
                         f"{amount:.8f}",
@@ -1321,6 +1329,13 @@ class Taxman:
                         f"{gain_loss:.2f}",
                     ]
                 )
+
+        if skipped_zero_rows:
+            log.info(
+                "Skipped %s zero-value CoinTracking rows in %s.",
+                skipped_zero_rows,
+                csv_path.name,
+            )
 
         log.info("Saved CoinTracking capital-gains CSV in %s.", csv_path)
         return csv_path

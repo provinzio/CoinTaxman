@@ -246,6 +246,105 @@ class Book:
                         f"({op.platform}, {op.utc_time})"
                     )
 
+        def is_internal_bitget_future_transfer(op: tr.Transaction) -> bool:
+            if op.platform != "bitget":
+                return False
+
+            for remark in op.remarks:
+                upper_remark = remark.upper()
+                if "BITGET FUTURE RECORD" not in upper_remark:
+                    continue
+
+                if "TAXTYPE:" not in upper_remark:
+                    continue
+
+                if any(
+                    token in upper_remark
+                    for token in (
+                        "TAXTYPE: TRANSFER_IN",
+                        "TAXTYPE: TRANSFER_OUT",
+                        "TAXTYPE: TRANS_FROM_",
+                        "TAXTYPE: TRANS_TO_",
+                        "TAXTYPE: TRANSFER_FROM_",
+                        "TAXTYPE: TRANSFER_TO_",
+                    )
+                ):
+                    return True
+
+            return False
+
+        # Exchanges can represent internal conversions as a withdrawal of one
+        # coin and a deposit of another coin at the same timestamp/platform.
+        # Do not flag these as unknown transfer origin/target.
+        conversion_like_deposits: set[int] = set()
+        conversion_like_withdrawals: set[int] = set()
+        deposits_by_key: dict[tuple[str, datetime.datetime], list[tr.Deposit]] = (
+            collections.defaultdict(list)
+        )
+        withdrawals_by_key: dict[
+            tuple[str, datetime.datetime],
+            list[tr.Withdrawal],
+        ] = collections.defaultdict(list)
+
+        for op in unmatched_deposits:
+            deposits_by_key[(op.platform, op.utc_time)].append(op)
+        for op in withdrawal_queue:
+            withdrawals_by_key[(op.platform, op.utc_time)].append(op)
+
+        for key in set(deposits_by_key.keys()).intersection(withdrawals_by_key.keys()):
+            remaining_withdrawals = list(withdrawals_by_key[key])
+            for deposit in deposits_by_key[key]:
+                match_idx = next(
+                    (
+                        i
+                        for i, withdrawal in enumerate(remaining_withdrawals)
+                        if withdrawal.coin != deposit.coin
+                    ),
+                    None,
+                )
+                if match_idx is None:
+                    continue
+
+                conversion_like_deposits.add(id(deposit))
+                conversion_like_withdrawals.add(
+                    id(remaining_withdrawals.pop(match_idx)))
+
+        if conversion_like_deposits or conversion_like_withdrawals:
+            log.debug(
+                "Skipping unknown transfer remarks for %s conversion-like deposits "
+                "and %s conversion-like withdrawals.",
+                len(conversion_like_deposits),
+                len(conversion_like_withdrawals),
+            )
+
+        internal_future_deposits = {
+            id(op) for op in unmatched_deposits if is_internal_bitget_future_transfer(op)
+        }
+        internal_future_withdrawals = {
+            id(op) for op in withdrawal_queue if is_internal_bitget_future_transfer(op)
+        }
+
+        if internal_future_deposits or internal_future_withdrawals:
+            log.debug(
+                "Skipping unknown transfer remarks for %s internal Bitget future "
+                "deposits and %s internal Bitget future withdrawals.",
+                len(internal_future_deposits),
+                len(internal_future_withdrawals),
+            )
+
+        unmatched_deposits = [
+            op
+            for op in unmatched_deposits
+            if id(op) not in conversion_like_deposits
+            and id(op) not in internal_future_deposits
+        ]
+        withdrawal_queue = [
+            op
+            for op in withdrawal_queue
+            if id(op) not in conversion_like_withdrawals
+            and id(op) not in internal_future_withdrawals
+        ]
+
         if unmatched_deposits:
             log.warning(
                 "Unable to match all deposits with withdrawals. "
