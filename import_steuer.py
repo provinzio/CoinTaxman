@@ -1554,16 +1554,21 @@ def _fill_by_positions(win, scope, tx: dict) -> bool:
         print("    [HEARTBEAT] fill kaufpreis")
         _click_and_type_at(scope, pos_k_price, tx["Kaufpreis"], tab_after=True)
 
-        # Werbungskosten-Unterdialog erst öffnen, dann Art und Betrag setzen.
+        # Werbungskosten-Unterdialog öffnen und wieder verlassen.
+        # Nur wenn Werbungskosten > 0, werden Art und Betrag eingetragen.
+        wk = tx["Werbungskosten"]
+        has_werbungskosten = wk and wk not in ("0", "0,00", "0.00", "0,0", "0.0")
         print("    [HEARTBEAT] vor open werbungskosten submenu")
         cost_scope = _navigate_to_werbungskosten_submenu(win)
-        print("    [HEARTBEAT] fill werbungskosten_art")
-        _click_and_type_at(cost_scope, pos_cost_type,
-                           _WERBUNGSKOSTEN_ART_VALUE, confirm=True, tab_after=True)
-        print("    [HEARTBEAT] fill werbungskosten_betrag")
-        _click_and_type_at(cost_scope, pos_cost, tx["Werbungskosten"], tab_after=True)
+        if has_werbungskosten:
+            print("    [HEARTBEAT] fill werbungskosten_art")
+            _click_and_type_at(cost_scope, pos_cost_type,
+                               _WERBUNGSKOSTEN_ART_VALUE, confirm=True, tab_after=True)
+            print("    [HEARTBEAT] fill werbungskosten_betrag")
+            _click_and_type_at(cost_scope, pos_cost, wk, tab_after=True)
+        else:
+            print("    [HEARTBEAT] Werbungskosten=0 → keine Eingabe")
         print("    [HEARTBEAT] vor _advance_from_werbungskosten_submenu")
-        # HIER SOLLTE DER ERSTE "WEITER" KOMMEN
         _advance_from_werbungskosten_submenu(win)
         print("    [HEARTBEAT] _fill_by_positions done")
         return True
