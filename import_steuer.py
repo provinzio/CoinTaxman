@@ -134,6 +134,14 @@ def _normalize_amount(value: str, decimals: int | None = None) -> str:
     return f"{amount:.{decimals}f}".replace(".", ",")
 
 
+def _is_zero(value: str) -> bool:
+    """Prüft ob ein normalisierter Betrag effektiv 0 ist."""
+    try:
+        return float(value.replace(",", ".")) == 0.0
+    except (ValueError, AttributeError):
+        return False
+
+
 def load_transactions(csv_path: Path) -> list[dict]:
     """Liest Transaktionen; unterstützt alte und neue CSV-Header."""
     with open(csv_path, encoding="utf-8-sig", newline="") as f:
@@ -147,6 +155,7 @@ def load_transactions(csv_path: Path) -> list[dict]:
             )
 
         rows = []
+        skipped = 0
         for raw_row in reader:
             row = {
                 "Bezeichnung": _resolve_header(raw_row, "Bezeichnung"),
@@ -159,7 +168,15 @@ def load_transactions(csv_path: Path) -> list[dict]:
                     _resolve_header(raw_row, "Werbungskosten"), decimals=2
                 ),
             }
+            # Einträge mit Kaufpreis oder Verkaufspreis 0.00 überspringen
+            if _is_zero(row["Kaufpreis"]) or _is_zero(row["Verkaufspreis"]):
+                skipped += 1
+                continue
             rows.append(row)
+
+        if skipped:
+            print(
+                f"[INFO] {skipped} Einträge mit Kauf-/Verkaufspreis 0,00 übersprungen.")
 
     return rows
 
@@ -1216,6 +1233,25 @@ _entry_count = 0
 _last_weiteres_delta = 0
 
 
+def _scroll_at(x: int, y: int, clicks: int = 5, direction: str = "down"):
+    """Scrollt per Mausrad an der gegebenen Bildschirmposition.
+
+    clicks: Anzahl Scroll-Schritte (je 120 Einheiten = ein Notch).
+    direction: "down" oder "up".
+    """
+    MOUSEEVENTF_WHEEL = 0x0800
+    WHEEL_DELTA = 120
+    delta = -WHEEL_DELTA if direction == "down" else WHEEL_DELTA
+
+    ctypes.windll.user32.SetCursorPos(x, y)
+    time.sleep(0.05)
+    for _ in range(clicks):
+        # mouse_event dwData ist signed DWORD; ctypes akzeptiert negative Werte
+        ctypes.windll.user32.mouse_event(MOUSEEVENTF_WHEEL, 0, 0, delta, 0)
+        time.sleep(0.05)
+    time.sleep(0.3)
+
+
 def _click_weiteres_win32(win) -> bool:
     """Klickt 'Weiteres Veräußerungsgeschäft erfassen' per Win32 (kein UIA, deadlockt nie).
 
@@ -1231,6 +1267,17 @@ def _click_weiteres_win32(win) -> bool:
         print("  [WARN] Bitte 'python import_steuer.py --calibrate' ausführen.")
         return False
     x, y_base = int(pos[0]), int(pos[1])
+
+    # Bei vielen Einträgen muss die Übersichtsseite nach unten gescrollt werden,
+    # damit der Button sichtbar wird.  Scroll-Menge wächst mit Anzahl Einträge.
+    if _entry_count > 0:
+        scroll_clicks = 5 + _entry_count * 3
+        # Scrolle in der Mitte des Formularbereichs (x vom Button, y etwas oberhalb)
+        scroll_y = max(y_base - 200, 100)
+        print(
+            f"  [INFO] Scrolle Übersicht nach unten ({scroll_clicks} Notches bei y={scroll_y})")
+        _scroll_at(x, scroll_y, clicks=scroll_clicks, direction="down")
+        time.sleep(0.5)
 
     # Der Button verschiebt sich nach unten bei mehr Einträgen.
     # Start beim letzten bekannten Offset, dann in 18er Schritten nach unten/oben.
