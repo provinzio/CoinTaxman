@@ -22,3 +22,4 @@ urllib3==2.6.0
     # via requests
 xlsxwriter==3.2.9
     # via -r dependencies/requirements.in
+dotenv

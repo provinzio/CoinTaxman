@@ -1,0 +1,432 @@
+from exchanges.bitget_api import BitgetApiReader
+import datetime
+import decimal
+import os
+import requests
+import sys
+import unittest
+from unittest.mock import Mock, patch
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+
+
+class _BookStub:
+    def __init__(self) -> None:
+        self.operations = []
+
+    def append_operation(
+        self,
+        operation,
+        utc_time,
+        platform,
+        change,
+        coin,
+        row,
+        file_path,
+        remark=None,
+    ) -> None:
+        self.operations.append(
+            {
+                "operation": operation,
+                "utc_time": utc_time,
+                "platform": platform,
+                "change": change,
+                "coin": coin,
+                "row": row,
+                "file_path": str(file_path),
+                "remark": remark,
+            }
+        )
+
+
+class BitgetApiReaderTests(unittest.TestCase):
+    def test_get_retries_on_timestamp_expired_after_resync(self) -> None:
+        reader = BitgetApiReader()
+
+        expired_response = Mock()
+        expired_response.status_code = 400
+        expired_response.headers = {}
+        expired_response.text = (
+            '{"code":"40008","msg":"Request timestamp expired",'
+            '"requestTime":1781202251285,"data":null}'
+        )
+        expired_response.raise_for_status.side_effect = requests.HTTPError("400")
+
+        ok_response = Mock()
+        ok_response.status_code = 200
+        ok_response.headers = {}
+        ok_response.text = '{"code":"00000","data":[]}'
+        ok_response.raise_for_status.return_value = None
+        ok_response.json.return_value = {"code": "00000", "data": []}
+
+        with patch("requests.get", side_effect=[expired_response, ok_response]), patch.object(
+            reader,
+            "_maybe_sync_server_time",
+        ) as sync_mock, patch("exchanges.bitget_api.time.sleep"):
+            result = reader._get("/api/v2/tax/spot-record", {"limit": 100})
+
+        self.assertEqual(result, {"code": "00000", "data": []})
+        self.assertEqual(sync_mock.call_count, 3)
+        self.assertEqual(sync_mock.call_args_list[1].kwargs, {"force": True})
+
+    def test_fetch_copy_trade_history_uses_supported_limit(self) -> None:
+        reader = BitgetApiReader()
+
+        with patch.object(reader, "_get", return_value={"data": {"trackingList": []}}) as get_mock:
+            records = reader._fetch_copy_trade_history(0, 1)
+
+        self.assertEqual(records, [])
+        get_mock.assert_called_once_with(
+            "/api/v2/copy/spot-follower/query-history-orders",
+            {"startTime": 0, "endTime": 1, "limit": 20},
+        )
+
+    def test_fetch_all_warns_on_round_page_size_without_cursor(self) -> None:
+        reader = BitgetApiReader()
+
+        with patch.object(reader, "_get", return_value={"data": [{}] * 100}), patch(
+            "exchanges.bitget_api.log.warning"
+        ) as warn_mock:
+            reader._fetch_all("/api/v2/tax/future-record", {"limit": 100})
+
+        warn_mock.assert_called_once()
+
+    def test_fetch_all_does_not_warn_when_cursor_present(self) -> None:
+        reader = BitgetApiReader()
+
+        responses = [
+            {"data": [{}] * 100, "cursor": "next-cursor"},
+            {"data": [], "cursor": None},
+        ]
+        with patch.object(reader, "_get", side_effect=responses), patch(
+            "exchanges.bitget_api.log.warning"
+        ) as warn_mock:
+            reader._fetch_all("/api/v2/tax/future-record", {"limit": 100})
+
+        warn_mock.assert_not_called()
+
+    def test_fetch_future_copy_trade_history_warns_on_round_page_size_without_end_id(
+        self,
+    ) -> None:
+        reader = BitgetApiReader()
+
+        payload = {
+            "data": {
+                "trackingList": [{}] * 100,
+                "endId": None,
+            }
+        }
+        with patch.object(reader, "_get", return_value=payload), patch(
+            "exchanges.bitget_api.log.warning"
+        ) as warn_mock:
+            reader._fetch_future_copy_trade_history(0, 1, "USDT-FUTURES")
+
+        warn_mock.assert_called_once()
+
+    def test_import_api_records_imports_copy_group_by_default(self) -> None:
+        reader = BitgetApiReader()
+        book = _BookStub()
+
+        with patch.object(reader, "import_spot_records") as import_spot, patch.object(
+            reader, "import_future_records"
+        ) as import_future, patch.object(
+            reader, "import_margin_records"
+        ) as import_margin, patch.object(
+            reader, "import_p2p_records"
+        ) as import_p2p, patch.object(
+            reader, "import_copy_trade_records"
+        ) as import_copy:
+            reader.import_api_records(book, 0, 0)
+
+        import_spot.assert_called_once_with(book, 0, 0)
+        import_future.assert_called_once_with(book, 0, 0)
+        import_margin.assert_called_once_with(book, 0, 0)
+        import_p2p.assert_called_once_with(book, 0, 0)
+        import_copy.assert_called_once_with(book, 0, 0)
+
+    def test_import_spot_records_uses_spot_tax_type_field(self) -> None:
+        reader = BitgetApiReader()
+        book = _BookStub()
+        records = [
+            {
+                "coin": "USDT",
+                "spotTaxType": "Transfer out",
+                "amount": "-10000",
+                "fee": "0",
+                "ts": "1758198095000",
+                "bizOrderId": "order-1",
+            },
+            {
+                "coin": "EUR",
+                "spotTaxType": "fiat_recharge_in",
+                "amount": "3000",
+                "fee": "0",
+                "ts": "1758197000000",
+                "bizOrderId": "order-2",
+            },
+        ]
+
+        with patch.object(
+            reader,
+            "_fetch_all_range",
+            return_value=[(0, 0, records, {}, {})],
+        ):
+            reader.import_spot_records(book, 0, 0)
+
+        self.assertEqual(len(book.operations), 2)
+        self.assertEqual(book.operations[0]["operation"], "Withdrawal")
+        self.assertEqual(book.operations[0]["coin"], "USDT")
+        self.assertEqual(book.operations[0]["platform"], "bitget")
+        self.assertEqual(book.operations[1]["operation"], "Deposit")
+        self.assertEqual(book.operations[1]["coin"], "EUR")
+        self.assertEqual(
+            book.operations[0]["utc_time"],
+            datetime.datetime.fromtimestamp(1758198095, datetime.timezone.utc),
+        )
+
+    def test_import_future_records_maps_signed_pnl_to_futures_operations(self) -> None:
+        reader = BitgetApiReader()
+        book = _BookStub()
+        records = [
+            {
+                "coin": "USDT",
+                "taxType": "CLOSE_LONG",
+                "amount": "120.5",
+                "fee": "0",
+                "ts": "1758198095000",
+                "bizOrderId": "future-1",
+            },
+            {
+                "coin": "USDT",
+                "taxType": "OPEN_LONG",
+                "amount": "-42.25",
+                "fee": "0",
+                "ts": "1758199095000",
+                "bizOrderId": "future-2",
+            },
+        ]
+
+        with patch.object(
+            reader,
+            "_fetch_all_range",
+            return_value=[(0, 0, records, {}, {})],
+        ):
+            reader.import_future_records(book, 0, 0)
+
+        self.assertEqual(len(book.operations), 2)
+        self.assertEqual(book.operations[0]["operation"], "FuturesProfit")
+        self.assertEqual(book.operations[0]["change"], decimal.Decimal("120.5"))
+        self.assertEqual(book.operations[1]["operation"], "FuturesLoss")
+        self.assertEqual(book.operations[1]["change"], decimal.Decimal("42.25"))
+
+    def test_import_future_records_supports_future_tax_type_and_margin_coin_fields(self) -> None:
+        reader = BitgetApiReader()
+        book = _BookStub()
+        records = [
+            {
+                "marginCoin": "USDT",
+                "futureTaxType": "close_short",
+                "amount": "10.0",
+                "fee": "0",
+                "ts": "1758198095000",
+                "bizOrderId": "future-3",
+            },
+            {
+                "marginCoin": "USDT",
+                "futureTaxType": "open_long",
+                "amount": "-1.5",
+                "fee": "0",
+                "ts": "1758199095000",
+                "bizOrderId": "future-4",
+            },
+        ]
+
+        with patch.object(
+            reader,
+            "_fetch_all_range",
+            return_value=[(0, 0, records, {}, {})],
+        ):
+            reader.import_future_records(book, 0, 0)
+
+        self.assertEqual(len(book.operations), 2)
+        self.assertEqual(book.operations[0]["operation"], "FuturesProfit")
+        self.assertEqual(book.operations[0]["coin"], "USDT")
+        self.assertEqual(book.operations[0]["change"], decimal.Decimal("10.0"))
+        self.assertEqual(book.operations[1]["operation"], "FuturesLoss")
+        self.assertEqual(book.operations[1]["coin"], "USDT")
+        self.assertEqual(book.operations[1]["change"], decimal.Decimal("1.5"))
+
+    def test_import_future_records_maps_copytrade_transfer_to_futures_pnl(self) -> None:
+        reader = BitgetApiReader()
+        book = _BookStub()
+        records = [
+            {
+                "marginCoin": "USDT",
+                "futureTaxType": "transfer_from_future_copytrade",
+                "amount": "515.48703082",
+                "fee": "0",
+                "ts": "1745804112361",
+                "id": "copy-1",
+            },
+            {
+                "marginCoin": "USDT",
+                "futureTaxType": "transfer_from_future_copytrade",
+                "amount": "-12.25",
+                "fee": "0",
+                "ts": "1745804113361",
+                "id": "copy-2",
+            },
+        ]
+
+        with patch.object(
+            reader,
+            "_fetch_all_range",
+            return_value=[(0, 0, records, {}, {})],
+        ):
+            reader.import_future_records(book, 0, 0)
+
+        self.assertEqual(len(book.operations), 2)
+        self.assertEqual(book.operations[0]["operation"], "FuturesProfit")
+        self.assertEqual(book.operations[0]["coin"], "USDT")
+        self.assertEqual(book.operations[0]["change"], decimal.Decimal("515.48703082"))
+        self.assertEqual(book.operations[1]["operation"], "FuturesLoss")
+        self.assertEqual(book.operations[1]["coin"], "USDT")
+        self.assertEqual(book.operations[1]["change"], decimal.Decimal("12.25"))
+
+    def test_import_spot_records_maps_consumption_and_ignores_gains(self) -> None:
+        reader = BitgetApiReader()
+        book = _BookStub()
+        records = [
+            {
+                "coin": "USDT",
+                "spotTaxType": "Consumption",
+                "amount": "-3876.8169",
+                "fee": "0",
+                "ts": "1748242582267",
+                "bizOrderId": "order-3",
+            },
+            {
+                "coin": "NEAR",
+                "spotTaxType": "Gains",
+                "amount": "1359.32",
+                "fee": "0",
+                "ts": "1748242582250",
+                "bizOrderId": "order-3",
+            },
+        ]
+
+        with patch.object(
+            reader,
+            "_fetch_all_range",
+            return_value=[(0, 0, records, {}, {})],
+        ):
+            reader.import_spot_records(book, 0, 0)
+
+        self.assertEqual(len(book.operations), 1)
+        self.assertEqual(book.operations[0]["operation"], "Sell")
+        self.assertEqual(book.operations[0]["coin"], "USDT")
+        self.assertEqual(book.operations[0]["change"], decimal.Decimal("3876.8169"))
+
+    def test_map_spot_tax_type_supports_withdrawal_and_copy_refund_variants(self) -> None:
+        reader = BitgetApiReader()
+
+        self.assertEqual(
+            reader._map_spot_tax_type("Ordinary Withdrawal"),
+            "Withdrawal",
+        )
+        self.assertEqual(
+            reader._map_spot_tax_type("Copy trade - Profit share refunds"),
+            "Commission",
+        )
+
+    def test_import_spot_copy_trade_records_maps_buy_sell_and_fees(self) -> None:
+        reader = BitgetApiReader()
+        book = _BookStub()
+        records = [
+            {
+                "trackingNo": "123",
+                "traderId": "999",
+                "fillSize": "0.0316",
+                "buyFee": "-0.00001902",
+                "sellFee": "-0.66104988",
+                "symbol": "BTCUSDT",
+                "buyTime": "1695729617968",
+                "sellTime": "1695729886269",
+            }
+        ]
+
+        with patch.object(
+            reader,
+            "_fetch_copy_trade_history_range",
+            return_value=[(0, 0, records, {}, {})],
+        ):
+            reader.import_spot_copy_trade_records(book, 0, 0)
+
+        self.assertEqual(len(book.operations), 4)
+        self.assertEqual(book.operations[0]["operation"], "Buy")
+        self.assertEqual(book.operations[0]["coin"], "BTC")
+        self.assertEqual(book.operations[0]["change"], decimal.Decimal("0.0316"))
+        self.assertEqual(book.operations[1]["operation"], "Fee")
+        self.assertEqual(book.operations[1]["coin"], "USDT")
+        self.assertEqual(
+            book.operations[1]["change"],
+            decimal.Decimal("0.00001902"),
+        )
+        self.assertEqual(book.operations[2]["operation"], "Sell")
+        self.assertEqual(book.operations[2]["coin"], "BTC")
+        self.assertEqual(book.operations[3]["operation"], "Fee")
+        self.assertEqual(book.operations[3]["coin"], "USDT")
+        self.assertEqual(
+            book.operations[3]["change"],
+            decimal.Decimal("0.66104988"),
+        )
+
+    def test_import_future_copy_trade_records_maps_pnl_and_fees(self) -> None:
+        reader = BitgetApiReader()
+        book = _BookStub()
+        records = [
+            {
+                "trackingNo": "456",
+                "traderId": "888",
+                "symbol": "BTCUSDT",
+                "netProfit": "-697.74100000",
+                "openFee": "-5.92649260",
+                "closeFee": "-5.22875160",
+                "closeTime": "1695353868557",
+            }
+        ]
+
+        with patch.object(
+            reader,
+            "_fetch_future_copy_trade_history_range",
+            side_effect=[
+                [(0, 0, records, {}, {})],
+                [(0, 0, [], {}, {})],
+                [(0, 0, [], {}, {})],
+            ],
+        ):
+            reader.import_future_copy_trade_records(book, 0, 0)
+
+        self.assertEqual(len(book.operations), 3)
+        self.assertEqual(book.operations[0]["operation"], "FuturesLoss")
+        self.assertEqual(book.operations[0]["coin"], "USDT")
+        self.assertEqual(
+            book.operations[0]["change"],
+            decimal.Decimal("697.74100000"),
+        )
+        self.assertEqual(book.operations[1]["operation"], "Fee")
+        self.assertEqual(book.operations[1]["coin"], "USDT")
+        self.assertEqual(
+            book.operations[1]["change"],
+            decimal.Decimal("5.92649260"),
+        )
+        self.assertEqual(book.operations[2]["operation"], "Fee")
+        self.assertEqual(book.operations[2]["coin"], "USDT")
+        self.assertEqual(
+            book.operations[2]["change"],
+            decimal.Decimal("5.22875160"),
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

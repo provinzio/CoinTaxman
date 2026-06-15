@@ -14,543 +14,112 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import bisect
 import datetime
 import decimal
 import json
 import sqlite3
-import time
 from pathlib import Path
 from typing import Any, Union
 
-import requests
-
 import config
 import log_config
-import misc
 import transaction as tr
-from core import kraken_pair_map
 from database import get_price_db, get_tablenames_from_db, mean_price_db, set_price_db
+from price_providers import create_price_provider
 
 log = log_config.getLogger(__name__)
 
 
-class FallbackPriceNotFound(Exception):
-    pass
-
-
 class PriceData:
-    # list of Kraken pairs that returned invalid arguments error
-    kraken_invalid_pairs: list[str] = []
+    _PIONEX_USD_STABLE_ASSETS = {
+        "USDT",
+        "USDC",
+        "BUSD",
+        "FDUSD",
+        "TUSD",
+        "USDP",
+        "PYUSD",
+        "DAI",
+    }
+    _BITGET_USD_STABLE_ASSETS = {
+        "USDT",
+        "USDC",
+        "BUSD",
+        "FDUSD",
+        "TUSD",
+        "USDP",
+        "PYUSD",
+        "DAI",
+    }
 
-    @misc.delayed
-    def _get_price_binance(
-        self,
-        base_asset: str,
-        utc_time: datetime.datetime,
-        quote_asset: str,
-        swapped_symbols: bool = False,
-        fallback_mode: bool = False,
-        minute_interval: int = 1,
-    ) -> decimal.Decimal:
-        """Retrieve price from binance official REST API.
+    def __init__(self) -> None:
+        self._providers = {}
+        self._missing_symbols_cache_path = Path(
+            config.DATA_PATH) / "missing_price_symbols.json"
+        self._provider_missing_symbols = self._load_missing_symbols_cache()
 
-        The price is calculated as the average price in a
-        time frame of 1 minute around `utc_time`.
-
-        None existing pairs like `TWTEUR` are calculated as
-        `TWTBTC * BTCEUR`.
-
-        Documentation:
-        https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md
-
-        Args:
-            base_asset (str)
-            utc_time (datetime.datetime)
-            quote_asset (str)
-            swapped_symbols (bool, optional): The function is run with swapped
-                                              asset symbols. Defaults to False.
-
-        Raises:
-            RuntimeError: Unable to retrieve price data.
-
-        Returns:
-            decimal.Decimal: Price of asset pair.
-        """
-        assert base_asset != quote_asset
-        root_url = "https://api.binance.com/api/v3/aggTrades"
-        symbol = f"{base_asset}{quote_asset}"
-        startTime, endTime = misc.get_offset_timestamps(
-            utc_time, datetime.timedelta(minutes=minute_interval)
-        )
-        url = f"{root_url}?{symbol=:}&{startTime=:}&{endTime=:}"
-
-        log.debug("Calling %s", url)
-        response = requests.get(url)
-        data = json.loads(response.text)
-
-        if (
-            isinstance(data, dict)
-            and data.get("code") == -1121
-            and data.get("msg") == "Invalid symbol."
-        ) or len(data) == 0:
-            # Some combinations do not exist (e.g. `TWTEUR`), but almost anything
-            # is paired with our fallback coins.
-            # Check if binance offers prices against our fallback coins as
-            # intermediate coin (e.g. SHIB/EUR = SHIB/BTC * BTC/EUR)
-            fallback_assets = ["BTC", "BNB", "BUSD", "USDT"]
-            fallback_intervalls = [1, 3, 5, 10, 15, 30, 60]
-
-            # Are we already comparing against an fallback coin?
-            if fallback_mode:
-                # We could also try to swap the coins...
-                # Check a last time, if we find the pair by changing the symbol
-                # order.
-                if swapped_symbols:
-                    # We have already swapped the symbols.
-                    # Raise an exception.
-                    raise FallbackPriceNotFound
-                # Changing the order of the assets require to invert the price.
-                price = self.get_price(
-                    "binance",
-                    quote_asset,
-                    utc_time,
-                    base_asset,
-                    swapped_symbols=True,
-                    fallback_mode=fallback_mode,
-                    minute_interval=minute_interval,
-                )
-                return misc.reciprocal(price)
-
-            assert swapped_symbols is False
-
-            # Check against all fallback coins.
-            for fallback_intervall in fallback_intervalls:
-                for fallback_asset in fallback_assets:
-                    if base_asset != fallback_asset and quote_asset != fallback_asset:
-                        try:
-                            base = self.get_price(
-                                "binance",
-                                base_asset,
-                                utc_time,
-                                fallback_asset,
-                                fallback_mode=True,
-                                minute_interval=fallback_intervall,
-                            )
-                            quote = self.get_price(
-                                "binance",
-                                fallback_asset,
-                                utc_time,
-                                quote_asset,
-                                fallback_mode=True,
-                                minute_interval=fallback_intervall,
-                            )
-                        except FallbackPriceNotFound:
-                            # Unable to fetch prices with our intermediate fallback
-                            # coin. Lets checkout the next fallback coin.
-                            continue
-                        else:
-                            return base * quote
-
+    def _load_missing_symbols_cache(self) -> dict[str, set[str]]:
+        try:
+            with open(self._missing_symbols_cache_path, encoding="utf8") as f:
+                raw_data = json.load(f)
+        except FileNotFoundError:
+            return {}
+        except json.JSONDecodeError:
             log.warning(
-                f"Unable to retrieve price for {symbol=} from binance at "
-                f"{utc_time=} even though multiple {fallback_assets=} and "
-                f"multiple {fallback_intervalls=} were checked against. "
-                "Assumption: The coin couldn't been traded at that time. "
-                "Set the price to 0. "
-                "This will be saved to the database and used again without "
-                "further warnings. "
-                "Please edit the price entry in the database by hand, "
-                "if you want to avoid that or use make check-db. "
-                "Feel free to open a PR to improve the binance fallback strategy."
+                "Unable to parse missing symbol cache at %s. Starting with empty cache.",
+                self._missing_symbols_cache_path,
             )
+            return {}
 
-            return decimal.Decimal()
+        if not isinstance(raw_data, dict):
+            log.warning(
+                "Unexpected missing symbol cache format at %s. Starting with empty cache.",
+                self._missing_symbols_cache_path,
+            )
+            return {}
 
-        response.raise_for_status()
-        assert data
+        cache: dict[str, set[str]] = {}
+        for platform, symbols in raw_data.items():
+            if isinstance(platform, str) and isinstance(symbols, list):
+                cache[platform] = {
+                    symbol for symbol in symbols if isinstance(symbol, str)}
+        return cache
 
-        # Calculate average price.
-        total_cost = decimal.Decimal()
-        total_quantity = decimal.Decimal()
-        for d in data:
-            price = misc.force_decimal(d["p"])
-            quantity = misc.force_decimal(d["q"])
-            total_cost += price * quantity
-            total_quantity += quantity
-        average_price = total_cost / total_quantity
-        return average_price
+    def _save_missing_symbols_cache(self) -> None:
+        Path(config.DATA_PATH).mkdir(parents=True, exist_ok=True)
+        serializable_cache = {
+            platform: sorted(symbols)
+            for platform, symbols in sorted(self._provider_missing_symbols.items())
+            if symbols
+        }
+        with open(self._missing_symbols_cache_path, "w", encoding="utf8") as f:
+            json.dump(serializable_cache, f, indent=2, sort_keys=True)
 
-    @misc.delayed
-    def _get_price_coinbase(
-        self,
-        base_asset: str,
-        utc_time: datetime.datetime,
-        quote_asset: str,
-        minutes_step: int = 5,
-    ) -> decimal.Decimal:
-        return self._get_price_coinbase_pro(
-            base_asset, utc_time, quote_asset, minutes_step
+    def _get_provider(self, platform: str):
+        provider = self._providers.get(platform)
+        if provider is not None:
+            return provider
+
+        provider = create_price_provider(
+            platform,
+            self.get_price,
+            missing_symbols=self._provider_missing_symbols.get(platform, set()),
         )
+        if provider is not None:
+            self._providers[platform] = provider
+        return provider
 
-    @misc.delayed
-    def _get_price_coinbase_pro(
-        self,
-        base_asset: str,
-        utc_time: datetime.datetime,
-        quote_asset: str,
-        minutes_step: int = 5,
-    ) -> decimal.Decimal:
-        """Retrieve price from Coinbase Pro official REST API.
+    def _persist_provider_missing_symbols(self, platform: str, provider) -> None:
+        if not provider.has_missing_symbols_update():
+            return
 
-        Documentation: https://docs.pro.coinbase.com
-
-        Args:
-            base_asset (str): Base asset.
-            utc_time (datetime.datetime): Target time (time of the trade).
-            quote_asset (str): Quote asset.
-            minutes_step (int): Initial time offset for consecutive
-                                Coinbase Pro API requests. Defaults to 5.
-
-        Returns:
-            decimal.Decimal: Price of asset pair at target time
-                   (0 if price couldn't be determined)
-        """
-
-        root_url = "https://api.pro.coinbase.com"
-        pair = f"{base_asset}-{quote_asset}"
-
-        minutes_offset = 0
-        while minutes_offset < 120:
-            minutes_offset += minutes_step
-
-            start = misc.to_iso_timestamp(
-                utc_time - datetime.timedelta(minutes=minutes_offset)
-            )
-            end = misc.to_iso_timestamp(
-                utc_time + datetime.timedelta(minutes=minutes_offset)
-            )
-            params = f"start={start}&end={end}&granularity=60"
-            url = f"{root_url}/products/{pair}/candles?{params}"
-
-            log.debug(
-                f"Querying Coinbase Pro candles for {pair} at {utc_time} "
-                f"(offset={minutes_offset}m): Calling %s",
-                url,
-            )
-
-            response = requests.get(url)
-            response.raise_for_status()
-            data = json.loads(response.text)
-
-            # No candles within the time window
-            if len(data) == 0:
-                continue
-
-            # Find closest timestamp match
-            target_timestamp = misc.to_ms_timestamp(utc_time)
-            data_timestamps_ms = [int(float(d[0]) * 1000) for d in data]
-            data_timestamps_ms.reverse()  # bisect requires ascending order
-
-            closest_match_index = (
-                bisect.bisect_left(data_timestamps_ms, target_timestamp) - 1
-            )
-
-            # The desired timestamp is in the past
-            if closest_match_index == -1:
-                continue
-
-            # The desired timestamp is in the future
-            if closest_match_index == len(data_timestamps_ms) - 1:
-                continue
-
-            closest_match = data[closest_match_index]
-            open_price = misc.force_decimal(closest_match[3])
-            close_price = misc.force_decimal(closest_match[4])
-
-            return (open_price + close_price) / 2
-
-        log.warning(
-            f"Querying Coinbase Pro candles for {pair} at {utc_time}: "
-            f"Failed to find matching exchange rate. "
-            "Please create an Issue or PR."
-        )
-        return decimal.Decimal()
-
-    @misc.delayed
-    def _get_price_bitpanda(
-        self, base_asset: str, utc_time: datetime.datetime, quote_asset: str
-    ) -> decimal.Decimal:
-        return self._get_price_bitpanda_pro(base_asset, utc_time, quote_asset)
-
-    @misc.delayed
-    def _get_price_bitpanda_pro(
-        self, base_asset: str, utc_time: datetime.datetime, quote_asset: str
-    ) -> decimal.Decimal:
-        """Retrieve the price from the Bitpanda Pro API.
-
-        This uses the "candlestricks" API endpoint.
-        It returns the highest and lowest price for the COIN in a given time frame.
-
-        Timeframe ends at the requested time.
-
-        Args:
-            base_asset (str): The currency to get the price for.
-            utc_time (datetime.datetime): Time of the trade to fetch the price for.
-            quote_asset (str): The currency for the price.
-
-        Returns:
-            decimal.Decimal: Price of the asset pair.
-        """
-
-        baseurl = (
-            f"https://api.exchange.bitpanda.com/public/v1/"
-            f"candlesticks/{base_asset}_{quote_asset}"
-        )
-
-        # Bitpanda Pro only supports distinctive arguments for this, *not arbitrary*
-        timeframes = [1, 5, 15, 30]
-
-        # Try to find the price in the most detailed timeframe, to get the best matching
-        # price for the transaction. If we can not find the price in a timeframe, use
-        # the next bigger frame and try again. If we reached the highest timeframe, move
-        # the fetched time window into the past, to get the latest transaction from the
-        # API. If there were no trades in the requested time frame, the returned data
-        # will be empty
-        for t in timeframes:
-            # Maximum number of allowed offsets into the past to find a valid price
-            # before we throw an error. We do not offset the time window as long as we
-            # can choose a bigger timeframe instead. num_max_offsets has been determined
-            # empirically and may be changed.
-            num_max_offsets = 12 if t == timeframes[-1] else 1
-            for num_offset in range(num_max_offsets):
-                # if no trades can be found, move 30 min window to the past
-                window_offset = num_offset * t
-                end = utc_time.astimezone(datetime.timezone.utc) - datetime.timedelta(
-                    minutes=window_offset
-                )
-                begin = end - datetime.timedelta(minutes=t)
-
-                # https://github.com/python/mypy/issues/3176
-                params: dict[str, Union[int, str]] = {
-                    "unit": "MINUTES",
-                    "period": t,
-                    # convert ISO 8601 format to RFC3339 timestamp
-                    "from": begin.isoformat().replace("+00:00", "Z"),
-                    "to": end.isoformat().replace("+00:00", "Z"),
-                }
-                if num_offset:
-                    log.debug(
-                        f"Calling Bitpanda API for {base_asset} / {quote_asset} price "
-                        f"for {t} minute timeframe ending at {end} "
-                        f"(includes {window_offset} minutes offset)"
-                    )
-                else:
-                    log.debug(
-                        f"Calling Bitpanda API for {base_asset} / {quote_asset} price "
-                        f"for {t} minute timeframe ending at {end}"
-                    )
-                r = requests.get(baseurl, params=params)
-
-                assert r.status_code == 200, "No valid response from Bitpanda API"
-                data = r.json()
-
-                # exit loop if data is valid
-                if data:
-                    break
-
-                # issue warning if time window is moved to the past
-                if num_offset < num_max_offsets - 1:
-                    log.warning(
-                        f"No price data found for {base_asset} / {quote_asset} "
-                        f"at {end}, moving {t} minutes window to the past."
-                    )
-
-            # exit loop if data is valid
-            if data:
-                break
+        symbols = provider.get_missing_symbols()
+        if symbols:
+            self._provider_missing_symbols[platform] = symbols
         else:
-            log.error(
-                f"No price data found for {base_asset} / {quote_asset} at {end}. "
-                f"You can try to increase num_max_offsets to obtain older price data."
-            )
-            raise RuntimeError
-
-        # this should never be triggered, but just in case assert received data
-        assert data, f"No valid price data for {base_asset} / {quote_asset} at {end}"
-
-        # simply take the average of the latest data element
-        high = misc.force_decimal(data[-1]["high"])
-        low = misc.force_decimal(data[-1]["low"])
-
-        # if spread is greater than 3%
-        if (high - low) / high > 0.03:
-            log.warning(f"Price spread is greater than 3%! High: {high}, Low: {low}")
-        return (high + low) / 2
-
-    @misc.delayed
-    def _get_price_kraken(
-        self,
-        base_asset: str,
-        utc_time: datetime.datetime,
-        quote_asset: str,
-        minutes_step: int = 10,
-    ) -> decimal.Decimal:
-        """Retrieve price from Kraken official REST API.
-
-        We select the data point closest to the desired timestamp (utc_time),
-        but not newer than this timestamp.
-        For this we fetch one chunk of the trade history, starting
-        `minutes_step`minutes before this timestamp.
-        We then walk through the history until the closest timestamp match is
-        found. Otherwise (if all received price data points are newer than the desired
-        timestamp), we start another 10 minutes earlier and try again.
-        (Exiting with a warning and zero price after hitting the arbitrarily
-        chosen offset limit of 120 minutes). If the initial offset is already
-        too large (i.e. all received price data points are older than the desired
-        timestamp), recursively retry by reducing the offset step,
-        down to 1 minute.
-
-        Documentation: https://www.kraken.com/features/api
-
-        Args:
-            base_asset (str): Base asset.
-            utc_time (datetime.datetime): Target time (time of the trade).
-            quote_asset (str): Quote asset.
-            minutes_step (int): Initial time offset for consecutive
-                                Kraken API requests. Defaults to 10.
-
-        Returns:
-            decimal.Decimal: Price of asset pair at target time
-                   (0 if price couldn't be determined)
-        """
-        target_timestamp = misc.to_ms_timestamp(utc_time)
-        root_url = "https://api.kraken.com/0/public/Trades"
-        inverse = False
-
-        minutes_offset = 0
-        while minutes_offset < 120:
-            minutes_offset += minutes_step
-
-            since = misc.to_ns_timestamp(
-                utc_time - datetime.timedelta(minutes=minutes_offset)
-            )
-
-            num_retries = 10
-            while num_retries:
-                pair = base_asset + quote_asset
-                pair = kraken_pair_map.get(pair, pair)
-
-                # if the pair is invalid, invert it
-                if pair in self.kraken_invalid_pairs:
-                    inverse = not inverse
-                    base_asset, quote_asset = quote_asset, base_asset
-                    pair = base_asset + quote_asset
-                    pair = kraken_pair_map.get(pair, pair)
-                    # if inverted pair is also invalid, throw error
-                    if pair in self.kraken_invalid_pairs:
-                        log.error(
-                            f"Could not retrieve trades for {pair} or inverse pair, "
-                            "invalid arguments error. Please create an Issue or PR."
-                        )
-                        raise RuntimeError
-
-                url = f"{root_url}?{pair=:}&{since=:}"
-
-                log.debug(
-                    f"Querying trades for {pair} at {utc_time} "
-                    f"(offset={minutes_offset}m): Calling %s",
-                    url,
-                )
-                response = requests.get(url)
-                response.raise_for_status()
-                data = json.loads(response.text)
-
-                if not data["error"]:
-                    break
-                elif data["error"] == ["EGeneral:Invalid arguments"]:
-                    # add pair to invalid pairs list
-                    # leads to inversion of pair next time
-                    log.warning(
-                        f"Invalid arguments error for {pair} at {utc_time} "
-                        f"(offset={minutes_offset}m): "
-                        f"Blocking pair and trying inverse coin pair ..."
-                    )
-                    self.kraken_invalid_pairs.append(pair)
-                else:
-                    num_retries -= 1
-                    sleep_duration = 2 ** (10 - num_retries)
-                    log.warning(
-                        f"Could not retrieve trades for {pair} at {utc_time} "
-                        f"(offset={minutes_offset}m): {data['error']}. "
-                        f"Retry in {sleep_duration} s ..."
-                    )
-                    time.sleep(sleep_duration)
-                    continue
-            else:
-                log.error(
-                    f"Could not retrieve trades for {pair} at {utc_time} "
-                    f"(offset={minutes_offset}m): {data['error']}. "
-                )
-                raise RuntimeError("Kraken response keeps having error flags.")
-
-            # Find closest timestamp match
-            data = data["result"][pair]
-            data_timestamps_ms = [int(float(d[2]) * 1000) for d in data]
-            closest_match_index = (
-                bisect.bisect_left(data_timestamps_ms, target_timestamp) - 1
-            )
-
-            # The desired timestamp is in the past; increase the offset
-            # desired timestamp is smaller than all timestamps of the received data
-            if closest_match_index == -1:
-                continue
-
-            # The desired timestamp is in the future
-            # desired timestamp is larger than all timestamps of the received data
-            if closest_match_index == len(data_timestamps_ms) - 1:
-                if len(data_timestamps_ms) < 100:
-                    # The API returns the last 1000 trades. If less than 100 trades are
-                    # received, it can be assumed that we've received the last trade.
-                    price_timestamp = data_timestamps_ms[closest_match_index]
-                    log.debug(
-                        "Accepting price from "
-                        f"{datetime.datetime.fromtimestamp(price_timestamp/1000.0)} "
-                        f"as latest price for {pair} at {utc_time}"
-                    )
-                    # This should normally only happen for virtual sells, therefore
-                    # raise a warning if the target timestamp is older than one hour
-                    now_timestamp = misc.to_ms_timestamp(
-                        datetime.datetime.now().astimezone()
-                    )
-                    if target_timestamp < now_timestamp - 3600 * 1000:
-                        log.warning(
-                            f"Timestamp for {pair} at {utc_time} is older than one "
-                            "hour, still accepted latest received trading price"
-                        )
-                elif minutes_step == 1:
-                    # Cannot reduce interval any further; give up
-                    break
-                else:
-                    # We missed the desired timestamp because our initial step
-                    # size was too large; reduce step size
-                    log.debug(
-                        f"Querying trades for {pair} at {utc_time}: " "Reducing step"
-                    )
-                    return self._get_price_kraken(
-                        base_asset, utc_time, quote_asset, minutes_step - 1
-                    )
-
-            price = misc.force_decimal(data[closest_match_index][0])
-            if inverse:
-                price = misc.reciprocal(price)
-            return price
-
-        log.warning(
-            f"Failed to find matching exchange rate for {pair} at {utc_time}: "
-            "Please create an Issue or PR."
-        )
-        return decimal.Decimal()
+            self._provider_missing_symbols.pop(platform, None)
+        self._save_missing_symbols_cache()
+        provider.mark_missing_symbols_persisted()
 
     def get_price(
         self,
@@ -579,16 +148,59 @@ class PriceData:
             return decimal.Decimal("1")
 
         # Check if price exists already in our database.
-        if (price := get_price_db(platform, coin, reference_coin, utc_time)) is None:
+        price = get_price_db(platform, coin, reference_coin, utc_time)
+        if price is None:
             # Price doesn't exists. Fetch price from platform.
-            try:
-                get_price = getattr(self, f"_get_price_{platform}")
-            except AttributeError:
+            provider = self._get_provider(platform)
+            if provider is None:
                 raise NotImplementedError(f"Unable to read data from {platform=}")
 
-            price = get_price(coin, utc_time, reference_coin, **kwargs)
+            get_price = provider.fetch_price
+            try:
+                price = get_price(coin, utc_time, reference_coin, **kwargs)
+            finally:
+                self._persist_provider_missing_symbols(platform, provider)
             assert isinstance(price, decimal.Decimal)
+
+            if price <= 0:
+                fallback_price = mean_price_db(
+                    platform,
+                    coin,
+                    reference_coin,
+                    utc_time,
+                )
+                if fallback_price > 0:
+                    price = fallback_price
+
             set_price_db(platform, coin, reference_coin, utc_time, price)
+        elif (
+            price <= 0
+            and reference_coin != "USD"
+            and (
+                (platform == "pionex" and coin in self._PIONEX_USD_STABLE_ASSETS)
+                or (platform == "bitget" and coin in self._BITGET_USD_STABLE_ASSETS)
+            )
+        ):
+            # Recover from legacy cached zero prices for stablecoins
+            # (e.g. USDT/EUR) by re-running provider fallback logic.
+            provider = self._get_provider(platform)
+            if provider is not None:
+                get_price = provider.fetch_price
+                try:
+                    refreshed = get_price(coin, utc_time, reference_coin)
+                finally:
+                    self._persist_provider_missing_symbols(platform, provider)
+
+                if refreshed > 0:
+                    price = refreshed
+                    set_price_db(
+                        platform,
+                        coin,
+                        reference_coin,
+                        utc_time,
+                        price,
+                        overwrite=True,
+                    )
 
         if config.MEAN_MISSING_PRICES and price <= 0.0:
             # The price is missing. Check for prices before and after the
@@ -626,18 +238,17 @@ class PriceData:
             if db_path.is_file():
                 platform = db_path.stem
                 stats[platform] = {"fix": 0, "rem": 0}
-                try:
-                    get_price = getattr(self, f"_get_price_{platform}")
-                except AttributeError as e:
-                    if platform == "coinbase":
-                        get_price = self._get_price_coinbase_pro
-                    else:
-                        log.warning(
-                            f"excepted NotImplementedError: {e}, "
-                            "checking will be ignored in this case"
-                        )
-                        del stats[platform]
-                        continue
+                provider = self._get_provider(platform)
+                if provider is None:
+                    log.warning(
+                        "No price provider registered for %s. "
+                        "Database check for this platform will be skipped.",
+                        platform,
+                    )
+                    del stats[platform]
+                    continue
+
+                get_price = provider.fetch_price
 
                 with sqlite3.connect(db_path) as conn:
                     cur = conn.cursor()
@@ -724,6 +335,8 @@ class PriceData:
                                 stats[platform]["fix"] += 1
 
                     conn.commit()
+
+                self._persist_provider_missing_symbols(platform, provider)
 
         log.info("Check Database Result:")
         for platform, result in stats.items():
