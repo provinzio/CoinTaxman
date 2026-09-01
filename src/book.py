@@ -143,6 +143,7 @@ class Book:
             "HODLer Airdrops Distribution": "Airdrop",
             "Token Swap - Distribution": "Airdrop",
             "Launchpool Airdrop - System Distribution": "Airdrop",
+            "Launchpool Airdrop - User Claim Distribution": "Airdrop",
             #
             "Savings Interest": "CoinLendInterest",
             "Savings purchase": "CoinLend",
@@ -151,9 +152,11 @@ class Book:
             "Simple Earn Flexible Subscription": "CoinLend",
             "Simple Earn Flexible Redemption": "CoinLendEnd",
             "Simple Earn Flexible Interest": "CoinLendInterest",
+            "Simple Earn Flexible - Rewards Income": "CoinLendInterest",
             "Simple Earn Locked Subscription": "CoinLend",
             "Simple Earn Locked Redemption": "CoinLendEnd",
             "Simple Earn Locked Rewards": "CoinLendInterest",
+            "Simple Earn Locked - Rewards Income": "CoinLendInterest",
             "Savings Distribution": "CoinLendInterest",
             #
             "BNB Vault Rewards": "CoinLendInterest",
@@ -178,10 +181,14 @@ class Book:
             "Staking Purchase": "Staking",
             "Staking Rewards": "StakingInterest",
             "Staking Redemption": "StakingEnd",
+            "DOT Slot Auction Staking": "Staking",
+            "DOT Slot Auction Redemption": "StakingEnd",
+            "DOT Slot Auction Rewards": "StakingInterest",
             #
             "Fiat Deposit": "Deposit",
             "Fiat Withdraw": "Withdrawal",
             "Withdraw": "Withdrawal",
+            "Crypto Box Refund": "Deposit",
             #
             "Transaction Buy": "Buy",
             "Transaction Spend": "Sell",
@@ -189,6 +196,8 @@ class Book:
             "Transaction Sold": "Sell",
             "Transaction Fee": "Fee",
             "Asset Recovery": "Sell",
+            "Buy Crypto With Fiat": "Buy",
+            "Convert Fiat to Stablecoin Paysafe": "Buy",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -241,8 +250,12 @@ class Book:
                     "Sell",
                     "Buy",
                     "Binance Convert",
+                    "Stablecoins Auto-Conversion",
                 ):
                     operation = "Sell" if change < 0 else "Buy"
+
+                if operation == "Launchpool Subscription/Redemption":
+                    operation = "CoinLend" if change < 0 else "CoinLendEnd"
 
                 if operation == "Liquid Swap add/sell":
                     operation = "CoinLendEnd" if change < 0 else "CoinLend"
@@ -262,8 +275,13 @@ class Book:
                     )
                     or (
                         account in ("Spot", "Funding")
-                        and operation == "Transfer Between Main and Funding Wallet"
+                        and operation 
+                        in (
+                            "Transfer Between Main and Funding Wallet",
+                            "Transfer Between Spot and Funding",
+                        )
                     )
+                    or operation == "Simple Earn Flexible - Internal Transfer"
                 ):
                     # Ignore transfers
                     continue
