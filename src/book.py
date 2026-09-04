@@ -143,7 +143,6 @@ class Book:
             "HODLer Airdrops Distribution": "Airdrop",
             "Token Swap - Distribution": "Airdrop",
             "Launchpool Airdrop - System Distribution": "Airdrop",
-            "Launchpool Airdrop - User Claim Distribution": "Airdrop",
             #
             "Savings Interest": "CoinLendInterest",
             "Savings purchase": "CoinLend",
@@ -161,6 +160,7 @@ class Book:
             #
             "BNB Vault Rewards": "CoinLendInterest",
             "Launchpool Earnings Withdrawal": "CoinLendInterest",
+            "Launchpool Airdrop - User Claim Distribution": "CoinLendInterest",
             #
             "Commission History": "Commission",
             "Commission Fee Shared With You": "Commission",
@@ -188,7 +188,6 @@ class Book:
             "Fiat Deposit": "Deposit",
             "Fiat Withdraw": "Withdrawal",
             "Withdraw": "Withdrawal",
-            "Crypto Box Refund": "Deposit",
             #
             "Transaction Buy": "Buy",
             "Transaction Spend": "Sell",
@@ -196,8 +195,6 @@ class Book:
             "Transaction Sold": "Sell",
             "Transaction Fee": "Fee",
             "Asset Recovery": "Sell",
-            "Buy Crypto With Fiat": "Buy",
-            "Convert Fiat to Stablecoin Paysafe": "Buy",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -251,6 +248,8 @@ class Book:
                     "Buy",
                     "Binance Convert",
                     "Stablecoins Auto-Conversion",
+                    "Buy Crypto With Fiat",
+                    "Convert Fiat to Stablecoin Paysafe",
                 ):
                     operation = "Sell" if change < 0 else "Buy"
 
@@ -272,6 +271,7 @@ class Book:
                     in (
                         "transfer_in",
                         "transfer_out",
+                        "Crypto Box Refund",
                     )
                     or (
                         account in ("Spot", "Funding")
