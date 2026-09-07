@@ -71,7 +71,8 @@ def main() -> None:
 
     if log_config.counter_handler.warning_count > 0:
         print(
-            f"Warning: {log_config.counter_handler.warning_count} warnings were logged during the evaluation. "
+            f"Warning: {log_config.counter_handler.warning_count} warnings "
+            "were logged during the evaluation. "
             "Please check the log file for details."
         )
 

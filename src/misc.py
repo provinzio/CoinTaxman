@@ -263,7 +263,6 @@ def delayed(func: F) -> F:
     """Randomly delay calls to the same function."""
 
     def wrapper(*args, **kwargs):
-        global __delayed
         if delayed := __delayed.get(id(func)):
             delayed_for = (delayed - datetime.datetime.now()).total_seconds()
             if delayed_for > 0:

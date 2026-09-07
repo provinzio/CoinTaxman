@@ -21,7 +21,7 @@ import decimal
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Optional, NamedTuple
+from typing import Any, NamedTuple, Optional
 
 import config
 import log_config

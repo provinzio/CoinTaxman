@@ -15,8 +15,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import configparser
-import locale
 import datetime
+import locale
 import zoneinfo
 from os import environ
 from pathlib import Path

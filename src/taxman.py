@@ -761,9 +761,10 @@ class Taxman:
                     "Nein, separate Betrachtung je Wallet"
                     if config.MULTI_DEPOT
                     else (
-                        "Ja, Zusammenfassung aller Transaktion in einer virtuellen Wallet "
-                        "(Hinweis: ausgewiesene Bestände können sich von der Bilanz der "
-                        "einzelnen Wallets unterscheiden)"
+                        "Ja, Zusammenfassung aller Transaktion in einer "
+                        "virtuellen Wallet (Hinweis: ausgewiesene Bestände "
+                        "können sich von der Bilanz der einzelnen Wallets "
+                        "unterscheiden)"
                     )
                 ),
             ],
