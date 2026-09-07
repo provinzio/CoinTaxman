@@ -92,7 +92,7 @@ class Operation:
             actual_type = typing.get_origin(field.type) or field.type
 
             if isinstance(actual_type, typing._SpecialForm):
-                actual_type = field.type.__args__
+                actual_type = typing.get_args(field.type)
             elif isinstance(actual_type, str):
                 while isinstance(actual_type, str):
                     # BUG row:list[int] value gets only checked for list.
@@ -271,10 +271,12 @@ class TaxReportEntry:
 
     @property
     def first_local_time(self) -> Optional[datetime.datetime]:
-        """Get the first local time by converting the first UTC time to the local timezone.
+        """Get the first local time by converting the first UTC time to
+        the local timezone.
 
         Returns:
-            Optional[datetime.datetime]: First local time or None if the first time is not set.
+            Optional[datetime.datetime]: First local time or None if the
+                first time is not set.
         """
         if self.first_utc_time is None:
             return None
@@ -282,10 +284,12 @@ class TaxReportEntry:
 
     @property
     def second_local_time(self) -> Optional[datetime.datetime]:
-        """Get the second local time by converting the second UTC time to the local timezone.
+        """Get the second local time by converting the second UTC time to
+        the local timezone.
 
         Returns:
-            Optional[datetime.datetime]: Second local time or None if the second time is not set.
+            Optional[datetime.datetime]: Second local time or None if the
+                second time is not set.
         """
         if self.second_utc_time is None:
             return None
