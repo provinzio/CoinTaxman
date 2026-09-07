@@ -46,6 +46,7 @@ class Operation:
     line: list[int]
     file_path: Path
     fees: "Optional[list[Fee]]" = None
+    exported_price: "Optional[decimal.Decimal]" = None # can hold the price from the exported data (csv)
     remarks: list[str] = dataclasses.field(default_factory=list)
 
     @property
@@ -87,6 +88,10 @@ class Operation:
                 # TODO currently kind of ignored, would be nice when
                 #      implemented correctly.
                 assert actual_value is None
+                continue
+
+            if field.name == "exported_price":
+                assert (actual_value is None or isinstance(actual_value, decimal.Decimal))
                 continue
 
             actual_type = typing.get_origin(field.type) or field.type
@@ -212,8 +217,17 @@ class StakingInterest(Transaction):
 
 
 class Airdrop(Transaction):
-    pass
+    taxation_type: Optional[str] = None
 
+class AirdropGift(Airdrop):
+    """AirdropGift is used for gifts that are non-taxable"""
+
+    taxation_type: Optional[str] = "Schenkung"
+
+class AirdropIncome(Airdrop):
+    """AirdropIncome is used for income that is taxable"""
+
+    taxation_type: Optional[str] = "Einkünfte aus sonstigen Leistungen"
 
 class Commission(Transaction):
     pass
