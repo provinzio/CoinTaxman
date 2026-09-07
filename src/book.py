@@ -33,6 +33,12 @@ from price_data import PriceData
 
 log = log_config.getLogger(__name__)
 
+# Bitpanda exported incoming staking rewards as "transfer" until (roughly)
+# this date. Afterwards they are correctly exported as "reward".
+BITPANDA_REWARD_TAGGING_DATE = datetime.datetime(
+    2022, 6, 14, tzinfo=datetime.timezone.utc
+)
+
 
 class MissingOperation(NamedTuple):
     platform: str
@@ -88,7 +94,16 @@ class Book:
         if remark:
             kwargs["remarks"] = [remark]
 
-        op = Op(utc_time, platform, change, coin, [row], file_path, None, exported_price, **kwargs)
+        op = Op(
+            utc_time,
+            platform,
+            change,
+            coin,
+            [row],
+            file_path,
+            exported_price=exported_price,
+            **kwargs,
+        )
         assert isinstance(op, tr.Operation)
         return op
 
@@ -278,7 +293,7 @@ class Book:
                     )
                     or (
                         account in ("Spot", "Funding")
-                        and operation 
+                        and operation
                         in (
                             "Transfer Between Main and Funding Wallet",
                             "Transfer Between Spot and Funding",
@@ -327,7 +342,14 @@ class Book:
                         )
 
                 self.append_operation(
-                    operation, utc_time, platform, change, coin, row, file_path, None, remark
+                    operation,
+                    utc_time,
+                    platform,
+                    change,
+                    coin,
+                    row,
+                    file_path,
+                    remark=remark,
                 )
 
     def _read_binance_v2(self, file_path: Path) -> None:
@@ -1226,9 +1248,15 @@ class Book:
                 # CocaCola transfer, which I don't want to track. Would need to
                 # be implemented if need be.
                 if operation == "transfer":
-                    if asset == "BEST" and asset_class == "Cryptocurrency" and inout == "incoming":
-                        # BEST is awarded for trading activity and holding a portfolio at bitpanda
-                        # The BEST awards are listed as "transfer" but must be processed as Airdrop (non-taxable)
+                    if (
+                        inout == "incoming"
+                        and asset == "BEST"
+                        and asset_class == "Cryptocurrency"
+                    ):
+                        # BEST is bitpandas own token which is awarded for
+                        # trading activity and for holding a portfolio at
+                        # bitpanda. These awards are exported as "transfer"
+                        # but have to be processed as a gifted airdrop.
                         operation = "airdrop_gift"
                     elif (
                         inout == "incoming"
@@ -1237,84 +1265,89 @@ class Book:
                         and utc_time.year == 2022
                         and utc_time.month == 9
                     ):
-                        # In September 2022 the ETH blockchain switched from proof of work to
-                        # proof of stake. This bore the potential for a hardfork and continuation
-                        # of the original PoW chain albeit with a drastically reduced hashrate.
-                        # Bitpanda considered listing the resulting token if there was still value
-                        # in trading the ETH token on the PoW fork and considered distributing airdrops
-                        # in that case. The resulting token would be traded using the ETHW handle.
-                        # See: https://blog.bitpanda.com/en/ethereum-merge-everything-you-need-know
+                        # In September 2022 the ETH blockchain switched from
+                        # proof of work to proof of stake. This bore the
+                        # potential for a hardfork and continuation of the
+                        # original PoW chain albeit with a drastically reduced
+                        # hashrate. Bitpanda considered listing the resulting
+                        # token if there was still value in trading the ETH
+                        # token on the PoW fork and considered distributing
+                        # airdrops in that case. The resulting token would be
+                        # traded using the ETHW handle.
+                        # See: https://blog.bitpanda.com/en/ethereum-merge-everything-you-need-know  # noqa: E501
                         #
-                        # German law regarding this case is not entirely clear
-                        # (see https://www.winheller.com/bankrecht-finanzrecht/bitcointrading/bitcoinundsteuer/besteuerung-hardforks-ledger-splits.html).
-                        # TODO: This should actually copy the history from the original ETH history.
+                        # German law regarding this case is not entirely clear,
+                        # see https://www.winheller.com/bankrecht-finanzrecht/bitcointrading/bitcoinundsteuer/besteuerung-hardforks-ledger-splits.html  # noqa: E501
+                        # TODO This should actually copy the history from the
+                        #      original ETH history.
                         log.warning(
-                            f"Airdrop of {asset} is likely a result of Ethereums switch "
-                            f"to PoS in September 2022. The legal status of taxation of fork "
-                            f"airdrops is unclear in Germany (at least). Also, the original "
-                            f"history should be copied, which is NOT YET IMPLEMENTED. "
-                            f"See https://blog.bitpanda.com/en/ethereum-merge-everything-you-need-know "
-                            f"for more information. "
-                            f"Please open an issue or PR if you know how to resolve this. "
-                            f"In row {row} in file {file_path}."
+                            f"Airdrop of {asset} is likely a result of "
+                            "Ethereums switch to PoS in September 2022. The "
+                            "legal status of taxation of fork airdrops is "
+                            "unclear in Germany (at least). Also, the original "
+                            "history should be copied, which is NOT YET "
+                            "IMPLEMENTED. Please open an issue or PR if you "
+                            "know how to resolve this. "
+                            f"In row {row} of file {file_path}."
                         )
                         operation = "airdrop_gift"
                     elif (
                         inout == "incoming"
                         and asset == "LUNC"
-                        and asset_class == "Fiat"
                         and utc_time.year == 2022
                         and utc_time.month == 5
                     ):
-                        # In May 2022 the Terra (LUNA) blockchain crashed. In response, a new chain
-                        # Terra 2.0 (LUNA) was created. The new old chain is still tradeable as
-                        # Terra Classic (LUNC) and holders of LUNA before the crash received their
-                        # LUNC tokens as airdrop. This also applied to LUNA tokens held through
-                        # bitpanda crypto indices.
-                        # Source for bitpanda LUNC airdrop:
-                        # https://support.bitpanda.com/hc/en-us/articles/4995318011292-Terra-2-0-LUNA-Airdrop
+                        # In May 2022 the Terra (LUNA) blockchain crashed. In
+                        # response, a new chain Terra 2.0 (LUNA) was created.
+                        # The old chain is still tradeable as Terra Classic
+                        # (LUNC) and holders of LUNA before the crash received
+                        # their LUNC tokens as airdrop. This also applied to
+                        # LUNA tokens held through bitpanda crypto indices.
+                        # See: https://support.bitpanda.com/hc/en-us/articles/4995318011292-Terra-2-0-LUNA-Airdrop  # noqa: E501
                         #
-                        # The German law regarding this case is not entirely clear:
-                        # https://www.winheller.com/bankrecht-finanzrecht/bitcointrading/bitcoinundsteuer/besteuerung-hardforks-ledger-splits.html
-                        # TODO: This should actually copy the history from the original LUNA history.
+                        # German law regarding this case is not entirely clear,
+                        # see https://www.winheller.com/bankrecht-finanzrecht/bitcointrading/bitcoinundsteuer/besteuerung-hardforks-ledger-splits.html  # noqa: E501
+                        # TODO This should actually copy the history from the
+                        #      original LUNA history.
                         log.warning(
-                            f"WARNING: Airdrop of {asset} is a result of the fork of the "
-                            f"LUNA blockchain in May 2022. The legal status of "
-                            f"taxation of hardfork results is not clear in German law. "
-                            f"Also, the date of procurement should be set to the date(s) "
-                            f"of procurement of the original coins, essentially copying "
-                            f"the history of the original chain, which is NOT YET IMPLEMENTED. "
-                            f"See https://support.bitpanda.com/hc/en-us/articles/4995318011292-Terra-2-0-LUNA-Airdrop "
-                            f"for more information. "
-                            f"Please open an issue or PR if you know how to resolve this. "
-                            f"In row {row} in file {file_path}."
+                            f"Airdrop of {asset} is a result of the fork of "
+                            "the LUNA blockchain in May 2022. The legal status "
+                            "of taxation of hardfork results is not clear in "
+                            "German law. Also, the date of procurement should "
+                            "be set to the date(s) of procurement of the "
+                            "original coins, essentially copying the history "
+                            "of the original chain, which is NOT YET "
+                            "IMPLEMENTED. Please open an issue or PR if you "
+                            "know how to resolve this. "
+                            f"In row {row} of file {file_path}."
                         )
-                        # Rewrite this asset_class because "Fiat" clearly wrong.
-                        asset_class = "Cryptocurrency"
+                        if asset_class != "Cryptocurrency":
+                            # Bitpanda exported this airdrop as "Fiat",
+                            # which is clearly wrong.
+                            asset_class = "Cryptocurrency"
                         operation = "airdrop_gift"
                     elif (
                         inout == "incoming"
                         and asset_class == "Cryptocurrency"
                         and asset != "BEST"
-                        and utc_time < datetime.datetime(2022, 6, 14, 0, 0, 0, 0, utc_time.tzinfo)
+                        and utc_time < BITPANDA_REWARD_TAGGING_DATE
                     ):
-                        # Bitpanda tagged incoming staking rewards as incoming transfer until June 14 2022
-                        # or a few days before that date. After that, staking rewards are correctly tagged as "reward".
+                        # Bitpanda tagged incoming staking rewards as incoming
+                        # transfer until (roughly) June 14 2022. After that,
+                        # staking rewards are correctly tagged as "reward".
                         operation = "reward"
                     else:
                         log.warning(
-                            f"'Transfer' operations are not "
+                            "'Transfer' operations are not "
                             f"implemented, skipping row {row} of file {file_path}"
                         )
                         continue
 
-                # remap tansfer(stake)
-                if operation == "transfer(stake)":
-                    if inout == "incoming":
-                        operation = "staking"
-                if operation == "transfer(unstake)":
-                    if inout == "outgoing":
-                        operation = "staking_end"
+                # Remap transfer(stake) / transfer(unstake).
+                if operation == "transfer(stake)" and inout == "incoming":
+                    operation = "staking"
+                elif operation == "transfer(unstake)" and inout == "outgoing":
+                    operation = "staking_end"
 
                 # fail for unknown ops
                 try:
@@ -1326,8 +1359,15 @@ class Book:
                     )
                     raise RuntimeError
 
-                # Handling Airdrops the same as Deposits and Withdrawals here. Otherwise, balance doesn't add up.
-                if operation in ["Deposit", "Withdrawal", "Airdrop", "AirdropGift", "AirdropIncome"]:
+                # Airdrops are handled like Deposits and Withdrawals here.
+                # Otherwise the balance doesn't add up.
+                if operation in (
+                    "Deposit",
+                    "Withdrawal",
+                    "Airdrop",
+                    "AirdropGift",
+                    "AirdropIncome",
+                ):
                     if asset_class == "Fiat":
                         change = misc.force_decimal(amount_fiat)
                         if fiat != asset:
@@ -1344,7 +1384,7 @@ class Book:
                             f"'Cryptocurrency' in row {row} of file {file_path}"
                         )
                         raise RuntimeError
-                elif operation in ["Buy", "Sell"]:
+                elif operation in ("Buy", "Sell"):
                     if asset_price_currency != config.FIAT:
                         log.error(
                             f"Only {config.FIAT} is supported as "
@@ -1360,12 +1400,15 @@ class Book:
                     # Calculated price
                     price_calc = change_fiat / change
                     set_price_db(platform, asset, config.FIAT, utc_time, price_calc)
-                elif operation in ["Staking", "StakingEnd", "StakingInterest"]:
+                elif operation in ("Staking", "StakingEnd", "StakingInterest"):
                     change = misc.force_decimal(amount_asset)
                 else:
-                    # If something slips through the if/elifs above, the change will be wrong!
-                    # That's why we have to raise an exception here!
-                    log.error(f"Failed to appropriately handle operation '{operation}' for {platform}!")
+                    # Without an explicit branch, `change` would silently keep
+                    # the value of the previous row. Fail loudly instead.
+                    log.error(
+                        f"Failed to determine the amount of the operation "
+                        f"'{operation}' in row {row} of file {file_path}"
+                    )
                     raise RuntimeError
 
                 if change < 0:
@@ -1375,11 +1418,19 @@ class Book:
                     )
                     raise RuntimeError
 
-                # Asset price is added to operation as 'exported_price' because some asset prices
-                # can't be checked anymore (like BEST and ETHW, which are both not available using
-                # ONE TRADINGs (ex Bitpanda Pro) candlebars API.
+                # The exported asset price is passed on as `exported_price`,
+                # because some prices can not be fetched anymore (e.g. BEST and
+                # ETHW are not available via the ONE TRADING
+                # (ex Bitpanda Pro) candlesticks API).
                 self.append_operation(
-                    operation, utc_time, platform, change, asset, row, file_path, exported_price
+                    operation,
+                    utc_time,
+                    platform,
+                    change,
+                    asset,
+                    row,
+                    file_path,
+                    exported_price=exported_price,
                 )
 
                 # add buy / sell operation for fiat currency

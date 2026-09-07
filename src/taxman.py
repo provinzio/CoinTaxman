@@ -262,8 +262,12 @@ class Taxman:
         Raises:
             NotImplementedError: When there are more than two different fee coins.
         """
-        assert op.coin == sc.op.coin, f"Error evaluating op.coin==sc.op.coin:\n\t\t{op}\n\t\t{sc}"
-        assert op.change >= sc.sold, f"Error evaluating op.change >=sc.sold:\n\t\t{op}\n\t\t{sc}"
+        assert (
+            op.coin == sc.op.coin
+        ), f"Error evaluating op.coin == sc.op.coin:\n\t\t{op}\n\t\t{sc}"
+        assert (
+            op.change >= sc.sold
+        ), f"Error evaluating op.change >= sc.sold:\n\t\t{op}\n\t\t{sc}"
 
         # Share the fees and sell_value proportionally to the coins sold.
         percent = sc.sold / op.change
@@ -483,15 +487,20 @@ class Taxman:
             self.add_to_balance(op)
 
             if in_tax_year(op):
-                if config.ALL_AIRDROPS_ARE_GIFTS:
-                    taxation_type = "Schenkung"
+                # Airdrops which could be classified while reading the account
+                # statement are taxed according to their type; the user setting
+                # `ALL_AIRDROPS_ARE_GIFTS` must not overrule them.
+                # It is only the fallback for unclassified airdrops.
+                if isinstance(op, tr.AirdropGift):
+                    is_gift = True
+                elif isinstance(op, tr.AirdropIncome):
+                    is_gift = False
                 else:
-                    taxation_type = "Einkünfte aus sonstigen Leistungen"
+                    is_gift = config.ALL_AIRDROPS_ARE_GIFTS
 
-                # If taxation_type is actually set, it should overwrite the general setting.
-                # This can happen by using the subclasses AirdropGift (not taxed) and AirdropIncome (taxed)
-                if op.taxation_type:
-                    taxation_type = op.taxation_type
+                taxation_type = (
+                    "Schenkung" if is_gift else "Einkünfte aus sonstigen Leistungen"
+                )
 
                 report_entry = tr.AirdropReportEntry(
                     platform=op.platform,

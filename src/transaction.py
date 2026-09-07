@@ -46,7 +46,9 @@ class Operation:
     line: list[int]
     file_path: Path
     fees: "Optional[list[Fee]]" = None
-    exported_price: "Optional[decimal.Decimal]" = None # can hold the price from the exported data (csv)
+    # Asset price as stated in the imported account statement (e.g. csv).
+    # Used as a fallback, when the price can not be fetched from the platform.
+    exported_price: "Optional[decimal.Decimal]" = None
     remarks: list[str] = dataclasses.field(default_factory=list)
 
     @property
@@ -91,7 +93,9 @@ class Operation:
                 continue
 
             if field.name == "exported_price":
-                assert (actual_value is None or isinstance(actual_value, decimal.Decimal))
+                assert actual_value is None or isinstance(
+                    actual_value, decimal.Decimal
+                )
                 continue
 
             actual_type = typing.get_origin(field.type) or field.type
@@ -217,17 +221,36 @@ class StakingInterest(Transaction):
 
 
 class Airdrop(Transaction):
-    taxation_type: Optional[str] = None
+    """Airdrop of an unknown kind.
+
+    The taxation of these airdrops is determined by the user setting
+    `config.ALL_AIRDROPS_ARE_GIFTS`. Use the subclasses `AirdropGift` and
+    `AirdropIncome` instead, when the kind of the airdrop is known while
+    importing the account statement. Their taxation is fixed and can not be
+    overwritten by the user setting.
+    """
+
+    pass
+
 
 class AirdropGift(Airdrop):
-    """AirdropGift is used for gifts that are non-taxable"""
+    """Airdrop which is known to be a gift (e.g. a hard fork or ledger split).
 
-    taxation_type: Optional[str] = "Schenkung"
+    Taxed as `Schenkung` in Germany, independent of the user setting.
+    """
+
+    pass
+
 
 class AirdropIncome(Airdrop):
-    """AirdropIncome is used for income that is taxable"""
+    """Airdrop which is known to be earned (e.g. a reward for an activity).
 
-    taxation_type: Optional[str] = "Einkünfte aus sonstigen Leistungen"
+    Taxed as `Einkünfte aus sonstigen Leistungen` in Germany, independent of
+    the user setting.
+    """
+
+    pass
+
 
 class Commission(Transaction):
     pass

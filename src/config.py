@@ -51,7 +51,9 @@ MEAN_MISSING_PRICES = config["BASE"].getboolean("MEAN_MISSING_PRICES")
 CALCULATE_UNREALIZED_GAINS = config["BASE"].getboolean("CALCULATE_UNREALIZED_GAINS")
 MULTI_DEPOT = config["BASE"].getboolean("MULTI_DEPOT")
 LOG_LEVEL = config["BASE"].get("LOG_LEVEL", "INFO")
-ALL_AIRDROPS_ARE_GIFTS = config["BASE"].getboolean("ALL_AIRDROPS_ARE_GIFTS")
+ALL_AIRDROPS_ARE_GIFTS = config["BASE"].getboolean(
+    "ALL_AIRDROPS_ARE_GIFTS", fallback=True
+)
 EXPORT_WISO_CSV = config["BASE"].getboolean("EXPORT_WISO_CSV", fallback=False)
 
 # Read in environmental variables.
@@ -71,7 +73,8 @@ if COUNTRY == core.Country.GERMANY:
     PRINCIPLE = core.Principle.FIFO
     LOCAL_TIMEZONE = zoneinfo.ZoneInfo("CET")
     LOCAL_TIMEZONE_KEY = "MEZ"
-    locale_str = ["de_DE", "de_DE.utf8"] # try multiple german locales in order
+    # Try the locales in order; not every system provides all of them.
+    locale_strs = ["de_DE", "de_DE.utf8", "de_DE.UTF-8"]
 
 else:
     raise NotImplementedError(
@@ -81,9 +84,14 @@ else:
 
 # Program specific constants.
 FIAT = FIAT_CLASS.name  # Convert to string.
-for loc in locale_str:
+for locale_str in locale_strs:
     try:
-        locale.setlocale(locale.LC_ALL, loc)
-    except:
+        locale.setlocale(locale.LC_ALL, locale_str)
+    except locale.Error:
         continue
     break
+else:
+    raise RuntimeError(
+        f"Unable to set any of the locales {locale_strs}. "
+        "Please make sure that one of them is installed on your system."
+    )

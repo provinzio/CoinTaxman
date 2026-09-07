@@ -281,11 +281,12 @@ class PriceData:
     def _get_price_bitpanda(
         self, base_asset: str, utc_time: datetime.datetime, quote_asset: str
     ) -> decimal.Decimal:
-        # TODO: Do we want to get historic price data from ONE TRADING (ex Bitpanda Pro) or do we want something else?
+        # TODO Do we want to get historic price data from ONE TRADING
+        #      (ex Bitpanda Pro) or do we want something else?
         return self._get_price_bitpanda_pro(base_asset, utc_time, quote_asset)
 
     # Bitpanda Pro is now ONE TRADING.
-    # TODO: Handle something different?
+    # TODO Handle something different?
     @misc.delayed
     def _get_price_bitpanda_pro(
         self, base_asset: str, utc_time: datetime.datetime, quote_asset: str
@@ -344,21 +345,32 @@ class PriceData:
                 }
                 if num_offset:
                     log.debug(
-                        f"Calling ONE TRADING (ex Bitpanda Pro) API for {base_asset} / {quote_asset} price "
+                        "Calling ONE TRADING (ex Bitpanda Pro) API for "
+                        f"{base_asset} / {quote_asset} price "
                         f"for {t} minute timeframe ending at {end} "
                         f"(includes {window_offset} minutes offset)"
                     )
                 else:
                     log.debug(
-                        f"Calling ONE TRADING (ex Bitpanda Pro) API for {base_asset} / {quote_asset} price "
+                        "Calling ONE TRADING (ex Bitpanda Pro) API for "
+                        f"{base_asset} / {quote_asset} price "
                         f"for {t} minute timeframe ending at {end}"
                     )
                 r = requests.get(baseurl, params=params)
 
                 data = r.json()
-                if r.status_code == 400 and data["error"] == f"The requested market {base_asset}_{quote_asset} is not available.":
-                    raise ValueError(data["error"])
-                assert r.status_code == 200, f"No valid response from ONE TRADING (ex Bitpanda Pro) API\nError: {r.json()['error']}"
+                error = data.get("error") if isinstance(data, dict) else None
+                if r.status_code == 400 and error == (
+                    f"The requested market {base_asset}_{quote_asset} "
+                    "is not available."
+                ):
+                    # The market is unknown to the API; the caller may be able
+                    # to fall back to a price from the account statement.
+                    raise ValueError(error)
+                assert r.status_code == 200, (
+                    "No valid response from the ONE TRADING "
+                    f"(ex Bitpanda Pro) API\nError: {error}"
+                )
 
                 # exit loop if data is valid
                 if data:
@@ -382,7 +394,9 @@ class PriceData:
             raise RuntimeError
 
         # this should never be triggered, but just in case assert received data
-        assert data["candlesticks"], f"No valid price data for {base_asset} / {quote_asset} at {end}"
+        assert data[
+            "candlesticks"
+        ], f"No valid price data for {base_asset} / {quote_asset} at {end}"
         data = data["candlesticks"]
 
         # simply take the average of the first data element
@@ -613,36 +627,44 @@ class PriceData:
         try:
             price = self.get_price(op.platform, op.coin, op.utc_time, reference_coin)
         except ValueError as e:
+            # The platform does not offer this market (anymore), e.g. LUNC,
+            # ETHW and BEST are not available via the ONE TRADING
+            # (ex Bitpanda Pro) API. Fall back to the price which was exported
+            # in the account statement.
             log.warning(
-                f"The API didn't provide a valid response. Using the price from the csv file if possible.\n"
-                f"\t\tCoin: {op.coin} | Op: {type(op).__name__} | Platform: {op.platform} | Row: {op.line} | File: {op.file_path}\n"
-                f"\t\tCaught exception: {e}"
+                "The API did not provide a valid response. Falling back to the "
+                "price from the account statement, if possible.\n"
+                f"\t\tCoin: {op.coin} | Op: {op.type_name} | "
+                f"Platform: {op.platform}\n"
+                f"\t\tRow: {op.line} | File: {op.file_path}\n"
+                f"\t\tCaught exception: {type(e).__name__}: {e}"
             )
-            if op.platform == "bitpanda":
-                # LUNC, ETHW, BEST and maybe more are not available via ONE TRADING (ex Bitpanda Pro) API
-                # => use the price from the exported data.
-                if op.exported_price is not None:
-                    price = op.exported_price
 
-                # Fees paid with BEST don't have a value given in the exported data.
-                # The value also can't be queried from the ONE TRADING (ex Bitpanda Pro) API (anymore)
-                if op.coin == "BEST" and isinstance(op, tr.Fee):
-                    log.warning(
-                        f"Can't get price for '{type(op).__name__}' of {op.coin} on platform {op.platform} anymore.\n"
-                        f"A withdrawal of BEST on bitpanda is likely a deduction of fees. For now we'll assume a value of 0.\n"
-                        f"For accurately calculating fees, this needs to be fixed. PRs welcome!\n"
-                        f"(row {op.line} in {op.file_path}"
-                    )
-                    return 0
-            else:
+            if op.exported_price is not None:
+                price = op.exported_price
+            elif (
+                op.platform == "bitpanda"
+                and op.coin == "BEST"
+                and isinstance(op, tr.Fee)
+            ):
+                # Fees paid with BEST are exported without a price and the
+                # price can not be queried from the ONE TRADING
+                # (ex Bitpanda Pro) API anymore.
                 log.warning(
-                    f"Could not get any price info for {type(op).__name__} {op.coin} on {op.platform}! "
-                    f"Row: {op.line} | File: {op.file_path}"
+                    f"Can not get a price for the {op.type_name} of {op.coin} "
+                    f"on platform {op.platform} anymore. A withdrawal of BEST "
+                    "on bitpanda is likely a deduction of fees. For now we "
+                    "assume a value of 0. For accurately calculating fees, "
+                    "this needs to be fixed. PRs welcome! "
+                    f"(row {op.line} in {op.file_path})"
                 )
-                raise RuntimeError(e)
-
-        # This may fail if an exchange is queried for a non existant coin/fiat pair and the operation doesn't include an exported price.
-        assert price, f"Could not get a price for asset {op.coin} at {op.utc_time}"
+                price = decimal.Decimal()
+            else:
+                raise RuntimeError(
+                    f"Could not determine a price for the {op.type_name} of "
+                    f"{op.coin} on {op.platform} "
+                    f"(row {op.line} in {op.file_path})."
+                ) from e
 
         if isinstance(op_sc, tr.Operation):
             return price * op_sc.change
