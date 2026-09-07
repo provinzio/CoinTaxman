@@ -151,13 +151,16 @@ class Book:
             "Simple Earn Flexible Subscription": "CoinLend",
             "Simple Earn Flexible Redemption": "CoinLendEnd",
             "Simple Earn Flexible Interest": "CoinLendInterest",
+            "Simple Earn Flexible - Rewards Income": "CoinLendInterest",
             "Simple Earn Locked Subscription": "CoinLend",
             "Simple Earn Locked Redemption": "CoinLendEnd",
             "Simple Earn Locked Rewards": "CoinLendInterest",
+            "Simple Earn Locked - Rewards Income": "CoinLendInterest",
             "Savings Distribution": "CoinLendInterest",
             #
             "BNB Vault Rewards": "CoinLendInterest",
             "Launchpool Earnings Withdrawal": "CoinLendInterest",
+            "Launchpool Airdrop - User Claim Distribution": "CoinLendInterest",
             #
             "Commission History": "Commission",
             "Commission Fee Shared With You": "Commission",
@@ -178,6 +181,9 @@ class Book:
             "Staking Purchase": "Staking",
             "Staking Rewards": "StakingInterest",
             "Staking Redemption": "StakingEnd",
+            "DOT Slot Auction Staking": "Staking",
+            "DOT Slot Auction Redemption": "StakingEnd",
+            "DOT Slot Auction Rewards": "StakingInterest",
             #
             "Fiat Deposit": "Deposit",
             "Fiat Withdraw": "Withdrawal",
@@ -241,8 +247,14 @@ class Book:
                     "Sell",
                     "Buy",
                     "Binance Convert",
+                    "Stablecoins Auto-Conversion",
+                    "Buy Crypto With Fiat",
+                    "Convert Fiat to Stablecoin Paysafe",
                 ):
                     operation = "Sell" if change < 0 else "Buy"
+
+                if operation == "Launchpool Subscription/Redemption":
+                    operation = "CoinLend" if change < 0 else "CoinLendEnd"
 
                 if operation == "Liquid Swap add/sell":
                     operation = "CoinLendEnd" if change < 0 else "CoinLend"
@@ -259,11 +271,17 @@ class Book:
                     in (
                         "transfer_in",
                         "transfer_out",
+                        "Crypto Box Refund",
                     )
                     or (
                         account in ("Spot", "Funding")
-                        and operation == "Transfer Between Main and Funding Wallet"
+                        and operation 
+                        in (
+                            "Transfer Between Main and Funding Wallet",
+                            "Transfer Between Spot and Funding",
+                        )
                     )
+                    or operation == "Simple Earn Flexible - Internal Transfer"
                 ):
                     # Ignore transfers
                     continue
