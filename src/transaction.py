@@ -215,6 +215,14 @@ class Airdrop(Transaction):
     pass
 
 
+class AssetRecovery(Operation):
+    pass
+
+
+class TokenSwapDistribution(Operation):
+    pass
+
+
 class Commission(Transaction):
     pass
 
@@ -234,6 +242,23 @@ class Withdrawal(Transaction):
             (wsc.sold for wsc in withdrawn_coins)
         ), "Withdrawn coins total must be equal to the sum if the single coins."
         return withdrawn_coins
+
+
+class TokenMigrationOut(Operation):
+    target_coin: str = ""
+    ratio: decimal.Decimal = decimal.Decimal("1")
+    link: Optional["TokenMigrationIn"] = None
+
+
+class TokenMigrationIn(Operation):
+    source_coin: str = ""
+    ratio: decimal.Decimal = decimal.Decimal("1")
+    link: Optional[TokenMigrationOut] = None
+    source_lots: Optional[list["SoldCoin"]] = None
+
+
+class TokenMigrationLot(Operation):
+    source_lot: Optional["SoldCoin"] = None
 
 
 # Helping variables

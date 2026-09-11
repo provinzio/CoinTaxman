@@ -44,6 +44,9 @@ def main() -> None:
     # (as long as there are only one buy/sell pair per time,
     # might be problematic otherwise).
     book.merge_identical_operations()
+    # Resolve configured token migrations before price extraction and trade matching,
+    # so migration legs are not interpreted as ordinary sells or airdrops.
+    book.resolve_token_migrations()
     # Resolve dependencies between withdrawals and deposits, which is
     # necessary to correctly fetch prices and to calculate p/l.
     book.resolve_deposits()
