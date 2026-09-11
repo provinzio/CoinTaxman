@@ -30,6 +30,7 @@ import transaction as tr
 from core import kraken_asset_map
 from database import set_price_db
 from price_data import PriceData
+from migrations import TOKEN_MIGRATIONS
 
 log = log_config.getLogger(__name__)
 
@@ -141,7 +142,7 @@ class Book:
             "Launchpool Airdrop": "Airdrop",
             "Megadrop Rewards": "Airdrop",
             "HODLer Airdrops Distribution": "Airdrop",
-            "Token Swap - Distribution": "Airdrop",
+            "Token Swap - Distribution": "TokenSwapDistribution",
             "Launchpool Airdrop - System Distribution": "Airdrop",
             #
             "Savings Interest": "CoinLendInterest",
@@ -194,7 +195,7 @@ class Book:
             "Transaction Revenue": "Buy",
             "Transaction Sold": "Sell",
             "Transaction Fee": "Fee",
-            "Asset Recovery": "Sell",
+            "Asset Recovery": "AssetRecovery",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -1688,6 +1689,107 @@ class Book:
                 op.remarks.append("Ziel der Auszahlung unbekannt")
 
         log.info("Finished withdrawal/deposit matching")
+
+    def resolve_token_migrations(self) -> None:
+        matched: set[int] = set()
+        replacements: list[tr.Operation] = []
+
+        for migration in TOKEN_MIGRATIONS:
+            sources = [
+                (idx, op)
+                for idx, op in enumerate(self.operations)
+                if isinstance(op, tr.AssetRecovery)
+                and op.platform == "binance"
+                and op.coin == migration.source_coin
+                and op.utc_time >= migration.effective_from
+            ]
+
+            for source_idx, source in sources:
+                expected_target = source.change * migration.ratio
+
+                candidates = [
+                    (idx, op)
+                    for idx, op in enumerate(self.operations)
+                    if idx not in matched
+                    and isinstance(op, tr.TokenSwapDistribution)
+                    and op.platform == source.platform
+                    and op.coin == migration.target_coin
+                    and source.utc_time <= op.utc_time
+                    <= source.utc_time + migration.max_delay
+                    and op.change == expected_target
+                ]
+
+                if len(candidates) != 1:
+                    continue
+
+                target_idx, target = candidates[0]
+
+                migration_out = tr.TokenMigrationOut(
+                    utc_time=source.utc_time,
+                    platform=source.platform,
+                    change=source.change,
+                    coin=source.coin,
+                    line=source.line,
+                    file_path=source.file_path,
+                    remarks=source.remarks,
+                )
+
+                migration_out.target_coin = target.coin
+                migration_out.ratio = migration.ratio
+
+                migration_in = tr.TokenMigrationIn(
+                    utc_time=target.utc_time,
+                    platform=target.platform,
+                    change=target.change,
+                    coin=target.coin,
+                    line=target.line,
+                    file_path=target.file_path,
+                    remarks=target.remarks,
+                )
+
+                migration_in.source_coin = source.coin
+                migration_in.ratio = migration.ratio
+
+                migration_out.link = migration_in
+                migration_in.link = migration_out
+
+                matched.update((source_idx, target_idx))
+                replacements.extend((migration_out, migration_in))
+
+        self.operations = [
+            op
+            for idx, op in enumerate(self.operations)
+            if idx not in matched
+        ]
+
+        self.operations.extend(replacements)
+
+        # Restore the existing CoinTaxman behavior for Asset Recovery /
+        # Token Swap operations that did not match a configured migration.
+        for idx, op in enumerate(self.operations):
+            if isinstance(op, tr.AssetRecovery):
+                self.operations[idx] = tr.Sell(
+                    utc_time=op.utc_time,
+                    platform=op.platform,
+                    change=op.change,
+                    coin=op.coin,
+                    line=op.line,
+                    file_path=op.file_path,
+                    fees=op.fees,
+                    remarks=op.remarks,
+                )
+
+            elif isinstance(op, tr.TokenSwapDistribution):
+                self.operations[idx] = tr.Airdrop(
+                    utc_time=op.utc_time,
+                    platform=op.platform,
+                    change=op.change,
+                    coin=op.coin,
+                    line=op.line,
+                    file_path=op.file_path,
+                    fees=op.fees,
+                    remarks=op.remarks,
+                )
 
     def get_price_from_csv(self) -> None:
         """Calculate coin prices from buy/sell operations in CSV files.

@@ -128,6 +128,19 @@ class Taxman:
             self.price_data.get_partial_cost(fee, percent),
         )
 
+    def get_origin_sold_coin(self, sc: tr.SoldCoin) -> tr.SoldCoin:
+        while isinstance(sc.op, tr.TokenMigrationLot):
+            assert sc.op.source_lot is not None
+
+            percent = sc.sold / sc.op.change
+
+            sc = tr.SoldCoin(
+                op=sc.op.source_lot.op,
+                sold=sc.op.source_lot.sold * percent,
+            )
+
+        return sc
+
     def get_buy_cost(self, sc: tr.SoldCoin) -> decimal.Decimal:
         """Calculate the buy cost of a sold coin.
 
@@ -142,6 +155,19 @@ class Taxman:
             decimal.Decimal: The buy value of the sold coin in fiat
         """
         assert sc.sold <= sc.op.change
+        
+        if isinstance(sc.op, tr.TokenMigrationLot):
+            assert sc.op.source_lot is not None
+
+            percent = sc.sold / sc.op.change
+
+            source_sc = tr.SoldCoin(
+                op=sc.op.source_lot.op,
+                sold=sc.op.source_lot.sold * percent,
+            )
+
+            return self.get_buy_cost(source_sc)
+
         percent = sc.sold / sc.op.change
 
         # Fees paid when buying the now sold coins.
@@ -275,7 +301,16 @@ class Taxman:
             assert not any(v for v in fee_params.values())
             # Do not give fee parameters to ReportEntry object.
             fee_params = {}
+       
+        origin_sc = self.get_origin_sold_coin(sc)
+
         buy_cost_in_fiat = self.get_buy_cost(sc)
+
+        # Taxable when sell is not more than one year after the original acquisition.
+        is_taxable = (
+            origin_sc.op.utc_time + relativedelta(years=1)
+            >= op.utc_time
+        )
 
         # Taxable when sell is not more than one year after buy.
         is_taxable = sc.op.utc_time + relativedelta(years=1) >= op.utc_time
@@ -308,7 +343,7 @@ class Taxman:
             amount=sc.sold,
             coin=op.coin,
             sell_utc_time=op.utc_time,
-            buy_utc_time=sc.op.utc_time,
+            buy_utc_time=origin_sc.op.utc_time,
             **fee_params,
             sell_value_in_fiat=sell_value_in_fiat,
             buy_cost_in_fiat=buy_cost_in_fiat,
@@ -407,6 +442,38 @@ class Taxman:
             # TODO maybe add total accumulated fees?
             #      might be impossible to match CoinInterest with CoinLend periods
             pass
+
+        elif isinstance(op, tr.TokenMigrationOut):
+            source_lots = self.remove_from_balance(op)
+
+            assert op.link is not None
+            op.link.source_lots = source_lots
+
+        elif isinstance(op, tr.TokenMigrationIn):
+            assert op.source_lots is not None
+
+            migrated_total = decimal.Decimal()
+
+            for source_lot in op.source_lots:
+                migrated_amount = source_lot.sold * op.ratio
+
+                migrated_op = tr.TokenMigrationLot(
+                    utc_time=op.utc_time,
+                    platform=op.platform,
+                    change=migrated_amount,
+                    coin=op.coin,
+                    line=op.line,
+                    file_path=op.file_path,
+                    remarks=op.remarks.copy(),
+                )
+
+                migrated_op.source_lot = source_lot
+
+                self.add_to_balance(migrated_op)
+                migrated_total += migrated_amount
+
+            # An exchange export can legitimately differ by tiny rounding amounts
+            assert abs(migrated_total - op.change) <= decimal.Decimal("0.00000001")
 
         elif isinstance(op, tr.Buy):
             # Buys and sells always come in a pair. The buying/receiving
