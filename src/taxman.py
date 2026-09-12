@@ -155,18 +155,9 @@ class Taxman:
             decimal.Decimal: The buy value of the sold coin in fiat
         """
         assert sc.sold <= sc.op.change
-        
-        if isinstance(sc.op, tr.TokenMigrationLot):
-            assert sc.op.source_lot is not None
 
-            percent = sc.sold / sc.op.change
-
-            source_sc = tr.SoldCoin(
-                op=sc.op.source_lot.op,
-                sold=sc.op.source_lot.sold * percent,
-            )
-
-            return self.get_buy_cost(source_sc)
+        # Migrated tokens carry the cost basis of their predecessor.
+        sc = self.get_origin_sold_coin(sc)
 
         percent = sc.sold / sc.op.change
 
@@ -301,19 +292,15 @@ class Taxman:
             assert not any(v for v in fee_params.values())
             # Do not give fee parameters to ReportEntry object.
             fee_params = {}
-       
+
         origin_sc = self.get_origin_sold_coin(sc)
 
         buy_cost_in_fiat = self.get_buy_cost(sc)
 
-        # Taxable when sell is not more than one year after the original acquisition.
-        is_taxable = (
-            origin_sc.op.utc_time + relativedelta(years=1)
-            >= op.utc_time
-        )
-
-        # Taxable when sell is not more than one year after buy.
-        is_taxable = sc.op.utc_time + relativedelta(years=1) >= op.utc_time
+        # Taxable when sell is not more than one year after the original
+        # acquisition. For migrated tokens, the original acquisition is the
+        # buy of the predecessor token, not the migration itself.
+        is_taxable = origin_sc.op.utc_time + relativedelta(years=1) >= op.utc_time
 
         try:
             sell_value_in_fiat = self.get_sell_value(op, sc)

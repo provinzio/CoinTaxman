@@ -29,8 +29,8 @@ import misc
 import transaction as tr
 from core import kraken_asset_map
 from database import set_price_db
-from price_data import PriceData
 from migrations import TOKEN_MIGRATIONS
+from price_data import PriceData
 
 log = log_config.getLogger(__name__)
 
@@ -276,7 +276,7 @@ class Book:
                     )
                     or (
                         account in ("Spot", "Funding")
-                        and operation 
+                        and operation
                         in (
                             "Transfer Between Main and Funding Wallet",
                             "Transfer Between Spot and Funding",
