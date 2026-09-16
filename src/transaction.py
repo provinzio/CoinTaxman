@@ -513,10 +513,10 @@ class TaxReportEntry:
 
 
 # Bypass dataclass machinery, add a custom property function to a dataclass field.
-TaxReportEntry.total_fee_in_fiat = TaxReportEntry._total_fee_in_fiat  # type:ignore
-TaxReportEntry.gain_in_fiat = TaxReportEntry._gain_in_fiat  # type:ignore
+TaxReportEntry.total_fee_in_fiat = TaxReportEntry._total_fee_in_fiat  # type: ignore
+TaxReportEntry.gain_in_fiat = TaxReportEntry._gain_in_fiat  # type: ignore
 TaxReportEntry.taxable_gain_in_fiat = (
-    TaxReportEntry._taxable_gain_in_fiat  # type:ignore
+    TaxReportEntry._taxable_gain_in_fiat  # type: ignore
 )
 
 

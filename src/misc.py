@@ -51,7 +51,7 @@ def xfloat(x: Union[None, str, SupportsFloat]) -> Optional[float]:
 
 
 def xdecimal(
-    x: Union[None, str, int, float, decimal.Decimal]
+    x: Union[None, str, int, float, decimal.Decimal],
 ) -> Optional[decimal.Decimal]:
     """Convert to decimal, but make sure, that empty values return as None.
 

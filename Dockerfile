@@ -10,6 +10,7 @@ RUN apk update \
 USER cointaxman
 
 COPY --chown=cointaxman requirements.txt Makefile ./
+COPY config.ini migrations.ini ./
 
 RUN make install
 

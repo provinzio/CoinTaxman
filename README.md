@@ -36,9 +36,10 @@ Quick and easy installation can be done with `pip`.
 
 ### Usage
 
-1. Adjust `\config.ini` to your liking
-2. Add all your account statements in `account_statements/`
-2. Run `python "src/main.py"`
+1. Review and update `config.ini` as needed
+2. Review and update `migrations.ini` if needed
+3. Add all account statements to `account_statements/`
+4. Run `python "src/main.py"`
 
 If not all your exchanges are supported, you can not (directly) calculate your taxes with this tool.
 You can use the custom import format [here](https://github.com/provinzio/CoinTaxman/wiki/Custom-import-format) to make it happen.
@@ -150,6 +151,17 @@ Es ist weder sichergestellt, dass ich es aktuell noch nutze (falls ich das Repo 
 Issues und Pull Requests sind gerne gesehen.
 
 Weitere Besonderheiten die sich so nicht im BMF-Schreiben wiederfinden, sind im folgenden aufgelistet.
+
+### Token migrations
+
+CoinTaxman treats configured deterministic token migrations with a fixed conversion ratio as non-taxable conversions of the same economic asset.
+
+For these migrations, the acquisition date and acquisition cost of the original token are carried over to the successor token instead of treating the migration as a disposal followed by a new acquisition.
+
+This reflects CoinTaxman's current tax treatment of migrations where the economic identity of the asset is considered to be preserved. Token migrations are not explicitly addressed by the BMF guidance on cryptocurrencies, so users should verify this treatment for their individual
+tax situation if necessary.
+
+Only migrations explicitly configured in `migrations.ini` are handled this way.
 
 
 ### Binance Referral Rewards (Referral System)

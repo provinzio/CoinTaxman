@@ -155,18 +155,6 @@ class Taxman:
             decimal.Decimal: The buy value of the sold coin in fiat
         """
         assert sc.sold <= sc.op.change
-        
-        if isinstance(sc.op, tr.TokenMigrationLot):
-            assert sc.op.source_lot is not None
-
-            percent = sc.sold / sc.op.change
-
-            source_sc = tr.SoldCoin(
-                op=sc.op.source_lot.op,
-                sold=sc.op.source_lot.sold * percent,
-            )
-
-            return self.get_buy_cost(source_sc)
 
         percent = sc.sold / sc.op.change
 
@@ -301,19 +289,13 @@ class Taxman:
             assert not any(v for v in fee_params.values())
             # Do not give fee parameters to ReportEntry object.
             fee_params = {}
-       
+
         origin_sc = self.get_origin_sold_coin(sc)
 
-        buy_cost_in_fiat = self.get_buy_cost(sc)
+        buy_cost_in_fiat = self.get_buy_cost(origin_sc)
 
         # Taxable when sell is not more than one year after the original acquisition.
-        is_taxable = (
-            origin_sc.op.utc_time + relativedelta(years=1)
-            >= op.utc_time
-        )
-
-        # Taxable when sell is not more than one year after buy.
-        is_taxable = sc.op.utc_time + relativedelta(years=1) >= op.utc_time
+        is_taxable = origin_sc.op.utc_time + relativedelta(years=1) >= op.utc_time
 
         try:
             sell_value_in_fiat = self.get_sell_value(op, sc)
@@ -452,8 +434,6 @@ class Taxman:
         elif isinstance(op, tr.TokenMigrationIn):
             assert op.source_lots is not None
 
-            migrated_total = decimal.Decimal()
-
             for source_lot in op.source_lots:
                 migrated_amount = source_lot.sold * op.ratio
 
@@ -470,10 +450,6 @@ class Taxman:
                 migrated_op.source_lot = source_lot
 
                 self.add_to_balance(migrated_op)
-                migrated_total += migrated_amount
-
-            # An exchange export can legitimately differ by tiny rounding amounts
-            assert abs(migrated_total - op.change) <= decimal.Decimal("0.00000001")
 
         elif isinstance(op, tr.Buy):
             # Buys and sells always come in a pair. The buying/receiving

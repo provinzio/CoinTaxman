@@ -30,7 +30,7 @@ import transaction as tr
 from core import kraken_asset_map
 from database import set_price_db
 from price_data import PriceData
-from migrations import TOKEN_MIGRATIONS
+from migrations import load_token_migrations
 
 log = log_config.getLogger(__name__)
 
@@ -276,7 +276,7 @@ class Book:
                     )
                     or (
                         account in ("Spot", "Funding")
-                        and operation 
+                        and operation
                         in (
                             "Transfer Between Main and Funding Wallet",
                             "Transfer Between Spot and Funding",
@@ -1691,21 +1691,23 @@ class Book:
         log.info("Finished withdrawal/deposit matching")
 
     def resolve_token_migrations(self) -> None:
+        token_migrations = load_token_migrations()
+
         matched: set[int] = set()
         replacements: list[tr.Operation] = []
 
-        for migration in TOKEN_MIGRATIONS:
+        for migration in token_migrations:
             sources = [
                 (idx, op)
                 for idx, op in enumerate(self.operations)
                 if isinstance(op, tr.AssetRecovery)
-                and op.platform == "binance"
                 and op.coin == migration.source_coin
                 and op.utc_time >= migration.effective_from
+                and idx not in matched
             ]
 
             for source_idx, source in sources:
-                expected_target = source.change * migration.ratio
+                expected_target = abs(source.change) * migration.ratio
 
                 candidates = [
                     (idx, op)
@@ -1714,12 +1716,42 @@ class Book:
                     and isinstance(op, tr.TokenSwapDistribution)
                     and op.platform == source.platform
                     and op.coin == migration.target_coin
-                    and source.utc_time <= op.utc_time
+                    and source.utc_time
+                    <= op.utc_time
                     <= source.utc_time + migration.max_delay
                     and op.change == expected_target
                 ]
 
                 if len(candidates) != 1:
+                    target_distributions = [
+                        op
+                        for op in self.operations
+                        if isinstance(op, tr.TokenSwapDistribution)
+                        and op.platform == source.platform
+                        and op.coin == migration.target_coin
+                        and op.utc_time >= source.utc_time
+                    ]
+
+                    found = ", ".join(
+                        (
+                            f"{op.change} {op.coin} at {op.utc_time} "
+                            f"({(op.utc_time - source.utc_time).total_seconds() / 3600:.1f}h later)"
+                        )
+                        for op in target_distributions
+                    )
+
+                    log.warning(
+                        "No token migration match for %s %s at %s. "
+                        "Expected %s %s within %s. Found: %s",
+                        abs(source.change),
+                        source.coin,
+                        source.utc_time,
+                        expected_target,
+                        migration.target_coin,
+                        migration.max_delay,
+                        found or "no matching target distributions",
+                    )
+
                     continue
 
                 target_idx, target = candidates[0]
@@ -1756,10 +1788,20 @@ class Book:
                 matched.update((source_idx, target_idx))
                 replacements.extend((migration_out, migration_in))
 
+                log.info(
+                    "Matched token migration %s -> %s: %s %s -> %s %s " "(%s -> %s)",
+                    source.coin,
+                    target.coin,
+                    abs(source.change),
+                    source.coin,
+                    target.change,
+                    target.coin,
+                    source.utc_time,
+                    target.utc_time,
+                )
+
         self.operations = [
-            op
-            for idx, op in enumerate(self.operations)
-            if idx not in matched
+            op for idx, op in enumerate(self.operations) if idx not in matched
         ]
 
         self.operations.extend(replacements)
@@ -1790,6 +1832,8 @@ class Book:
                     fees=op.fees,
                     remarks=op.remarks,
                 )
+
+        log.info("Finished token migration matching")
 
     def get_price_from_csv(self) -> None:
         """Calculate coin prices from buy/sell operations in CSV files.
