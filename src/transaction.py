@@ -998,6 +998,8 @@ gain_operations = [
     Airdrop,
     Commission,
     Deposit,
+    TokenMigrationIn,
+    TokenMigrationLot,
 ]
 loss_operations = [
     Fee,
@@ -1005,6 +1007,7 @@ loss_operations = [
     Staking,
     Sell,
     Withdrawal,
+    TokenMigrationOut,
 ]
 operations_order = gain_operations + loss_operations
 

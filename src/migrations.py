@@ -19,7 +19,10 @@ import dataclasses
 import datetime
 import decimal
 
+import log_config
 from config import BASE_PATH
+
+log = log_config.getLogger(__name__)
 
 MIGRATIONS_FILE = BASE_PATH / "migrations.ini"
 
@@ -62,7 +65,8 @@ def load_token_migrations() -> tuple[TokenMigrationConfig, ...]:
             source_coin = config[section]["source_coin"].upper()
             target_coin = config[section]["target_coin"].upper()
             ratio = decimal.Decimal(config[section]["ratio"])
-            max_delay_hours = config[section].getint("max_delay_hours")
+            max_delay_hours_raw = config[section]["max_delay_hours"]
+            max_delay_hours = int(max_delay_hours_raw)
             effective_from_raw = config[section]["effective_from"]
 
             if not source_coin:

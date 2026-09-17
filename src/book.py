@@ -29,8 +29,8 @@ import misc
 import transaction as tr
 from core import kraken_asset_map
 from database import set_price_db
-from price_data import PriceData
 from migrations import load_token_migrations
+from price_data import PriceData
 
 log = log_config.getLogger(__name__)
 
@@ -1732,13 +1732,19 @@ class Book:
                         and op.utc_time >= source.utc_time
                     ]
 
-                    found = ", ".join(
-                        (
+                    found_parts = []
+
+                    for op in target_distributions:
+                        hours_later = (
+                            op.utc_time - source.utc_time
+                        ).total_seconds() / 3600
+
+                        found_parts.append(
                             f"{op.change} {op.coin} at {op.utc_time} "
-                            f"({(op.utc_time - source.utc_time).total_seconds() / 3600:.1f}h later)"
+                            f"({hours_later:.1f}h later)"
                         )
-                        for op in target_distributions
-                    )
+
+                    found = ", ".join(found_parts)
 
                     log.warning(
                         "No token migration match for %s %s at %s. "
