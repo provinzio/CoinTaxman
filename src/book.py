@@ -1814,29 +1814,29 @@ class Book:
 
         # Restore the existing CoinTaxman behavior for Asset Recovery /
         # Token Swap operations that did not match a configured migration.
-        for idx, op in enumerate(self.operations):
-            if isinstance(op, tr.AssetRecovery):
+        for idx, operation in enumerate(self.operations):
+            if isinstance(operation, tr.AssetRecovery):
                 self.operations[idx] = tr.Sell(
-                    utc_time=op.utc_time,
-                    platform=op.platform,
-                    change=op.change,
-                    coin=op.coin,
-                    line=op.line,
-                    file_path=op.file_path,
-                    fees=op.fees,
-                    remarks=op.remarks,
+                    utc_time=operation.utc_time,
+                    platform=operation.platform,
+                    change=operation.change,
+                    coin=operation.coin,
+                    line=operation.line,
+                    file_path=operation.file_path,
+                    fees=operation.fees,
+                    remarks=operation.remarks,
                 )
 
-            elif isinstance(op, tr.TokenSwapDistribution):
+            elif isinstance(operation, tr.TokenSwapDistribution):
                 self.operations[idx] = tr.Airdrop(
-                    utc_time=op.utc_time,
-                    platform=op.platform,
-                    change=op.change,
-                    coin=op.coin,
-                    line=op.line,
-                    file_path=op.file_path,
-                    fees=op.fees,
-                    remarks=op.remarks,
+                    utc_time=operation.utc_time,
+                    platform=operation.platform,
+                    change=operation.change,
+                    coin=operation.coin,
+                    line=operation.line,
+                    file_path=operation.file_path,
+                    fees=operation.fees,
+                    remarks=operation.remarks,
                 )
 
         log.info("Finished token migration matching")
