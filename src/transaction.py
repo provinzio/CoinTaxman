@@ -215,6 +215,14 @@ class Airdrop(Transaction):
     pass
 
 
+class AssetRecovery(Operation):
+    pass
+
+
+class TokenSwapDistribution(Operation):
+    pass
+
+
 class Commission(Transaction):
     pass
 
@@ -234,6 +242,23 @@ class Withdrawal(Transaction):
             (wsc.sold for wsc in withdrawn_coins)
         ), "Withdrawn coins total must be equal to the sum if the single coins."
         return withdrawn_coins
+
+
+class TokenMigrationOut(Operation):
+    target_coin: str = ""
+    ratio: decimal.Decimal = decimal.Decimal("1")
+    link: Optional["TokenMigrationIn"] = None
+
+
+class TokenMigrationIn(Operation):
+    source_coin: str = ""
+    ratio: decimal.Decimal = decimal.Decimal("1")
+    link: Optional[TokenMigrationOut] = None
+    source_lots: Optional[list["SoldCoin"]] = None
+
+
+class TokenMigrationLot(Operation):
+    source_lot: Optional["SoldCoin"] = None
 
 
 # Helping variables
@@ -488,10 +513,10 @@ class TaxReportEntry:
 
 
 # Bypass dataclass machinery, add a custom property function to a dataclass field.
-TaxReportEntry.total_fee_in_fiat = TaxReportEntry._total_fee_in_fiat  # type:ignore
-TaxReportEntry.gain_in_fiat = TaxReportEntry._gain_in_fiat  # type:ignore
+TaxReportEntry.total_fee_in_fiat = TaxReportEntry._total_fee_in_fiat  # type: ignore
+TaxReportEntry.gain_in_fiat = TaxReportEntry._gain_in_fiat  # type: ignore
 TaxReportEntry.taxable_gain_in_fiat = (
-    TaxReportEntry._taxable_gain_in_fiat  # type:ignore
+    TaxReportEntry._taxable_gain_in_fiat  # type: ignore
 )
 
 
@@ -973,6 +998,8 @@ gain_operations = [
     Airdrop,
     Commission,
     Deposit,
+    TokenMigrationIn,
+    TokenMigrationLot,
 ]
 loss_operations = [
     Fee,
@@ -980,6 +1007,7 @@ loss_operations = [
     Staking,
     Sell,
     Withdrawal,
+    TokenMigrationOut,
 ]
 operations_order = gain_operations + loss_operations
 

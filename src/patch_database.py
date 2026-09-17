@@ -111,16 +111,12 @@ def __patch_001(db_path: Path) -> None:
         cur = conn.execute(query)
         for tablename, sql in cur.fetchall():
             if "price str" not in sql.lower() and not tablename.startswith("§"):
-                conn.execute(
-                    """CREATE TABLE "sql_temp_table" (
+                conn.execute("""CREATE TABLE "sql_temp_table" (
                     "utc_time" DATETIME PRIMARY KEY,
                     "price"	VARCHAR(255) NOT NULL
-                );"""
-                )
-                conn.execute(
-                    f"""INSERT INTO "sql_temp_table" ("utc_time","price")
-                SELECT "utc_time",cast("price" as text) FROM "{tablename}";"""
-                )
+                );""")
+                conn.execute(f"""INSERT INTO "sql_temp_table" ("utc_time","price")
+                SELECT "utc_time",cast("price" as text) FROM "{tablename}";""")
                 conn.execute(f'DROP TABLE "{tablename}";')
                 conn.execute(f'ALTER TABLE "sql_temp_table" RENAME TO "{tablename}";')
 

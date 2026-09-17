@@ -29,6 +29,7 @@ import misc
 import transaction as tr
 from core import kraken_asset_map
 from database import set_price_db
+from migrations import load_token_migrations
 from price_data import PriceData
 
 log = log_config.getLogger(__name__)
@@ -141,7 +142,7 @@ class Book:
             "Launchpool Airdrop": "Airdrop",
             "Megadrop Rewards": "Airdrop",
             "HODLer Airdrops Distribution": "Airdrop",
-            "Token Swap - Distribution": "Airdrop",
+            "Token Swap - Distribution": "TokenSwapDistribution",
             "Launchpool Airdrop - System Distribution": "Airdrop",
             #
             "Savings Interest": "CoinLendInterest",
@@ -194,7 +195,7 @@ class Book:
             "Transaction Revenue": "Buy",
             "Transaction Sold": "Sell",
             "Transaction Fee": "Fee",
-            "Asset Recovery": "Sell",
+            "Asset Recovery": "AssetRecovery",
         }
 
         with open(file_path, encoding="utf8") as f:
@@ -275,7 +276,7 @@ class Book:
                     )
                     or (
                         account in ("Spot", "Funding")
-                        and operation 
+                        and operation
                         in (
                             "Transfer Between Main and Funding Wallet",
                             "Transfer Between Spot and Funding",
@@ -1688,6 +1689,157 @@ class Book:
                 op.remarks.append("Ziel der Auszahlung unbekannt")
 
         log.info("Finished withdrawal/deposit matching")
+
+    def resolve_token_migrations(self) -> None:
+        token_migrations = load_token_migrations()
+
+        matched: set[int] = set()
+        replacements: list[tr.Operation] = []
+
+        for migration in token_migrations:
+            sources = [
+                (idx, op)
+                for idx, op in enumerate(self.operations)
+                if isinstance(op, tr.AssetRecovery)
+                and op.coin == migration.source_coin
+                and op.utc_time >= migration.effective_from
+                and idx not in matched
+            ]
+
+            for source_idx, source in sources:
+                expected_target = abs(source.change) * migration.ratio
+
+                candidates = [
+                    (idx, op)
+                    for idx, op in enumerate(self.operations)
+                    if idx not in matched
+                    and isinstance(op, tr.TokenSwapDistribution)
+                    and op.platform == source.platform
+                    and op.coin == migration.target_coin
+                    and source.utc_time
+                    <= op.utc_time
+                    <= source.utc_time + migration.max_delay
+                    and op.change == expected_target
+                ]
+
+                if len(candidates) != 1:
+                    target_distributions = [
+                        op
+                        for op in self.operations
+                        if isinstance(op, tr.TokenSwapDistribution)
+                        and op.platform == source.platform
+                        and op.coin == migration.target_coin
+                        and op.utc_time >= source.utc_time
+                    ]
+
+                    found_parts = []
+
+                    for op in target_distributions:
+                        hours_later = (
+                            op.utc_time - source.utc_time
+                        ).total_seconds() / 3600
+
+                        found_parts.append(
+                            f"{op.change} {op.coin} at {op.utc_time} "
+                            f"({hours_later:.1f}h later)"
+                        )
+
+                    found = ", ".join(found_parts)
+
+                    log.warning(
+                        "No token migration match for %s %s at %s. "
+                        "Expected %s %s within %s. Found: %s",
+                        abs(source.change),
+                        source.coin,
+                        source.utc_time,
+                        expected_target,
+                        migration.target_coin,
+                        migration.max_delay,
+                        found or "no matching target distributions",
+                    )
+
+                    continue
+
+                target_idx, target = candidates[0]
+
+                migration_out = tr.TokenMigrationOut(
+                    utc_time=source.utc_time,
+                    platform=source.platform,
+                    change=source.change,
+                    coin=source.coin,
+                    line=source.line,
+                    file_path=source.file_path,
+                    remarks=source.remarks,
+                )
+
+                migration_out.target_coin = target.coin
+                migration_out.ratio = migration.ratio
+
+                migration_in = tr.TokenMigrationIn(
+                    utc_time=target.utc_time,
+                    platform=target.platform,
+                    change=target.change,
+                    coin=target.coin,
+                    line=target.line,
+                    file_path=target.file_path,
+                    remarks=target.remarks,
+                )
+
+                migration_in.source_coin = source.coin
+                migration_in.ratio = migration.ratio
+
+                migration_out.link = migration_in
+                migration_in.link = migration_out
+
+                matched.update((source_idx, target_idx))
+                replacements.extend((migration_out, migration_in))
+
+                log.info(
+                    "Matched token migration %s -> %s: %s %s -> %s %s " "(%s -> %s)",
+                    source.coin,
+                    target.coin,
+                    abs(source.change),
+                    source.coin,
+                    target.change,
+                    target.coin,
+                    source.utc_time,
+                    target.utc_time,
+                )
+
+        self.operations = [
+            op for idx, op in enumerate(self.operations) if idx not in matched
+        ]
+
+        self.operations.extend(replacements)
+
+        # Restore the existing CoinTaxman behavior for Asset Recovery /
+        # Token Swap operations that did not match a configured migration.
+        for idx, operation in enumerate(self.operations):
+            if isinstance(operation, tr.AssetRecovery):
+                self.operations[idx] = tr.Sell(
+                    utc_time=operation.utc_time,
+                    platform=operation.platform,
+                    change=operation.change,
+                    coin=operation.coin,
+                    line=operation.line,
+                    file_path=operation.file_path,
+                    fees=operation.fees,
+                    remarks=operation.remarks,
+                )
+
+            elif isinstance(operation, tr.TokenSwapDistribution):
+                self.operations[idx] = tr.Airdrop(
+                    utc_time=operation.utc_time,
+                    platform=operation.platform,
+                    change=operation.change,
+                    coin=operation.coin,
+                    line=operation.line,
+                    file_path=operation.file_path,
+                    fees=operation.fees,
+                    remarks=operation.remarks,
+                )
+
+        log.info("Finished token migration matching")
 
     def get_price_from_csv(self) -> None:
         """Calculate coin prices from buy/sell operations in CSV files.
