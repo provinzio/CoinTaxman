@@ -19,3 +19,6 @@ dev/
 !.gitkeep
 
 tmp.log
+
+# Local virtual environment for optional isolated regression tools
+.venv/

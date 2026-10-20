@@ -275,7 +275,7 @@ class Book:
                     )
                     or (
                         account in ("Spot", "Funding")
-                        and operation 
+                        and operation
                         in (
                             "Transfer Between Main and Funding Wallet",
                             "Transfer Between Spot and Funding",
@@ -725,8 +725,40 @@ class Book:
             for columns in reader:
 
                 num_columns = len(columns)
-                # Kraken ledgers export format from October 2020 and ongoing
-                if num_columns == 10:
+                # Kraken ledgers can contain 'subclass' and 'wallet' fields.
+                # See https://github.com/provinzio/CoinTaxman/issues/185.
+                # Do not silently ingest Earn/Futures wallet activity without
+                # established transaction semantics for tax calculation.
+                if num_columns == 12:
+                    (
+                        txid,
+                        refid,
+                        _utc_time,
+                        _type,
+                        subtype,
+                        aclass,
+                        subclass,
+                        _asset,
+                        wallet,
+                        _amount,
+                        _fee,
+                        balance,
+                    ) = columns
+                    if wallet.lower() not in ("spot", ""):
+                        raise NotImplementedError(
+                            f"{file_path} row {reader.line_num}: "
+                            f"Kraken wallet type {wallet!r} requires manual review. "
+                            "Earn/Futures movements cannot be classified as "
+                            "regular spot transactions automatically."
+                        )
+                    if subclass.lower() not in ("", "crypto", "currency"):
+                        raise NotImplementedError(
+                            f"{file_path} row {reader.line_num}: "
+                            f"Unsupported Kraken subclass {subclass!r}; "
+                            "please verify the meaning before tax calculations."
+                        )
+                # Kraken ledgers export format from October 2020 onwards
+                elif num_columns == 10:
                     (
                         txid,
                         refid,
@@ -762,8 +794,12 @@ class Book:
 
                 row = reader.line_num
 
-                # Parse data.
-                utc_time = datetime.datetime.strptime(_utc_time, "%Y-%m-%d %H:%M:%S")
+                # Parse Kraken's documented UTC timestamp. Fractional
+                # seconds must not silently alter the interpreted timezone.
+                timestamp_format = (
+                    "%Y-%m-%d %H:%M:%S.%f" if "." in _utc_time else "%Y-%m-%d %H:%M:%S"
+                )
+                utc_time = datetime.datetime.strptime(_utc_time, timestamp_format)
                 utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
                 change = misc.force_decimal(_amount)
                 # remove the appended .S for staked assets
@@ -822,6 +858,12 @@ class Book:
                                 "currently not supported. Please create an Issue or PR."
                             )
                             raise RuntimeError
+                    elif _type in ("earn", "hybridearnwithdrawal"):
+                        raise NotImplementedError(
+                            f"{file_path} row {row}: Kraken {_type!r} is not yet "
+                            "classified. A reviewed Earn tax/accounting mapping "
+                            "is required; refusing to silently omit the row."
+                        )
                     else:
                         log.error(
                             f"{file_path} row {row}: Other order type '{_type}' is "
@@ -967,6 +1009,9 @@ class Book:
                         self.append_operation(
                             "Staking", utc_time, platform, change, coin, row, file_path
                         )
+
+    def _read_kraken_ledgers_2026(self, file_path: Path) -> None:
+        self._read_kraken_ledgers(file_path)
 
     def _read_kraken_ledgers_old(self, file_path: Path) -> None:
         self._read_kraken_ledgers(file_path)
@@ -1421,6 +1466,7 @@ class Book:
                 "coinbase_pro": 1,
                 "kraken_ledgers_old": 1,
                 "kraken_ledgers": 1,
+                "kraken_ledgers_2026": 1,
                 "kraken_trades": 1,
                 "bitpanda_pro_trades": 4,
                 "bitpanda": 7,
@@ -1520,6 +1566,20 @@ class Book:
                     "subtype",
                     "aclass",
                     "asset",
+                    "amount",
+                    "fee",
+                    "balance",
+                ],
+                "kraken_ledgers_2026": [
+                    "txid",
+                    "refid",
+                    "time",
+                    "type",
+                    "subtype",
+                    "aclass",
+                    "subclass",
+                    "asset",
+                    "wallet",
                     "amount",
                     "fee",
                     "balance",
